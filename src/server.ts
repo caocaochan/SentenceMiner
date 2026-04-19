@@ -9,6 +9,7 @@ import {
   applyEditableSettings,
   getEditableSettings,
   loadConfig,
+  loadConfigFromPath,
   resolveAppRoot,
   resolveConfigPath,
   saveEditableSettings,
@@ -233,6 +234,9 @@ export async function routeRequest(
 
   if (method === 'POST' && url.pathname === '/api/session') {
     const payload = await readJsonBody<SessionPayload>(request);
+    if (payload.action === 'start') {
+      await refreshConfigFromDisk(context);
+    }
     context.playerCommandStore.clearAll();
     if (payload.action === 'start') {
       context.transcriptStore.startSession(payload);
@@ -515,6 +519,15 @@ function replaceConfig(target: AppConfig, next: AppConfig): void {
   target.capture = next.capture;
   target.runtime = next.runtime;
   target.transcript = next.transcript;
+}
+
+async function refreshConfigFromDisk(context: ServerContext): Promise<void> {
+  replaceConfig(
+    context.config,
+    await loadConfigFromPath(context.configPath, {
+      appRoot: APP_ROOT,
+    }),
+  );
 }
 
 function getRecord(value: unknown, fieldName: string): Record<string, unknown> {

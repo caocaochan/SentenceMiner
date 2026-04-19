@@ -108,6 +108,37 @@ test('POST /api/settings rejects invalid note field mappings with a 400', async 
   assert.match(body.message, /does not exist on Anki note type/);
 });
 
+test('POST /api/session reloads config from disk before a new playback session starts', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.anki.deck = 'Anime';
+
+  await fs.writeFile(
+    harness.configPath,
+    ['anki_deck=Mining', 'anki_note_type=Sentence', 'capture_audio=no'].join('\n'),
+    'utf8',
+  );
+
+  const response = await fetch(`${harness.baseUrl}/api/session`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'start',
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      durationMs: 60000,
+      playbackTimeMs: 0,
+    }),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(harness.config.anki.deck, 'Mining');
+  assert.equal(harness.config.runtime.captureAudio, false);
+});
+
 test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
   const harness = await createServerHarness(t);
 

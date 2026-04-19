@@ -52,6 +52,16 @@ export const DEFAULT_CONFIG: AppConfig = {
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
   const appRoot = resolveAppRoot();
   const configPath = resolveConfigPath(argv, appRoot);
+  return loadConfigFromPath(configPath, { appRoot });
+}
+
+export async function loadConfigFromPath(
+  configPath: string,
+  options: {
+    appRoot?: string;
+  } = {},
+): Promise<AppConfig> {
+  const appRoot = options.appRoot ?? resolveAppRoot();
   const fileConfig = await readOptionalConfig(configPath);
   const config = mergeConfig(DEFAULT_CONFIG, fileConfig ?? {});
 
