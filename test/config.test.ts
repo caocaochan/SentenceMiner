@@ -4,7 +4,15 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { loadConfig, resolveAppRoot, resolveConfigPath } from '../src/config.ts';
+import {
+  DEFAULT_CONFIG,
+  getEditableSettings,
+  loadConfig,
+  mergeEditableSettingsIntoConfig,
+  resolveAppRoot,
+  resolveConfigPath,
+  saveEditableSettings,
+} from '../src/config.ts';
 
 test('resolveAppRoot falls back to the current working directory in development', (t) => {
   const originalRoot = process.env.SENTENCEMINER_ROOT;
@@ -102,4 +110,75 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.capture.imageIncludeSubtitles, false);
   assert.equal(config.transcript.historyLimit, 40);
   assert.equal(config.server.host, '127.0.0.1');
+});
+
+test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates managed keys', () => {
+  const merged = mergeEditableSettingsIntoConfig(
+    [
+      '# mpv script options',
+      'helper_url=http://127.0.0.1:8766',
+      'anki_deck=Anime',
+      'anki_note_type=Sentence',
+      '; keep me',
+      'capture_audio=yes',
+    ].join('\n'),
+    {
+      ...getEditableSettings(DEFAULT_CONFIG),
+      anki: {
+        ...getEditableSettings(DEFAULT_CONFIG).anki,
+        deck: 'Mining',
+        noteType: 'Target',
+      },
+      runtime: {
+        captureAudio: false,
+        captureImage: true,
+      },
+    },
+  );
+
+  assert.match(merged, /helper_url=http:\/\/127\.0\.0\.1:8766/);
+  assert.match(merged, /anki_deck=Mining/);
+  assert.match(merged, /anki_note_type=Target/);
+  assert.match(merged, /; keep me/);
+  assert.match(merged, /capture_audio=no/);
+});
+
+test('mergeEditableSettingsIntoConfig appends missing managed keys using stable config formats', () => {
+  const merged = mergeEditableSettingsIntoConfig(
+    'helper_url=http://127.0.0.1:8766',
+    getEditableSettings(DEFAULT_CONFIG),
+  );
+
+  assert.match(merged, /anki_deck=Anime/);
+  assert.match(merged, /capture_audio=yes/);
+  assert.match(merged, /capture_image=yes/);
+  assert.match(merged, /capture_image_include_subtitles=yes/);
+  assert.match(merged, /capture_image_max_width=1600/);
+});
+
+test('saveEditableSettings writes updated settings to sentenceminer.conf', async (t) => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-save-config-'));
+  const configPath = path.join(tempRoot, 'sentenceminer.conf');
+
+  t.after(async () => {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(
+    configPath,
+    ['helper_url=http://127.0.0.1:8766', 'anki_deck=Anime', 'capture_audio=yes'].join('\n'),
+    'utf8',
+  );
+
+  const settings = getEditableSettings(DEFAULT_CONFIG);
+  settings.anki.deck = 'Refreshed Deck';
+  settings.runtime.captureAudio = false;
+  settings.capture.imageIncludeSubtitles = false;
+
+  await saveEditableSettings(configPath, settings);
+
+  const written = await fs.readFile(configPath, 'utf8');
+  assert.match(written, /anki_deck=Refreshed Deck/);
+  assert.match(written, /capture_audio=no/);
+  assert.match(written, /capture_image_include_subtitles=no/);
 });

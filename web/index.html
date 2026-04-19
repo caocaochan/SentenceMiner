@@ -14,9 +14,16 @@
           <p class="eyebrow">SentenceMiner</p>
           <h1>Live subtitle mining view</h1>
         </div>
-        <div class="status-card">
-          <span id="connection-pill" class="pill pill-muted">Connecting</span>
-          <span id="file-name" class="muted">No file loaded</span>
+        <div class="hero-actions">
+          <button id="settings-button" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="settings-modal" aria-label="Open settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.49-.42h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.12.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .49-.42l.36-2.54c.58-.22 1.12-.53 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z" fill="currentColor"></path>
+            </svg>
+          </button>
+          <div class="status-card">
+            <span id="connection-pill" class="pill pill-muted">Connecting</span>
+            <span id="file-name" class="muted">No file loaded</span>
+          </div>
         </div>
       </header>
 
@@ -37,6 +44,144 @@
           <div id="history-list" class="history-list"></div>
         </section>
       </main>
+    </div>
+
+    <div id="settings-modal" class="modal-shell" hidden>
+      <div id="settings-backdrop" class="modal-backdrop"></div>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2 id="settings-title">SentenceMiner configuration</h2>
+          </div>
+          <button id="settings-close" class="icon-button icon-button-subtle" type="button" aria-label="Close settings">Close</button>
+        </div>
+
+        <form id="settings-form" class="settings-form">
+          <section class="settings-section">
+            <div class="section-heading">
+              <h3>Anki Target</h3>
+              <p class="muted">Choose which notes SentenceMiner updates when you mine a subtitle.</p>
+            </div>
+            <div class="settings-grid">
+              <label class="field">
+                <span>Deck</span>
+                <select name="anki.deck" id="settings-anki-deck"></select>
+              </label>
+              <label class="field">
+                <span>Note type</span>
+                <select name="anki.noteType" id="settings-anki-note-type"></select>
+              </label>
+              <label class="field field-full">
+                <span>Extra query</span>
+                <input type="text" name="anki.extraQuery" id="settings-anki-extra-query" autocomplete="off">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-heading">
+              <h3>Field Mappings</h3>
+              <p class="muted">Map each mined value to a field on the selected Anki note type.</p>
+            </div>
+            <div class="settings-grid">
+              <label class="field">
+                <span>Subtitle</span>
+                <select name="anki.fields.subtitle" id="settings-field-subtitle"></select>
+              </label>
+              <label class="field">
+                <span>Audio</span>
+                <select name="anki.fields.audio" id="settings-field-audio"></select>
+              </label>
+              <label class="field">
+                <span>Image</span>
+                <select name="anki.fields.image" id="settings-field-image"></select>
+              </label>
+              <label class="field">
+                <span>Source</span>
+                <select name="anki.fields.source" id="settings-field-source"></select>
+              </label>
+              <label class="field">
+                <span>Time</span>
+                <select name="anki.fields.time" id="settings-field-time"></select>
+              </label>
+              <label class="field">
+                <span>Filename</span>
+                <select name="anki.fields.filename" id="settings-field-filename"></select>
+              </label>
+              <label class="field field-full">
+                <span>Filename template</span>
+                <input type="text" name="anki.filenameTemplate" id="settings-anki-filename-template" autocomplete="off">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-heading">
+              <h3>Capture</h3>
+              <p class="muted">Tune how audio and screenshots are clipped and attached during mining.</p>
+            </div>
+            <div class="settings-grid">
+              <label class="field field-checkbox">
+                <input type="checkbox" name="runtime.captureAudio" id="settings-runtime-capture-audio">
+                <span>Capture audio</span>
+              </label>
+              <label class="field field-checkbox">
+                <input type="checkbox" name="runtime.captureImage" id="settings-runtime-capture-image">
+                <span>Capture image</span>
+              </label>
+              <label class="field">
+                <span>Audio pre-padding (ms)</span>
+                <input type="number" name="capture.audioPrePaddingMs" id="settings-capture-audio-pre-padding-ms" min="0" step="1">
+              </label>
+              <label class="field">
+                <span>Audio post-padding (ms)</span>
+                <input type="number" name="capture.audioPostPaddingMs" id="settings-capture-audio-post-padding-ms" min="0" step="1">
+              </label>
+              <label class="field">
+                <span>Audio format</span>
+                <input type="text" name="capture.audioFormat" id="settings-capture-audio-format" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Audio codec</span>
+                <input type="text" name="capture.audioCodec" id="settings-capture-audio-codec" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Audio bitrate</span>
+                <input type="text" name="capture.audioBitrate" id="settings-capture-audio-bitrate" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Image format</span>
+                <input type="text" name="capture.imageFormat" id="settings-capture-image-format" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Image quality</span>
+                <input type="number" name="capture.imageQuality" id="settings-capture-image-quality" min="0" step="1">
+              </label>
+              <label class="field">
+                <span>Image max width</span>
+                <input type="number" name="capture.imageMaxWidth" id="settings-capture-image-max-width" min="1" step="1">
+              </label>
+              <label class="field">
+                <span>Image max height</span>
+                <input type="number" name="capture.imageMaxHeight" id="settings-capture-image-max-height" min="1" step="1">
+              </label>
+              <label class="field field-checkbox">
+                <input type="checkbox" name="capture.imageIncludeSubtitles" id="settings-capture-image-include-subtitles">
+                <span>Include subtitles in screenshots</span>
+              </label>
+            </div>
+          </section>
+
+          <p id="settings-options-status" class="settings-status muted" aria-live="polite"></p>
+          <p id="settings-error" class="settings-status settings-status-error" aria-live="assertive"></p>
+
+          <div class="modal-footer">
+            <button id="settings-cancel" class="history-button history-button-secondary" type="button">Cancel</button>
+            <button id="settings-save" class="history-button history-button-primary" type="submit">Save settings</button>
+          </div>
+        </form>
+      </section>
     </div>
 
     <script type="module" src="/app.js"></script>

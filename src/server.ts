@@ -1,47 +1,59 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { mineHistoryEntry } from './history-mine.ts';
-import { mineToAnki } from './anki.ts';
+import { listDeckNames, listModelFieldNames, listModelNames, mineToAnki } from './anki.ts';
 import { buildAppUrl, openUrlInBrowser } from './browser.ts';
-import { loadConfig, resolveAppRoot } from './config.ts';
+import {
+  applyEditableSettings,
+  getEditableSettings,
+  loadConfig,
+  resolveAppRoot,
+  resolveConfigPath,
+  saveEditableSettings,
+} from './config.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { PlayerCommandStore } from './player-command-store.ts';
 import { TranscriptStore } from './transcript-store.ts';
-import type { MinePayload, SessionPayload, SubtitleEventPayload } from './types.ts';
+import type {
+  AppConfig,
+  EditableSettings,
+  MinePayload,
+  SessionPayload,
+  StatePayload,
+  SubtitleEventPayload,
+} from './types.ts';
 import { WebSocketHub } from './ws.ts';
 
 const APP_ROOT = resolveAppRoot();
 const WEB_ROOT = path.join(APP_ROOT, 'web');
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-  process.exitCode = 1;
-});
+export interface ServerContext {
+  config: AppConfig;
+  configPath: string;
+  transcriptStore: TranscriptStore;
+  playerCommandStore: PlayerCommandStore;
+  sockets: WebSocketHub;
+}
 
 async function main(): Promise<void> {
   const parentPid = parseParentPidArg(process.argv.slice(2));
+  const configPath = resolveConfigPath(process.argv.slice(2));
   const config = await loadConfig();
   const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
   const playerCommandStore = new PlayerCommandStore();
   const sockets = new WebSocketHub();
+  const context: ServerContext = {
+    config,
+    configPath,
+    transcriptStore,
+    playerCommandStore,
+    sockets,
+  };
 
-  const server = http.createServer(async (request, response) => {
-    try {
-      await routeRequest(config, transcriptStore, playerCommandStore, sockets, request, response);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const statusCode = error instanceof HttpError ? error.statusCode : 500;
-      if (statusCode >= 500) {
-        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-      }
-      respondJson(response, statusCode, {
-        success: false,
-        message,
-      });
-    }
-  });
+  const server = http.createServer(createRequestHandler(context));
 
   server.on('upgrade', (request, socket) => {
     if (request.url !== '/ws') {
@@ -93,62 +105,112 @@ async function main(): Promise<void> {
   });
 }
 
-async function routeRequest(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  transcriptStore: TranscriptStore,
-  playerCommandStore: PlayerCommandStore,
-  sockets: WebSocketHub,
+export function createRequestHandler(context: ServerContext) {
+  return async (request: http.IncomingMessage, response: http.ServerResponse) => {
+    try {
+      await routeRequest(context, request, response);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const statusCode = error instanceof HttpError ? error.statusCode : 500;
+      if (statusCode >= 500) {
+        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+      }
+      respondJson(response, statusCode, {
+        success: false,
+        message,
+      });
+    }
+  };
+}
+
+export async function routeRequest(
+  context: ServerContext,
   request: http.IncomingMessage,
   response: http.ServerResponse,
 ): Promise<void> {
   const method = request.method ?? 'GET';
-  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? `${config.server.host}:${config.server.port}`}`);
+  const url = new URL(
+    request.url ?? '/',
+    `http://${request.headers.host ?? `${context.config.server.host}:${context.config.server.port}`}`,
+  );
 
   if (method === 'GET' && url.pathname === '/api/state') {
-    respondJson(response, 200, buildStatePayload(config, transcriptStore));
+    respondJson(response, 200, buildStatePayload(context.config, context.transcriptStore));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/api/settings/options') {
+    const noteType = url.searchParams.get('noteType')?.trim() || context.config.anki.noteType;
+    const [decks, noteTypes, noteFields] = await Promise.all([
+      listDeckNames(context.config.anki),
+      listModelNames(context.config.anki),
+      listModelFieldNames(context.config.anki, noteType),
+    ]);
+
+    respondJson(response, 200, {
+      success: true,
+      options: {
+        decks,
+        noteTypes,
+        noteFields,
+      },
+    });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/settings') {
+    const payload = await readJsonBody<unknown>(request);
+    const settings = parseEditableSettingsPayload(payload);
+    await validateEditableSettings(context.config, settings);
+    await saveEditableSettings(context.configPath, settings);
+
+    replaceConfig(context.config, applyEditableSettings(context.config, settings));
+    broadcastState(context.config, context.transcriptStore, context.sockets);
+
+    respondJson(response, 200, buildStatePayload(context.config, context.transcriptStore));
     return;
   }
 
   if (method === 'POST' && url.pathname === '/api/session') {
     const payload = await readJsonBody<SessionPayload>(request);
-    playerCommandStore.clearAll();
+    context.playerCommandStore.clearAll();
     if (payload.action === 'start') {
-      transcriptStore.startSession(payload);
+      context.transcriptStore.startSession(payload);
     } else {
-      transcriptStore.stopSession(payload.sessionId);
+      context.transcriptStore.stopSession(payload.sessionId);
     }
-    broadcastState(config, transcriptStore, sockets);
+    broadcastState(context.config, context.transcriptStore, context.sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Session updated.',
-      state: transcriptStore.getState(),
+      state: context.transcriptStore.getState(),
     });
     return;
   }
 
   if (method === 'POST' && url.pathname === '/api/subtitle-event') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
-    transcriptStore.pushSubtitle(payload);
-    broadcastState(config, transcriptStore, sockets);
+    context.transcriptStore.pushSubtitle(payload);
+    broadcastState(context.config, context.transcriptStore, context.sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Subtitle event recorded.',
-      state: transcriptStore.getState(),
+      state: context.transcriptStore.getState(),
     });
     return;
   }
 
   if (method === 'POST' && url.pathname === '/api/mine') {
     const payload = await readJsonBody<MinePayload>(request);
-    const result = await mineToAnki(config.anki, payload);
+    const result = await mineToAnki(context.config.anki, payload);
     respondJson(response, 200, result);
     return;
   }
 
   if (method === 'POST' && url.pathname === '/api/history/go-to') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
-    assertActiveSession(transcriptStore, payload.sessionId);
-    const command = playerCommandStore.queueSeek(payload);
+    assertActiveSession(context.transcriptStore, payload.sessionId);
+    const command = context.playerCommandStore.queueSeek(payload);
     respondJson(response, 200, {
       success: true,
       message: `Queued seek to ${command.startMs} ms.`,
@@ -162,13 +224,13 @@ async function routeRequest(
       throw new HttpError(400, 'Expected sessionId query parameter.');
     }
 
-    respondJson(response, 200, playerCommandStore.claim(sessionId));
+    respondJson(response, 200, context.playerCommandStore.claim(sessionId));
     return;
   }
 
   if (method === 'POST' && url.pathname === '/api/history/mine') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
-    const result = await mineHistoryEntry(config, payload);
+    const result = await mineHistoryEntry(context.config, payload);
     respondJson(response, 200, result);
     return;
   }
@@ -252,25 +314,161 @@ class HttpError extends Error {
   }
 }
 
-function buildStatePayload(config: Awaited<ReturnType<typeof loadConfig>>, transcriptStore: TranscriptStore) {
+export function buildStatePayload(config: AppConfig, transcriptStore: TranscriptStore): StatePayload {
   return {
     success: true,
     config: {
       capture: config.capture,
       transcript: config.transcript,
       server: config.server,
+      settings: getEditableSettings(config),
     },
     state: transcriptStore.getState(),
   };
 }
 
-function broadcastState(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  transcriptStore: TranscriptStore,
-  sockets: WebSocketHub,
-): void {
+function broadcastState(config: AppConfig, transcriptStore: TranscriptStore, sockets: WebSocketHub): void {
   sockets.broadcastJson({
     type: 'state',
     payload: buildStatePayload(config, transcriptStore),
+  });
+}
+
+function parseEditableSettingsPayload(payload: unknown): EditableSettings {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new HttpError(400, 'Expected a settings object.');
+  }
+
+  const root = payload as Record<string, unknown>;
+  const anki = getRecord(root.anki, 'anki');
+  const fields = getRecord(anki.fields, 'anki.fields');
+  const capture = getRecord(root.capture, 'capture');
+  const runtime = getRecord(root.runtime, 'runtime');
+
+  return {
+    anki: {
+      deck: getString(anki.deck, 'anki.deck', { allowEmpty: false }),
+      noteType: getString(anki.noteType, 'anki.noteType', { allowEmpty: false }),
+      extraQuery: getString(anki.extraQuery, 'anki.extraQuery'),
+      fields: {
+        subtitle: getString(fields.subtitle, 'anki.fields.subtitle', { allowEmpty: false }),
+        audio: getString(fields.audio, 'anki.fields.audio'),
+        image: getString(fields.image, 'anki.fields.image'),
+        source: getString(fields.source, 'anki.fields.source'),
+        time: getString(fields.time, 'anki.fields.time'),
+        filename: getString(fields.filename, 'anki.fields.filename'),
+      },
+      filenameTemplate: getString(anki.filenameTemplate, 'anki.filenameTemplate', { allowEmpty: false }),
+    },
+    capture: {
+      audioPrePaddingMs: getInteger(capture.audioPrePaddingMs, 'capture.audioPrePaddingMs'),
+      audioPostPaddingMs: getInteger(capture.audioPostPaddingMs, 'capture.audioPostPaddingMs'),
+      audioFormat: getString(capture.audioFormat, 'capture.audioFormat', { allowEmpty: false }),
+      audioCodec: getString(capture.audioCodec, 'capture.audioCodec', { allowEmpty: false }),
+      audioBitrate: getString(capture.audioBitrate, 'capture.audioBitrate', { allowEmpty: false }),
+      imageFormat: getString(capture.imageFormat, 'capture.imageFormat', { allowEmpty: false }),
+      imageQuality: getInteger(capture.imageQuality, 'capture.imageQuality'),
+      imageMaxWidth: getInteger(capture.imageMaxWidth, 'capture.imageMaxWidth'),
+      imageMaxHeight: getInteger(capture.imageMaxHeight, 'capture.imageMaxHeight'),
+      imageIncludeSubtitles: getBoolean(capture.imageIncludeSubtitles, 'capture.imageIncludeSubtitles'),
+    },
+    runtime: {
+      captureAudio: getBoolean(runtime.captureAudio, 'runtime.captureAudio'),
+      captureImage: getBoolean(runtime.captureImage, 'runtime.captureImage'),
+    },
+  };
+}
+
+async function validateEditableSettings(config: AppConfig, settings: EditableSettings): Promise<void> {
+  if (settings.capture.audioPrePaddingMs < 0) {
+    throw new HttpError(400, 'capture.audioPrePaddingMs must be 0 or greater.');
+  }
+
+  if (settings.capture.audioPostPaddingMs < 0) {
+    throw new HttpError(400, 'capture.audioPostPaddingMs must be 0 or greater.');
+  }
+
+  if (settings.capture.imageQuality < 0) {
+    throw new HttpError(400, 'capture.imageQuality must be 0 or greater.');
+  }
+
+  if (settings.capture.imageMaxWidth <= 0 || settings.capture.imageMaxHeight <= 0) {
+    throw new HttpError(400, 'capture image dimensions must be greater than 0.');
+  }
+
+  const noteFields = await listModelFieldNames(config.anki, settings.anki.noteType);
+  const noteFieldSet = new Set(noteFields);
+  const fieldEntries = [
+    ['subtitle', settings.anki.fields.subtitle],
+    ['audio', settings.anki.fields.audio],
+    ['image', settings.anki.fields.image],
+    ['source', settings.anki.fields.source ?? ''],
+    ['time', settings.anki.fields.time ?? ''],
+    ['filename', settings.anki.fields.filename ?? ''],
+  ] as const;
+
+  for (const [fieldKey, fieldName] of fieldEntries) {
+    if (!fieldName) {
+      continue;
+    }
+
+    if (!noteFieldSet.has(fieldName)) {
+      throw new HttpError(
+        400,
+        `Configured ${fieldKey} field "${fieldName}" does not exist on Anki note type "${settings.anki.noteType}".`,
+      );
+    }
+  }
+}
+
+function replaceConfig(target: AppConfig, next: AppConfig): void {
+  target.server = next.server;
+  target.anki = next.anki;
+  target.capture = next.capture;
+  target.runtime = next.runtime;
+  target.transcript = next.transcript;
+}
+
+function getRecord(value: unknown, fieldName: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpError(400, `${fieldName} must be an object.`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function getString(value: unknown, fieldName: string, options: { allowEmpty?: boolean } = {}): string {
+  if (typeof value !== 'string') {
+    throw new HttpError(400, `${fieldName} must be a string.`);
+  }
+
+  const normalized = value.trim();
+  if (options.allowEmpty === false && !normalized) {
+    throw new HttpError(400, `${fieldName} cannot be empty.`);
+  }
+
+  return normalized;
+}
+
+function getInteger(value: unknown, fieldName: string): number {
+  if (!Number.isInteger(value)) {
+    throw new HttpError(400, `${fieldName} must be an integer.`);
+  }
+
+  return value;
+}
+
+function getBoolean(value: unknown, fieldName: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new HttpError(400, `${fieldName} must be a boolean.`);
+  }
+
+  return value;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main().catch((error) => {
+    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+    process.exitCode = 1;
   });
 }

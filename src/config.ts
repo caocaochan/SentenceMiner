@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import type { AppConfig } from './types.ts';
+import type { AppConfig, EditableSettings } from './types.ts';
 
 export const DEFAULT_CONFIG: AppConfig = {
   server: {
@@ -52,6 +52,62 @@ export async function loadConfig(argv: string[] = process.argv.slice(2)): Promis
   const configPath = resolveConfigPath(argv);
   const fileConfig = await readOptionalConfig(configPath);
   return mergeConfig(DEFAULT_CONFIG, fileConfig ?? {});
+}
+
+export function getEditableSettings(config: AppConfig): EditableSettings {
+  return {
+    anki: {
+      deck: config.anki.deck,
+      noteType: config.anki.noteType,
+      extraQuery: config.anki.extraQuery ?? '',
+      fields: {
+        subtitle: config.anki.fields.subtitle,
+        audio: config.anki.fields.audio,
+        image: config.anki.fields.image,
+        source: config.anki.fields.source ?? '',
+        time: config.anki.fields.time ?? '',
+        filename: config.anki.fields.filename ?? '',
+      },
+      filenameTemplate: config.anki.filenameTemplate,
+    },
+    capture: {
+      ...config.capture,
+    },
+    runtime: {
+      captureAudio: config.runtime.captureAudio,
+      captureImage: config.runtime.captureImage,
+    },
+  };
+}
+
+export function applyEditableSettings(config: AppConfig, settings: EditableSettings): AppConfig {
+  return mergeConfig(config, {
+    anki: {
+      ...config.anki,
+      deck: settings.anki.deck,
+      noteType: settings.anki.noteType,
+      extraQuery: settings.anki.extraQuery,
+      fields: {
+        ...config.anki.fields,
+        ...settings.anki.fields,
+      },
+      filenameTemplate: settings.anki.filenameTemplate,
+    },
+    capture: {
+      ...settings.capture,
+    },
+    runtime: {
+      ...config.runtime,
+      captureAudio: settings.runtime.captureAudio,
+      captureImage: settings.runtime.captureImage,
+    },
+  });
+}
+
+export async function saveEditableSettings(filePath: string, settings: EditableSettings): Promise<void> {
+  const existingContent = await readConfigText(filePath);
+  const nextContent = mergeEditableSettingsIntoConfig(existingContent, settings);
+  await writeConfigAtomically(filePath, nextContent);
 }
 
 export function resolveAppRoot(execPath: string = process.execPath, cwd: string = process.cwd()): string {
@@ -329,6 +385,18 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
   }
 }
 
+async function readConfigText(filePath: string): Promise<string> {
+  try {
+    return await fsp.readFile(filePath, 'utf8');
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return '';
+    }
+
+    throw new Error(`Failed to read config at ${filePath}: ${String(error)}`);
+  }
+}
+
 function parseNumber(key: string, value: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -382,4 +450,92 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
       ...overrides.transcript,
     },
   };
+}
+
+interface EditableConfigEntry {
+  key: string;
+  value: (settings: EditableSettings) => string;
+}
+
+const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
+  { key: 'anki_deck', value: (settings) => settings.anki.deck },
+  { key: 'anki_note_type', value: (settings) => settings.anki.noteType },
+  { key: 'anki_extra_query', value: (settings) => settings.anki.extraQuery },
+  { key: 'anki_field_subtitle', value: (settings) => settings.anki.fields.subtitle },
+  { key: 'anki_field_audio', value: (settings) => settings.anki.fields.audio },
+  { key: 'anki_field_image', value: (settings) => settings.anki.fields.image },
+  { key: 'anki_field_source', value: (settings) => settings.anki.fields.source ?? '' },
+  { key: 'anki_field_time', value: (settings) => settings.anki.fields.time ?? '' },
+  { key: 'anki_field_filename', value: (settings) => settings.anki.fields.filename ?? '' },
+  { key: 'anki_filename_template', value: (settings) => settings.anki.filenameTemplate },
+  { key: 'capture_audio', value: (settings) => serializeBoolean(settings.runtime.captureAudio) },
+  { key: 'capture_image', value: (settings) => serializeBoolean(settings.runtime.captureImage) },
+  { key: 'capture_audio_pre_padding_ms', value: (settings) => String(settings.capture.audioPrePaddingMs) },
+  { key: 'capture_audio_post_padding_ms', value: (settings) => String(settings.capture.audioPostPaddingMs) },
+  { key: 'capture_audio_format', value: (settings) => settings.capture.audioFormat },
+  { key: 'capture_audio_codec', value: (settings) => settings.capture.audioCodec },
+  { key: 'capture_audio_bitrate', value: (settings) => settings.capture.audioBitrate },
+  { key: 'capture_image_format', value: (settings) => settings.capture.imageFormat },
+  { key: 'capture_image_quality', value: (settings) => String(settings.capture.imageQuality) },
+  { key: 'capture_image_max_width', value: (settings) => String(settings.capture.imageMaxWidth) },
+  { key: 'capture_image_max_height', value: (settings) => String(settings.capture.imageMaxHeight) },
+  { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
+];
+
+export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {
+  const newline = existingContent.includes('\r\n') ? '\r\n' : '\n';
+  const lines = existingContent === '' ? [] : existingContent.split(/\r?\n/);
+  const remainingKeys = new Set(EDITABLE_CONFIG_ENTRIES.map((entry) => entry.key));
+
+  const updatedLines = lines.map((line) => {
+    const trimmedStart = line.trimStart();
+    if (trimmedStart.startsWith('#') || trimmedStart.startsWith(';')) {
+      return line;
+    }
+
+    for (const entry of EDITABLE_CONFIG_ENTRIES) {
+      const keyPattern = new RegExp(`^\\s*${escapeRegExp(entry.key)}\\s*=`);
+      if (keyPattern.test(line)) {
+        remainingKeys.delete(entry.key);
+        return `${entry.key}=${entry.value(settings)}`;
+      }
+    }
+
+    return line;
+  });
+
+  if (remainingKeys.size > 0) {
+    if (updatedLines.length > 0 && updatedLines[updatedLines.length - 1] !== '') {
+      updatedLines.push('');
+    }
+
+    for (const entry of EDITABLE_CONFIG_ENTRIES) {
+      if (remainingKeys.has(entry.key)) {
+        updatedLines.push(`${entry.key}=${entry.value(settings)}`);
+      }
+    }
+  }
+
+  return updatedLines.join(newline);
+}
+
+function serializeBoolean(value: boolean): string {
+  return value ? 'yes' : 'no';
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function writeConfigAtomically(filePath: string, content: string): Promise<void> {
+  await fsp.mkdir(path.dirname(filePath), { recursive: true });
+
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fsp.writeFile(tempPath, content, 'utf8');
+    await fsp.rename(tempPath, filePath);
+  } catch (error) {
+    await fsp.rm(tempPath, { force: true }).catch(() => {});
+    throw new Error(`Failed to write config at ${filePath}: ${String(error)}`);
+  }
 }

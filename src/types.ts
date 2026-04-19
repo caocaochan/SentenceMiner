@@ -78,6 +78,47 @@ export interface AppConfig {
   transcript: TranscriptConfig;
 }
 
+export interface EditableAnkiSettings {
+  deck: string;
+  noteType: string;
+  extraQuery: string;
+  fields: FieldMapping;
+  filenameTemplate: string;
+}
+
+export interface EditableRuntimeSettings {
+  captureAudio: boolean;
+  captureImage: boolean;
+}
+
+export interface EditableSettings {
+  anki: EditableAnkiSettings;
+  capture: CaptureConfig;
+  runtime: EditableRuntimeSettings;
+}
+
+export interface SettingsOptions {
+  decks: string[];
+  noteTypes: string[];
+  noteFields: string[];
+}
+
+export interface StatePayload {
+  success: boolean;
+  config: {
+    capture: CaptureConfig;
+    transcript: TranscriptConfig;
+    server: ServerConfig;
+    settings: EditableSettings;
+  };
+  state: TranscriptState;
+}
+
+export interface SettingsOptionsPayload {
+  success: boolean;
+  options: SettingsOptions;
+}
+
 export interface TranscriptState {
   session: {
     sessionId: string;

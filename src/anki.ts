@@ -61,6 +61,18 @@ export async function findNewestMatchingNote(config: AnkiConfig): Promise<number
   return Math.max(...noteIds);
 }
 
+export async function listDeckNames(config: AnkiConfig): Promise<string[]> {
+  return ankiRequest<string[]>(config, 'deckNames');
+}
+
+export async function listModelNames(config: AnkiConfig): Promise<string[]> {
+  return ankiRequest<string[]>(config, 'modelNames');
+}
+
+export async function listModelFieldNames(config: AnkiConfig, modelName: string): Promise<string[]> {
+  return ankiRequest<string[]>(config, 'modelFieldNames', { modelName });
+}
+
 async function getNoteInfo(config: AnkiConfig, noteId: number): Promise<NoteInfo> {
   const notes = await ankiRequest<NoteInfo[]>(config, 'notesInfo', { notes: [noteId] });
   if (!Array.isArray(notes) || notes.length === 0) {
@@ -146,7 +158,7 @@ function validateConfiguredFields(config: AnkiConfig, note: NoteInfo): void {
   }
 }
 
-async function ankiRequest<T>(config: AnkiConfig, action: string, params: Record<string, unknown>): Promise<T> {
+async function ankiRequest<T>(config: AnkiConfig, action: string, params?: Record<string, unknown>): Promise<T> {
   const body = {
     action,
     version: 6,
