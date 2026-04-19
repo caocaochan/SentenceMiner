@@ -40,3 +40,26 @@ test('startParentWatch invokes the callback once the watched process disappears'
     );
   });
 });
+
+test('startParentWatch treats a reused PID as parent exit', async () => {
+  await new Promise<void>((resolve) => {
+    let fingerprintReads = 0;
+
+    startParentWatch(
+      31337,
+      () => {
+        assert.equal(fingerprintReads >= 2, true);
+        resolve();
+      },
+      {
+        intervalMs: 250,
+        identityCheckIntervalMs: 250,
+        isProcessAlive: () => true,
+        getProcessFingerprint: () => {
+          fingerprintReads += 1;
+          return fingerprintReads < 2 ? 'original-process' : 'reused-process';
+        },
+      },
+    );
+  });
+});

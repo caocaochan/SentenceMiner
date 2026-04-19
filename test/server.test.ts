@@ -90,6 +90,20 @@ test('POST /api/settings rejects invalid note field mappings with a 400', async 
   assert.match(body.message, /does not exist on Anki note type/);
 });
 
+test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
+  const harness = await createServerHarness(t);
+
+  const response = await fetch(`${harness.baseUrl}/api/runtime/shutdown`, {
+    method: 'POST',
+  });
+  const payload = await response.json();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.deepEqual(harness.shutdownReasons, ['runtime shutdown request']);
+});
+
 test('probeRunningHelper returns true for a live SentenceMiner instance', async (t) => {
   const harness = await createServerHarness(t);
   const address = new URL(harness.baseUrl);
@@ -186,6 +200,7 @@ async function createServerHarness(t: TestContext) {
 
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${ankiAddress.port}`;
+  const shutdownReasons: string[] = [];
 
   const appServer = http.createServer(
     createRequestHandler({
@@ -194,6 +209,9 @@ async function createServerHarness(t: TestContext) {
       transcriptStore: new TranscriptStore(config.transcript.historyLimit),
       playerCommandStore: new PlayerCommandStore(),
       sockets: new WebSocketHub(),
+      requestShutdown: (reason) => {
+        shutdownReasons.push(reason);
+      },
     }),
   );
 
@@ -215,6 +233,7 @@ async function createServerHarness(t: TestContext) {
     baseUrl: `http://127.0.0.1:${appAddress.port}`,
     config,
     configPath,
+    shutdownReasons,
   };
 }
 

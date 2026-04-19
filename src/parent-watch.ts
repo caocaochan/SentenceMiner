@@ -1,6 +1,10 @@
+import { execFileSync } from 'node:child_process';
+
 export interface ParentWatchOptions {
   intervalMs?: number;
+  identityCheckIntervalMs?: number;
   isProcessAlive?: (pid: number) => boolean;
+  getProcessFingerprint?: (pid: number) => string | null;
 }
 
 export function parseParentPidArg(argv: string[]): number | null {
@@ -35,6 +39,31 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
+export function getProcessFingerprint(pid: number): string | null {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+
+  try {
+    switch (process.platform) {
+      case 'win32':
+        return readCommandOutput('powershell.exe', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `$process = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction SilentlyContinue; if ($null -eq $process) { exit 1 }; [Console]::Out.Write($process.CreationDate)`,
+        ]);
+      case 'darwin':
+      case 'linux':
+        return readCommandOutput('ps', ['-o', 'lstart=', '-p', String(pid)]);
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
 export function startParentWatch(
   parentPid: number,
   onParentExit: () => void,
@@ -45,8 +74,15 @@ export function startParentWatch(
   }
 
   const intervalMs = Math.max(250, options.intervalMs ?? 1000);
+  const identityCheckIntervalMs = Math.max(
+    intervalMs,
+    options.identityCheckIntervalMs ?? Math.max(intervalMs * 5, 5000),
+  );
   const checkProcessAlive = options.isProcessAlive ?? isProcessAlive;
+  const readProcessFingerprint = options.getProcessFingerprint ?? getProcessFingerprint;
   let stopped = false;
+  let expectedFingerprint = readProcessFingerprint(parentPid);
+  let nextIdentityCheckAt = 0;
 
   const tick = () => {
     if (stopped) {
@@ -54,6 +90,25 @@ export function startParentWatch(
     }
 
     if (!checkProcessAlive(parentPid)) {
+      stopped = true;
+      clearInterval(interval);
+      onParentExit();
+      return;
+    }
+
+    const now = Date.now();
+    if (now < nextIdentityCheckAt) {
+      return;
+    }
+
+    nextIdentityCheckAt = now + identityCheckIntervalMs;
+    const currentFingerprint = readProcessFingerprint(parentPid);
+    if (!expectedFingerprint) {
+      expectedFingerprint = currentFingerprint;
+      return;
+    }
+
+    if (currentFingerprint && currentFingerprint !== expectedFingerprint) {
       stopped = true;
       clearInterval(interval);
       onParentExit();
@@ -68,4 +123,14 @@ export function startParentWatch(
     stopped = true;
     clearInterval(interval);
   };
+}
+
+function readCommandOutput(command: string, args: string[]): string | null {
+  const output = execFileSync(command, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    windowsHide: true,
+  }).trim();
+
+  return output || null;
 }

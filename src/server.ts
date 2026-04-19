@@ -36,6 +36,7 @@ export interface ServerContext {
   transcriptStore: TranscriptStore;
   playerCommandStore: PlayerCommandStore;
   sockets: WebSocketHub;
+  requestShutdown?: (reason: string) => void;
 }
 
 export type ListenResult = 'started' | 'already-running';
@@ -89,6 +90,7 @@ export async function main(): Promise<void> {
     const forcedExitTimer = setTimeout(() => process.exit(0), 2000);
     forcedExitTimer.unref?.();
   };
+  context.requestShutdown = shutdown;
 
   if (parentPid !== null) {
     stopParentWatch = startParentWatch(parentPid, () => {
@@ -267,6 +269,15 @@ export async function routeRequest(
     const payload = await readJsonBody<MinePayload>(request);
     const result = await mineToAnki(context.config.anki, payload);
     respondJson(response, 200, result);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/runtime/shutdown') {
+    respondJson(response, 200, {
+      success: true,
+      message: 'Shutdown requested.',
+    });
+    setImmediate(() => context.requestShutdown?.('runtime shutdown request'));
     return;
   }
 

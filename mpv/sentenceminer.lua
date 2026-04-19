@@ -668,6 +668,19 @@ local function stop_session()
     state.last_subtitle_key = nil
 end
 
+local function shutdown_helper()
+    if not state.helper_ready and not state.helper_starting then
+        return
+    end
+
+    local _, err = helper_request("POST", "/api/runtime/shutdown", nil, 1000)
+    if err then
+        msg.warn("could not request helper shutdown: " .. tostring(err))
+    end
+
+    state.helper_ready = false
+end
+
 local function sync_subtitle_state()
     if not state.session_id or not state.helper_ready then
         return
@@ -859,7 +872,10 @@ end
 
 mp.register_event("file-loaded", start_session)
 mp.register_event("end-file", stop_session)
-mp.register_event("shutdown", stop_session)
+mp.register_event("shutdown", function()
+    stop_session()
+    shutdown_helper()
+end)
 mp.add_periodic_timer(0.2, function()
     sync_subtitle_state()
     sync_player_command()
