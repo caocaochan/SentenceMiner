@@ -5,6 +5,7 @@ SentenceMiner is an `mpv`-first sentence mining workflow:
 - a local helper server hosts a live subtitle page you can scan with Yomitan
 - an `mpv` Lua script watches the current subtitle in real time
 - when you trigger the mining action, it captures the subtitle text, matching audio, and a screenshot
+- captured audio is loudness-normalized so mined cards play back at a more consistent volume
 - the helper updates the newest matching Anki note through AnkiConnect
 
 The UI uses a Catppuccin Macchiato-inspired theme and keeps a running subtitle history for the current playback session.

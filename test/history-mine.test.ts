@@ -65,6 +65,10 @@ test('mineHistoryEntry captures media, mines the entry, and cleans up temp files
   assert.equal(processCalls.length, 2);
   assert.equal(processCalls[0].description, 'audio extraction');
   assert.equal(processCalls[1].description, 'image capture');
+  assert.equal(
+    processCalls[0].args[processCalls[0].args.indexOf('-af') + 1],
+    'loudnorm=I=-16:TP=-1.5:LRA=11',
+  );
   assert.equal(minedPayload?.audioPath, 'C:\\Temp\\audio.mp3');
   assert.equal(minedPayload?.screenshotPath, 'C:\\Temp\\image.jpg');
   assert.deepEqual(cleanedPaths, ['C:\\Temp\\audio.mp3', 'C:\\Temp\\image.jpg']);
@@ -149,6 +153,10 @@ test('mineHistoryEntry captures one combined clip and one screenshot for batch r
   assert.equal(result.success, true);
   assert.equal(processCalls.length, 2);
   assert.deepEqual(processCalls[0].args.slice(0, 8), ['-y', '-ss', '0.750', '-i', 'C:\\Videos\\episode.mkv', '-t', '2.500', '-vn']);
+  assert.equal(
+    processCalls[0].args[processCalls[0].args.indexOf('-af') + 1],
+    'loudnorm=I=-16:TP=-1.5:LRA=11',
+  );
   assert.deepEqual(processCalls[1].args.slice(0, 7), ['-y', '-ss', '1.000', '-i', 'C:\\Videos\\episode.mkv', '-frames:v', '1']);
   assert.equal(minedPayload?.text, 'earlier later');
   assert.equal(minedPayload?.startMs, 1_000);

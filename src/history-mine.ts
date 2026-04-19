@@ -11,6 +11,7 @@ import { basenameWithoutExtension, sanitizeFilename } from './utils.ts';
 
 const execFileAsync = promisify(execFile);
 const REMOTE_MEDIA_RE = /^[a-z][\w+.-]*:\/\//i;
+const AUDIO_NORMALIZATION_FILTER = 'loudnorm=I=-16:TP=-1.5:LRA=11';
 
 export interface HistoryMineDependencies {
   mineToAnki?: typeof mineToAnki;
@@ -207,6 +208,8 @@ function buildAudioCaptureArgs(payload: SubtitleEventPayload, config: AppConfig,
     '-t',
     formatSeconds(durationMs),
     '-vn',
+    '-af',
+    AUDIO_NORMALIZATION_FILTER,
     '-acodec',
     config.capture.audioCodec,
     '-b:a',

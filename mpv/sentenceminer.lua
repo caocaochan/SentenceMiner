@@ -46,6 +46,8 @@ local opts = {
 
 options.read_options(opts, "sentenceminer")
 
+local AUDIO_NORMALIZATION_FILTER = "loudnorm=I=-16:TP=-1.5:LRA=11"
+
 local state = {
     enabled = false,
     open_browser_when_ready = false,
@@ -958,6 +960,8 @@ local function capture_audio(payload, capture)
         "-t",
         format_seconds(duration_ms / 1000),
         "-vn",
+        "-af",
+        AUDIO_NORMALIZATION_FILTER,
         "-acodec",
         tostring(capture.audioCodec or "libmp3lame"),
         "-b:a",
