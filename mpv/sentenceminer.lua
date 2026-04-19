@@ -682,7 +682,16 @@ local function shutdown_helper()
 end
 
 local function sync_subtitle_state()
-    if not state.session_id or not state.helper_ready then
+    if not state.session_id then
+        return
+    end
+
+    if not state.helper_ready then
+        ensure_helper_ready(function(ok, err)
+            if not ok and err then
+                msg.warn("could not reconnect helper for subtitle sync: " .. tostring(err))
+            end
+        end)
         return
     end
 
@@ -692,12 +701,14 @@ local function sync_subtitle_state()
         return
     end
 
-    state.last_subtitle_key = key
     local _, err = helper_request("POST", "/api/subtitle-event", payload)
     if err then
         state.helper_ready = false
         msg.warn("could not post subtitle event: " .. tostring(err))
+        return
     end
+
+    state.last_subtitle_key = key
 end
 
 local function sync_player_command()

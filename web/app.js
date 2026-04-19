@@ -15,6 +15,9 @@ const state = {
   settingsSaveError: '',
   settingsRequestId: 0,
 };
+const STATE_POLL_INTERVAL_MS = 2000;
+let reconnectTimerId = null;
+let statePollIntervalId = null;
 
 const elements = {
   connectionPill: document.getElementById('connection-pill'),
@@ -83,19 +86,36 @@ document.addEventListener('keydown', (event) => {
 bootstrap();
 
 async function bootstrap() {
-  await refreshState();
+  await refreshState({ suppressErrors: true });
   connectWebSocket();
+  startStatePolling();
   void refreshSettingsOptions(state.app?.config?.settings?.anki?.noteType, state.app?.config?.settings?.anki?.deck);
 }
 
-async function refreshState() {
-  const response = await fetch('/api/state');
-  const payload = await response.json();
-  state.app = payload;
-  if (!state.settingsModalOpen) {
-    hydrateSettingsForm();
+async function refreshState(options = {}) {
+  const { suppressErrors = false } = options;
+
+  try {
+    const response = await fetch('/api/state', {
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`State request failed with status ${response.status}.`);
+    }
+
+    const payload = await response.json();
+    state.app = payload;
+    if (!state.settingsModalOpen) {
+      hydrateSettingsForm();
+    }
+    render();
+  } catch (error) {
+    if (suppressErrors) {
+      return;
+    }
+
+    throw error;
   }
-  render();
 }
 
 function connectWebSocket() {
@@ -103,8 +123,13 @@ function connectWebSocket() {
   const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
   socket.addEventListener('open', () => {
+    if (reconnectTimerId !== null) {
+      window.clearTimeout(reconnectTimerId);
+      reconnectTimerId = null;
+    }
     state.connection = 'live';
     render();
+    void refreshState({ suppressErrors: true });
   });
 
   socket.addEventListener('message', (event) => {
@@ -118,12 +143,27 @@ function connectWebSocket() {
   socket.addEventListener('close', () => {
     state.connection = 'offline';
     render();
-    setTimeout(connectWebSocket, 1000);
+    if (reconnectTimerId === null) {
+      reconnectTimerId = window.setTimeout(() => {
+        reconnectTimerId = null;
+        connectWebSocket();
+      }, 1000);
+    }
   });
 
   socket.addEventListener('error', () => {
     socket.close();
   });
+}
+
+function startStatePolling() {
+  if (statePollIntervalId !== null) {
+    return;
+  }
+
+  statePollIntervalId = window.setInterval(() => {
+    void refreshState({ suppressErrors: true });
+  }, STATE_POLL_INTERVAL_MS);
 }
 
 function render() {
