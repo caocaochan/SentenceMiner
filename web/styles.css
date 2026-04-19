@@ -109,8 +109,10 @@ h1 {
 .sticky {
   position: sticky;
   top: 0;
-  padding-bottom: 12px;
-  background: linear-gradient(180deg, rgba(36, 39, 58, 0.98), rgba(36, 39, 58, 0.92));
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(30, 32, 48, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   z-index: 1;
 }
 
