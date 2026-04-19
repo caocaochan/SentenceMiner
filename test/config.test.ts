@@ -81,6 +81,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
     configPath,
     [
       'helper_url=http://127.0.0.1:9999',
+      'enabled=no',
       'server_port=9001',
       'anki_deck=Mining',
       'anki_field_subtitle=Expression',
@@ -99,6 +100,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
 
   const config = await loadConfig([]);
 
+  assert.equal(config.runtime.enabled, false);
   assert.equal(config.server.port, 9001);
   assert.equal(config.anki.deck, 'Mining');
   assert.equal(config.anki.fields.subtitle, 'Expression');

@@ -55,6 +55,7 @@ export interface CaptureConfig {
 }
 
 export interface RuntimeConfig {
+  enabled: boolean;
   ffmpegPath: string;
   tempDir: string;
   captureAudio: boolean;

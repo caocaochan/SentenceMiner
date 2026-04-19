@@ -153,8 +153,18 @@ test('listenForAppServer treats a healthy existing helper as already running', a
 });
 
 test('shouldAutoOpenBrowser only opens the site for a fresh helper start', () => {
-  assert.equal(shouldAutoOpenBrowser('started'), true);
-  assert.equal(shouldAutoOpenBrowser('already-running'), false);
+  assert.equal(shouldAutoOpenBrowser('started', DEFAULT_CONFIG), true);
+  assert.equal(
+    shouldAutoOpenBrowser('started', {
+      ...DEFAULT_CONFIG,
+      runtime: {
+        ...DEFAULT_CONFIG.runtime,
+        enabled: false,
+      },
+    }),
+    false,
+  );
+  assert.equal(shouldAutoOpenBrowser('already-running', DEFAULT_CONFIG), false);
 });
 
 test('listenForAppServer still rejects port conflicts from non-SentenceMiner services', async (t) => {

@@ -49,7 +49,7 @@ Node.js is not required for the packaged Windows release.
 2. Extract it directly into your `mpv` folder so the zip's `scripts/` and `script-opts/` folders merge into `mpv/scripts/` and `mpv/script-opts/`.
 3. Edit `mpv/script-opts/sentenceminer.conf` with your Anki deck, note type, field mappings, and any script options you want to customize.
 4. Play a video in `mpv`.
-5. Press `Ctrl+m` to mine the current subtitle, or open `http://127.0.0.1:8766` in your browser and use Yomitan on the live transcript.
+5. Press `Ctrl+m` to mine the current subtitle, press `Ctrl+Shift+m` to toggle SentenceMiner on or off, or open `http://127.0.0.1:8766` in your browser and use Yomitan on the live transcript.
 
 The helper starts automatically on first playback. You should not need to run `SentenceMinerHelper.exe` yourself unless you are debugging. The packaged release already includes `script-opts/sentenceminer.conf` with a relative helper path and a default `Ctrl+m` mining hotkey.
 
@@ -76,13 +76,17 @@ The helper starts automatically on first playback. You should not need to run `S
 - `helper_auto_start`
 - `helper_exe_path`
 - `helper_start_timeout_ms`
+- `enabled`
 - `ffmpeg_path`
 - `temp_dir`
 - `capture_audio`
 - `capture_image`
 - optional `bind_default_key`
+- optional `bind_toggle_key`, `toggle_key`
 
 If you change the helper listen host or port, keep `helper_url` aligned with `server_host` and `server_port`.
+
+Setting `enabled=no` disables SentenceMiner across launches. While disabled, the mpv script stops starting helper sessions, auto-launching the helper, and opening the helper site until you toggle it back on.
 
 In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe` and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and rely on auto-discovery.
 

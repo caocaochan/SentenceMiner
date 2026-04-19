@@ -42,8 +42,8 @@ export interface ServerContext {
 
 export type ListenResult = 'started' | 'already-running';
 
-export function shouldAutoOpenBrowser(listenResult: ListenResult): boolean {
-  return listenResult === 'started';
+export function shouldAutoOpenBrowser(listenResult: ListenResult, config: AppConfig): boolean {
+  return listenResult === 'started' && config.runtime.enabled;
 }
 
 export async function main(): Promise<void> {
@@ -114,7 +114,7 @@ export async function main(): Promise<void> {
 
   console.log(`SentenceMiner helper listening on ${appUrl}`);
 
-  if (shouldAutoOpenBrowser(listenResult) && !openUrlInBrowser(appUrl)) {
+  if (shouldAutoOpenBrowser(listenResult, config) && !openUrlInBrowser(appUrl)) {
     console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
   }
 }

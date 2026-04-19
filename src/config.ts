@@ -38,6 +38,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     imageIncludeSubtitles: true,
   },
   runtime: {
+    enabled: true,
     ffmpegPath: 'ffmpeg',
     tempDir: '',
     captureAudio: true,
@@ -360,6 +361,12 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
       config.runtime = {
         ...config.runtime,
         ffmpegPath: value,
+      };
+      return;
+    case 'enabled':
+      config.runtime = {
+        ...config.runtime,
+        enabled: parseBoolean(key, value),
       };
       return;
     case 'temp_dir':

@@ -4,6 +4,7 @@ local options = require("mp.options")
 local utils = require("mp.utils")
 
 local opts = {
+    enabled = "yes",
     helper_url = "http://127.0.0.1:8766",
     helper_timeout_ms = 5000,
     helper_auto_start = "yes",
@@ -15,6 +16,8 @@ local opts = {
     capture_image = "yes",
     bind_default_key = "no",
     default_key = "Ctrl+m",
+    bind_toggle_key = "yes",
+    toggle_key = "Ctrl+Shift+m",
     server_host = "127.0.0.1",
     server_port = 8766,
     anki_url = "http://127.0.0.1:8765",
@@ -62,6 +65,10 @@ math.randomseed(os.time())
 local function is_truthy(value)
     local normalized = tostring(value or ""):lower()
     return normalized == "yes" or normalized == "true" or normalized == "1" or normalized == "on"
+end
+
+local function is_sentence_miner_enabled()
+    return is_truthy(opts.enabled)
 end
 
 local function is_windows()
@@ -201,6 +208,17 @@ local function write_file(path, content)
     return true
 end
 
+local function read_file(path)
+    local handle, err = io.open(path, "rb")
+    if not handle then
+        return nil, err
+    end
+
+    local content = handle:read("*a")
+    handle:close()
+    return content, nil
+end
+
 local function read_json_property(name)
     local value = mp.get_property_native(name)
     if value == nil then
@@ -286,6 +304,73 @@ local function helper_error_from_result(result)
     end
 
     return nil
+end
+
+local function resolve_config_path()
+    local script_dir = get_script_dir()
+    local candidates = {}
+
+    local function add_candidate(path)
+        if path and path ~= "" then
+            table.insert(candidates, expand_mpv_path(path))
+        end
+    end
+
+    if script_dir and script_dir ~= "" then
+        local parent = parent_dir(script_dir)
+        if parent then
+            add_candidate(utils.join_path(utils.join_path(parent, "script-opts"), "sentenceminer.conf"))
+        end
+
+        add_candidate(utils.join_path(utils.join_path(script_dir, "script-opts"), "sentenceminer.conf"))
+    end
+
+    add_candidate("~~/script-opts/sentenceminer.conf")
+
+    for _, candidate in ipairs(candidates) do
+        if file_exists(candidate) then
+            return candidate
+        end
+    end
+
+    return candidates[1], nil
+end
+
+local function update_config_option(key, value)
+    local config_path, path_err = resolve_config_path()
+    if not config_path or config_path == "" then
+        return nil, path_err or "could not resolve sentenceminer.conf"
+    end
+
+    local existing_content, _ = read_file(config_path)
+    existing_content = existing_content or ""
+
+    local newline = existing_content:find("\r\n", 1, true) and "\r\n" or "\n"
+    local lines = {}
+    if existing_content ~= "" then
+        for line in (existing_content .. "\n"):gmatch("(.-)\r?\n") do
+            table.insert(lines, line)
+        end
+    end
+
+    local escaped_key = key:gsub("([^%w])", "%%%1")
+    local replaced = false
+    for index, line in ipairs(lines) do
+        local trimmed = line:match("^%s*(.-)%s*$") or ""
+        if not trimmed:match("^[#;]") and trimmed:match("^" .. escaped_key .. "%s*=") then
+            lines[index] = key .. "=" .. value
+            replaced = true
+        end
+    end
+
+    if not replaced then
+        if #lines > 0 and lines[#lines] ~= "" then
+            table.insert(lines, "")
+        end
+        table.insert(lines, key .. "=" .. value)
+    end
+
+    return write_file(config_path, table.concat(lines, newline))
 end
 
 local function powershell_escape(value)
@@ -522,6 +607,11 @@ local function probe_helper()
 end
 
 local function ensure_helper_ready(on_ready)
+    if not is_sentence_miner_enabled() then
+        on_ready(false, "SentenceMiner is disabled")
+        return
+    end
+
     local ready, ready_err = probe_helper()
     if ready then
         on_ready(true, nil)
@@ -554,6 +644,20 @@ local function ensure_helper_ready(on_ready)
     local deadline = mp.get_time() + ((tonumber(opts.helper_start_timeout_ms) or 15000) / 1000)
     local function poll()
         local poll_ready, poll_err = probe_helper()
+        if not is_sentence_miner_enabled() then
+            if poll_ready then
+                local _, shutdown_err = helper_request("POST", "/api/runtime/shutdown", nil, 1000)
+                if shutdown_err then
+                    msg.warn("could not request helper shutdown: " .. tostring(shutdown_err))
+                end
+                state.helper_ready = false
+            end
+
+            state.helper_starting = false
+            flush_helper_waiters(false, "SentenceMiner is disabled")
+            return
+        end
+
         if poll_ready then
             state.helper_starting = false
             flush_helper_waiters(true, nil)
@@ -606,6 +710,10 @@ local function fetch_capture_settings()
 end
 
 local function start_session()
+    if not is_sentence_miner_enabled() then
+        return
+    end
+
     local path = mp.get_property("path", "")
     if path == "" then
         return
@@ -682,6 +790,10 @@ local function shutdown_helper()
 end
 
 local function sync_subtitle_state()
+    if not is_sentence_miner_enabled() then
+        return
+    end
+
     if not state.session_id then
         return
     end
@@ -712,6 +824,10 @@ local function sync_subtitle_state()
 end
 
 local function sync_player_command()
+    if not is_sentence_miner_enabled() then
+        return
+    end
+
     if not state.session_id or not state.helper_ready then
         return
     end
@@ -834,6 +950,11 @@ local function capture_image(capture)
 end
 
 local function mine_current()
+    if not is_sentence_miner_enabled() then
+        mp.osd_message("SentenceMiner: disabled", 2)
+        return
+    end
+
     if not state.session_id then
         mp.osd_message("SentenceMiner: no active session", 2)
         return
@@ -881,6 +1002,40 @@ local function mine_current()
     mp.osd_message("SentenceMiner: " .. message, 3)
 end
 
+local function set_sentence_miner_enabled(enabled)
+    local serialized = enabled and "yes" or "no"
+    local ok, err = update_config_option("enabled", serialized)
+    if not ok then
+        return nil, err
+    end
+
+    opts.enabled = serialized
+
+    if enabled then
+        mp.osd_message("SentenceMiner: enabled", 2)
+        if mp.get_property("path", "") ~= "" then
+            start_session()
+        end
+        return true, nil
+    end
+
+    stop_session()
+    shutdown_helper()
+    mp.osd_message("SentenceMiner: disabled", 2)
+    return true, nil
+end
+
+local function toggle_sentence_miner_enabled()
+    local next_enabled = not is_sentence_miner_enabled()
+    local ok, err = set_sentence_miner_enabled(next_enabled)
+    if ok then
+        return
+    end
+
+    msg.error("could not update sentenceminer.conf: " .. tostring(err))
+    mp.osd_message("SentenceMiner: could not update sentenceminer.conf", 4)
+end
+
 mp.register_event("file-loaded", start_session)
 mp.register_event("end-file", stop_session)
 mp.register_event("shutdown", function()
@@ -893,7 +1048,12 @@ mp.add_periodic_timer(0.2, function()
 end)
 
 mp.register_script_message("mine", mine_current)
+mp.register_script_message("toggle-enabled", toggle_sentence_miner_enabled)
 
 if is_truthy(opts.bind_default_key) then
     mp.add_forced_key_binding(opts.default_key, "sentenceminer-mine", mine_current)
+end
+
+if is_truthy(opts.bind_toggle_key) then
+    mp.add_forced_key_binding(opts.toggle_key, "sentenceminer-toggle-enabled", toggle_sentence_miner_enabled)
 end
