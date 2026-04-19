@@ -47,6 +47,7 @@ const elements = {
   historyList: document.getElementById('history-list'),
   historyMineSelected: document.getElementById('history-mine-selected'),
   toastRegion: document.getElementById('toast-region'),
+  themeToggle: document.getElementById('theme-toggle'),
   settingsButton: document.getElementById('settings-button'),
   settingsModal: document.getElementById('settings-modal'),
   settingsBackdrop: document.getElementById('settings-backdrop'),
@@ -81,6 +82,12 @@ const elements = {
   settingsAppearanceSubtitleCardFontFamily: document.getElementById('settings-appearance-subtitle-card-font-family'),
 };
 
+elements.themeToggle.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+});
 elements.settingsButton.addEventListener('click', () => {
   openSettingsModal();
 });
@@ -103,7 +110,15 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+initTheme();
 bootstrap();
+
+function initTheme() {
+  const stored = localStorage.getItem('theme');
+  if (stored === 'light' || stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', stored);
+  }
+}
 
 async function bootstrap() {
   initializeStickyLayout();
