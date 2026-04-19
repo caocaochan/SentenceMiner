@@ -84,7 +84,6 @@ h1 {
   gap: 14px;
 }
 
-.current-panel,
 .history-panel,
 .status-card {
   background: var(--overlay);
@@ -94,7 +93,6 @@ h1 {
   backdrop-filter: blur(18px);
 }
 
-.current-panel,
 .history-panel {
   padding: 14px;
 }
@@ -168,25 +166,6 @@ h1 {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.subtitle-display {
-  min-height: 92px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  background:
-    linear-gradient(135deg, rgba(138, 173, 244, 0.16), rgba(198, 160, 246, 0.1)),
-    rgba(24, 25, 38, 0.7);
-  border: 1px solid rgba(138, 173, 244, 0.22);
-  font-size: clamp(1.18rem, 1.1vw + 1rem, 1.9rem);
-  line-height: 1.42;
-  letter-spacing: 0.01em;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.subtitle-display.empty {
-  color: var(--subtext0);
 }
 
 .history-panel {
@@ -358,6 +337,42 @@ h1 {
   padding: 24px;
 }
 
+.toast-region {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 25, 38, 0.96);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  line-height: 1.35;
+  backdrop-filter: blur(16px);
+}
+
+.toast-success {
+  border-color: rgba(166, 218, 149, 0.4);
+  background:
+    linear-gradient(135deg, rgba(166, 218, 149, 0.18), rgba(24, 25, 38, 0.96)),
+    rgba(24, 25, 38, 0.96);
+}
+
+.toast-error {
+  border-color: rgba(245, 169, 127, 0.4);
+  background:
+    linear-gradient(135deg, rgba(245, 169, 127, 0.16), rgba(24, 25, 38, 0.96)),
+    rgba(24, 25, 38, 0.96);
+}
+
 .modal-shell[hidden] {
   display: none;
 }
@@ -509,15 +524,8 @@ h1 {
     align-items: flex-start;
   }
 
-  .current-panel,
   .history-panel {
     padding: 12px;
-  }
-
-  .subtitle-display {
-    padding: 14px;
-    min-height: 78px;
-    font-size: clamp(1.05rem, 1.2vw + 0.95rem, 1.5rem);
   }
 
   .sticky {
@@ -543,6 +551,12 @@ h1 {
 
   .modal-shell {
     padding: 12px;
+  }
+
+  .toast-region {
+    right: 12px;
+    bottom: 12px;
+    width: min(360px, calc(100vw - 24px));
   }
 
   .modal-panel {

@@ -269,6 +269,10 @@ export async function routeRequest(
   if (method === 'POST' && url.pathname === '/api/mine') {
     const payload = await readJsonBody<MinePayload>(request);
     const result = await mapMineErrorToHttp(() => mineToAnki(context.config.anki, payload));
+    broadcastToast(context.sockets, {
+      kind: 'success',
+      message: result.message,
+    });
     respondJson(response, 200, result);
     return;
   }
@@ -307,6 +311,10 @@ export async function routeRequest(
     const payload = parseHistoryMineRequestPayload(await readJsonBody<unknown>(request));
     assertActiveHistoryMineRequest(context.transcriptStore, payload);
     const result = await mapMineErrorToHttp(() => mineHistoryEntry(context.config, payload));
+    broadcastToast(context.sockets, {
+      kind: 'success',
+      message: result.message,
+    });
     respondJson(response, 200, result);
     return;
   }
@@ -469,6 +477,19 @@ function broadcastState(config: AppConfig, transcriptStore: TranscriptStore, soc
   sockets.broadcastJson({
     type: 'state',
     payload: buildStatePayload(config, transcriptStore),
+  });
+}
+
+function broadcastToast(
+  sockets: WebSocketHub,
+  payload: {
+    kind: 'success' | 'error';
+    message: string;
+  },
+): void {
+  sockets.broadcastJson({
+    type: 'toast',
+    payload,
   });
 }
 

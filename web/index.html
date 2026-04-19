@@ -12,7 +12,7 @@
       <header class="hero">
         <div>
           <p class="eyebrow">SentenceMiner</p>
-          <h1>Mine away!</h1>
+          <h1>Happy Mining!</h1>
         </div>
         <div class="hero-actions">
           <button id="settings-button" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="settings-modal" aria-label="Open settings">
@@ -28,14 +28,6 @@
       </header>
 
       <main class="layout">
-        <section class="current-panel">
-          <div class="panel-header">
-            <span class="pill pill-accent">Now Playing</span>
-            <span id="current-time" class="muted">--:--.--</span>
-          </div>
-          <div id="current-subtitle" class="subtitle-display empty">Waiting for subtitles from mpv…</div>
-        </section>
-
         <section class="history-panel">
           <div class="panel-header sticky">
             <div>
@@ -51,6 +43,8 @@
         </section>
       </main>
     </div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 
     <div id="settings-modal" class="modal-shell" hidden>
       <div id="settings-backdrop" class="modal-backdrop"></div>

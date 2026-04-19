@@ -12,6 +12,7 @@ const state = {
   autoScroll: true,
   pendingActions: new Set(),
   selectedHistoryKeys: new Set(),
+  toasts: [],
   settingsModalOpen: false,
   settingsOptions: {
     decks: [],
@@ -27,16 +28,16 @@ const state = {
 const STATE_POLL_INTERVAL_MS = 2000;
 let reconnectTimerId = null;
 let statePollIntervalId = null;
+let nextToastId = 0;
 
 const elements = {
   connectionPill: document.getElementById('connection-pill'),
   fileName: document.getElementById('file-name'),
-  currentTime: document.getElementById('current-time'),
-  currentSubtitle: document.getElementById('current-subtitle'),
   historyCount: document.getElementById('history-count'),
   historySelectionCount: document.getElementById('history-selection-count'),
   historyList: document.getElementById('history-list'),
   historyMineSelected: document.getElementById('history-mine-selected'),
+  toastRegion: document.getElementById('toast-region'),
   settingsButton: document.getElementById('settings-button'),
   settingsModal: document.getElementById('settings-modal'),
   settingsBackdrop: document.getElementById('settings-backdrop'),
@@ -151,6 +152,11 @@ function connectWebSocket() {
     if (message.type === 'state') {
       state.app = message.payload;
       render();
+      return;
+    }
+
+    if (message.type === 'toast') {
+      showToast(message.payload?.message, message.payload?.kind);
     }
   });
 
@@ -183,6 +189,7 @@ function startStatePolling() {
 function render() {
   renderTranscript();
   renderSettingsUi();
+  renderToasts();
 }
 
 function renderTranscript() {
@@ -197,9 +204,6 @@ function renderTranscript() {
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
   elements.connectionPill.className = `pill ${state.connection === 'live' ? 'pill-success' : 'pill-muted'}`;
   elements.fileName.textContent = transcriptState.session?.filePath ?? 'No file loaded';
-  elements.currentTime.textContent = currentSubtitle ? formatRange(currentSubtitle.startMs, currentSubtitle.endMs) : '--:--.--';
-  elements.currentSubtitle.textContent = currentSubtitle?.text ?? 'Waiting for subtitles from mpv…';
-  elements.currentSubtitle.className = `subtitle-display ${currentSubtitle?.text ? '' : 'empty'}`;
   elements.historyCount.textContent = `${history.length} ${history.length === 1 ? 'line' : 'lines'}`;
   elements.historySelectionCount.textContent = `${selectedEntries.length} selected`;
   elements.historyMineSelected.disabled =
@@ -398,6 +402,52 @@ function applyHistorySelectionToggle(entries, entry, checked) {
 
 function isSameSubtitle(a, b) {
   return a.sessionId === b.sessionId && a.startMs === b.startMs && a.endMs === b.endMs && a.text === b.text;
+}
+
+function renderToasts() {
+  elements.toastRegion.innerHTML = '';
+
+  state.toasts.forEach((toast) => {
+    const item = document.createElement('div');
+    item.className = `toast toast-${toast.kind}`;
+    item.setAttribute('role', 'status');
+    item.textContent = toast.message;
+    elements.toastRegion.append(item);
+  });
+}
+
+function showToast(message, kind = 'success') {
+  if (typeof message !== 'string') {
+    return;
+  }
+
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage) {
+    return;
+  }
+
+  const toast = {
+    id: ++nextToastId,
+    kind: kind === 'error' ? 'error' : 'success',
+    message: trimmedMessage,
+  };
+
+  state.toasts = [...state.toasts, toast];
+  renderToasts();
+
+  window.setTimeout(() => {
+    dismissToast(toast.id);
+  }, 3200);
+}
+
+function dismissToast(toastId) {
+  const nextToasts = state.toasts.filter((toast) => toast.id !== toastId);
+  if (nextToasts.length === state.toasts.length) {
+    return;
+  }
+
+  state.toasts = nextToasts;
+  renderToasts();
 }
 
 function openSettingsModal() {
