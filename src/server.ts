@@ -42,6 +42,10 @@ export interface ServerContext {
 
 export type ListenResult = 'started' | 'already-running';
 
+export function shouldAutoOpenBrowser(listenResult: ListenResult): boolean {
+  return listenResult === 'started';
+}
+
 export async function main(): Promise<void> {
   const parentPid = parseParentPidArg(process.argv.slice(2));
   const configPath = resolveConfigPath(process.argv.slice(2));
@@ -104,16 +108,13 @@ export async function main(): Promise<void> {
   const listenResult = await listenForAppServer(server, config.server);
   if (listenResult === 'already-running') {
     console.log(`SentenceMiner helper is already running on ${appUrl}`);
-    if (!openUrlInBrowser(appUrl)) {
-      console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
-    }
     stopParentWatch?.();
     return;
   }
 
   console.log(`SentenceMiner helper listening on ${appUrl}`);
 
-  if (!openUrlInBrowser(appUrl)) {
+  if (shouldAutoOpenBrowser(listenResult) && !openUrlInBrowser(appUrl)) {
     console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
   }
 }
