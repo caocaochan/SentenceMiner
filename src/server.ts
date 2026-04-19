@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { mineToAnki } from './anki.ts';
 import { loadConfig, resolveAppRoot } from './config.ts';
+import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { TranscriptStore } from './transcript-store.ts';
 import type { MinePayload, SessionPayload, SubtitleEventPayload } from './types.ts';
 import { WebSocketHub } from './ws.ts';
@@ -17,6 +18,7 @@ void main().catch((error) => {
 });
 
 async function main(): Promise<void> {
+  const parentPid = parseParentPidArg(process.argv.slice(2));
   const config = await loadConfig();
   const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
   const sockets = new WebSocketHub();
@@ -45,6 +47,37 @@ async function main(): Promise<void> {
 
     sockets.handleUpgrade(request, socket);
   });
+
+  let stopParentWatch: (() => void) | undefined;
+  let shuttingDown = false;
+  const shutdown = (reason: string) => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+    stopParentWatch?.();
+    sockets.destroyAll();
+
+    server.close((error) => {
+      if (error) {
+        console.error(`SentenceMiner helper shutdown failed after ${reason}: ${error.stack ?? error.message}`);
+        process.exit(1);
+      }
+
+      process.exit(0);
+    });
+
+    const forcedExitTimer = setTimeout(() => process.exit(0), 2000);
+    forcedExitTimer.unref?.();
+  };
+
+  if (parentPid !== null) {
+    stopParentWatch = startParentWatch(parentPid, () => {
+      console.log(`SentenceMiner helper exiting because parent process ${parentPid} closed.`);
+      shutdown('parent process exit');
+    });
+  }
 
   server.listen(config.server.port, config.server.host, () => {
     console.log(`SentenceMiner helper listening on http://${config.server.host}:${config.server.port}`);

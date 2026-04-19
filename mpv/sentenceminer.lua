@@ -466,6 +466,7 @@ local function spawn_helper_process()
     end
 
     local working_dir = parent_dir(helper_exe_path) or get_script_dir() or "."
+    local mpv_pid = utils.getpid()
     local result = utils.subprocess({
         args = {
             "powershell",
@@ -474,8 +475,9 @@ local function spawn_helper_process()
             "Hidden",
             "-Command",
             string.format(
-                "Start-Process -FilePath '%s' -WorkingDirectory '%s' -WindowStyle Hidden",
+                "Start-Process -FilePath '%s' -ArgumentList '--parent-pid %s' -WorkingDirectory '%s' -WindowStyle Hidden",
                 powershell_escape(helper_exe_path),
+                powershell_escape(tostring(mpv_pid)),
                 powershell_escape(working_dir)
             ),
         },

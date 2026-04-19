@@ -49,6 +49,14 @@ export class WebSocketHub {
       client.write(frame);
     }
   }
+
+  destroyAll(): void {
+    for (const client of this.#clients) {
+      client.destroy();
+    }
+
+    this.#clients.clear();
+  }
 }
 
 function encodeTextFrame(payload: string): Buffer {
