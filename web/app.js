@@ -501,28 +501,36 @@ function parseRequiredInteger(input, label) {
 }
 
 function populateFieldSelects(noteFields, currentFields) {
+  const preserveUnknown = noteFields.length === 0;
+
   populateSelect(elements.settingsFieldSubtitle, noteFields, currentFields.subtitle ?? '', {
     allowBlank: false,
+    preserveUnknown,
   });
   populateSelect(elements.settingsFieldAudio, noteFields, currentFields.audio ?? '', {
     allowBlank: true,
     blankLabel: 'Disabled / empty',
+    preserveUnknown,
   });
   populateSelect(elements.settingsFieldImage, noteFields, currentFields.image ?? '', {
     allowBlank: true,
     blankLabel: 'Disabled / empty',
+    preserveUnknown,
   });
   populateSelect(elements.settingsFieldSource, noteFields, currentFields.source ?? '', {
     allowBlank: true,
     blankLabel: 'Not set',
+    preserveUnknown,
   });
   populateSelect(elements.settingsFieldTime, noteFields, currentFields.time ?? '', {
     allowBlank: true,
     blankLabel: 'Not set',
+    preserveUnknown,
   });
   populateSelect(elements.settingsFieldFilename, noteFields, currentFields.filename ?? '', {
     allowBlank: true,
     blankLabel: 'Not set',
+    preserveUnknown,
   });
 }
 
