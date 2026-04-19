@@ -30,7 +30,3 @@ export function computeTranscriptItemUiState(entries, selectedKeys, pendingActio
     checkboxDisabled: !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, selectedKeys.has(entryKey)),
   };
 }
-
-export function shouldAutoScrollToCue(previousCueId, nextCueId) {
-  return Boolean(nextCueId && previousCueId !== nextCueId);
-}

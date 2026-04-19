@@ -31,7 +31,7 @@ function buildCue(text: string, startMs: number, sessionId = 's1', filePath = 'e
 }
 
 test('TranscriptStore replaces the active transcript and keeps chronological order', () => {
-  const store = new TranscriptStore(10);
+  const store = new TranscriptStore();
   store.startSession({
     action: 'start',
     sessionId: 's1',
@@ -51,7 +51,7 @@ test('TranscriptStore replaces the active transcript and keeps chronological ord
 });
 
 test('TranscriptStore matches the current cue from live subtitle timings', () => {
-  const store = new TranscriptStore(10);
+  const store = new TranscriptStore();
   store.startSession({
     action: 'start',
     sessionId: 's1',
@@ -75,7 +75,7 @@ test('TranscriptStore matches the current cue from live subtitle timings', () =>
 });
 
 test('TranscriptStore clears the current cue when playback leaves subtitles', () => {
-  const store = new TranscriptStore(10);
+  const store = new TranscriptStore();
   store.startSession({
     action: 'start',
     sessionId: 's1',
@@ -99,7 +99,7 @@ test('TranscriptStore clears the current cue when playback leaves subtitles', ()
 });
 
 test('TranscriptStore stores unavailable fallback state when transcript loading fails', () => {
-  const store = new TranscriptStore(10);
+  const store = new TranscriptStore();
   const track = buildTrack();
   store.startSession({
     action: 'start',
@@ -117,7 +117,7 @@ test('TranscriptStore stores unavailable fallback state when transcript loading 
 });
 
 test('TranscriptStore session reset clears transcript state', () => {
-  const store = new TranscriptStore(10);
+  const store = new TranscriptStore();
   store.startSession({
     action: 'start',
     sessionId: 's1',

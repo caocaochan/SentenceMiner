@@ -8,7 +8,7 @@ SentenceMiner is an `mpv`-first sentence mining workflow:
 - captured audio is loudness-normalized so mined cards play back at a more consistent volume
 - the helper updates matching Anki notes only when the stored sentence matches what you mined
 
-The UI uses a Catppuccin Macchiato-inspired theme and keeps a running subtitle history for the current playback session.
+The UI uses a Catppuccin Macchiato-inspired theme and keeps the full active subtitle transcript visible for the current playback session.
 
 ## Downloads
 
@@ -19,7 +19,7 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 
 ## What v1 does
 
-- shows the current subtitle and transcript history on `localhost`
+- shows the full active subtitle transcript on `localhost`
 - keeps the text selectable and Yomitan-friendly
 - auto-starts the helper on Windows when `mpv` loads a file
 - updates an existing Anki note only when its sentence matches the mined subtitle text
@@ -71,8 +71,6 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_image_format`, `capture_image_quality`, `capture_image_max_width`, `capture_image_max_height`
 - `capture_image_include_subtitles`
 - `subtitle_card_font_family`
-- `transcript_history_limit`
-
 - `helper_url`
 - `helper_timeout_ms`
 - `helper_auto_start`
@@ -111,7 +109,7 @@ node scripts/package-release.mjs
 - If another process is already using the helper port, `mpv` will show a startup error instead of silently failing.
 - The packaged helper resolves `web/` assets relative to `SentenceMinerHelper.exe` and loads config from `mpv/script-opts/sentenceminer.conf`.
 - The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, and `ffmpeg.exe.README` inside `mpv/scripts/sentenceminer-helper/`.
-- v1 keeps transcript history in memory only.
+- v1 keeps the active transcript in memory only.
 - v1 only tracks the primary active subtitle.
 - SentenceMiner first looks for matching notes returned by the configured deck, note type, and extra query.
 - Mining is blocked unless the configured deck, note type, and mapped fields currently exist in Anki.

@@ -18,8 +18,6 @@ export class TranscriptStore {
     transcriptMessage: 'No active subtitle track is selected.',
   };
 
-  constructor(_historyLimit: number) {}
-
   startSession(payload: SessionPayload): TranscriptState {
     this.#state = {
       session: {

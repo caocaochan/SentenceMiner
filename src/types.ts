@@ -84,10 +84,6 @@ export interface RuntimeConfig {
   captureImage: boolean;
 }
 
-export interface TranscriptConfig {
-  historyLimit: number;
-}
-
 export interface AppearanceConfig {
   subtitleCardFontFamily: string;
 }
@@ -102,7 +98,6 @@ export interface AppConfig {
   anki: AnkiConfig;
   capture: CaptureConfig;
   runtime: RuntimeConfig;
-  transcript: TranscriptConfig;
   appearance: AppearanceConfig;
 }
 
@@ -138,7 +133,6 @@ export interface StatePayload {
   success: boolean;
   config: {
     capture: CaptureConfig;
-    transcript: TranscriptConfig;
     server: ServerConfig;
     appearance: AppearanceConfig;
     settings: EditableSettings;

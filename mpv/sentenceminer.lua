@@ -41,7 +41,6 @@ local opts = {
     capture_image_max_width = 1600,
     capture_image_max_height = 900,
     capture_image_include_subtitles = "yes",
-    transcript_history_limit = 250,
 }
 
 options.read_options(opts, "sentenceminer")

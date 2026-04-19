@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import {
   buildTranscriptStructureSignature,
   computeTranscriptItemUiState,
-  shouldAutoScrollToCue,
   shouldRebuildTranscriptList,
 } from '../web/transcript-render.js';
 import { buildHistoryEntryKey } from '../web/history-selection.js';
@@ -29,12 +28,11 @@ test('identical transcript snapshots do not rebuild the transcript list', () => 
   assert.equal(shouldRebuildTranscriptList(signature, structuredClone(entries)), false);
 });
 
-test('active cue changes request auto-scroll without rebuilding the transcript list', () => {
+test('active cue changes do not rebuild the transcript list', () => {
   const entries = [buildCue('cue-1', 'one', 100), buildCue('cue-2', 'two', 200)];
   const signature = buildTranscriptStructureSignature(entries);
 
   assert.equal(shouldRebuildTranscriptList(signature, entries), false);
-  assert.equal(shouldAutoScrollToCue('cue-1', 'cue-2'), true);
 });
 
 test('pending actions only disable the relevant transcript buttons', () => {

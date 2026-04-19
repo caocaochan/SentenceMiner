@@ -150,7 +150,6 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
       'capture_audio_pre_padding_ms=400',
       'capture_image_include_subtitles=no',
       'subtitle_card_font_family=Atkinson Hyperlegible, sans-serif',
-      'transcript_history_limit=40',
     ].join('\n'),
     'utf8',
   );
@@ -170,7 +169,6 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.capture.audioPrePaddingMs, 400);
   assert.equal(config.capture.imageIncludeSubtitles, false);
   assert.equal(config.appearance.subtitleCardFontFamily, 'Atkinson Hyperlegible, sans-serif');
-  assert.equal(config.transcript.historyLimit, 40);
   assert.equal(config.server.host, '127.0.0.1');
 });
 

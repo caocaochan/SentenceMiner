@@ -59,7 +59,7 @@ export async function main(): Promise<void> {
   const parentPid = parseParentPidArg(process.argv.slice(2));
   const configPath = resolveConfigPath(process.argv.slice(2));
   const config = await loadConfig();
-  const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
+  const transcriptStore = new TranscriptStore();
   const playerCommandStore = new PlayerCommandStore();
   const sockets = new WebSocketHub();
   const context: ServerContext = {
@@ -503,7 +503,6 @@ export function buildStatePayload(config: AppConfig, transcriptStore: Transcript
     success: true,
     config: {
       capture: config.capture,
-      transcript: config.transcript,
       server: config.server,
       appearance: config.appearance,
       settings: getEditableSettings(config),
@@ -628,7 +627,6 @@ function replaceConfig(target: AppConfig, next: AppConfig): void {
   target.anki = next.anki;
   target.capture = next.capture;
   target.runtime = next.runtime;
-  target.transcript = next.transcript;
   target.appearance = next.appearance;
 }
 

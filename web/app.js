@@ -7,7 +7,6 @@ import {
 import {
   buildTranscriptStructureSignature,
   computeTranscriptItemUiState,
-  shouldAutoScrollToCue,
   shouldRebuildTranscriptList,
 } from './transcript-render.js';
 
@@ -30,7 +29,6 @@ const state = {
   settingsRequestId: 0,
   renderedTranscriptSignature: '',
   renderedCueElements: new Map(),
-  lastAutoScrollCueId: null,
 };
 const STATE_POLL_INTERVAL_MS = 2000;
 let reconnectTimerId = null;
@@ -38,6 +36,7 @@ let statePollIntervalId = null;
 let nextToastId = 0;
 
 const elements = {
+  hero: document.querySelector('.hero'),
   connectionPill: document.getElementById('connection-pill'),
   fileName: document.getElementById('file-name'),
   historyCount: document.getElementById('history-count'),
@@ -105,10 +104,16 @@ document.addEventListener('keydown', (event) => {
 bootstrap();
 
 async function bootstrap() {
+  initializeStickyLayout();
   await refreshState({ suppressErrors: true });
   connectWebSocket();
   startStatePolling();
   void refreshSettingsOptions(state.app?.config?.settings?.anki?.noteType, state.app?.config?.settings?.anki?.deck);
+}
+
+function initializeStickyLayout() {
+  syncStickyLayout();
+  window.addEventListener('resize', syncStickyLayout);
 }
 
 async function refreshState(options = {}) {
@@ -195,6 +200,7 @@ function render() {
   renderTranscript();
   renderSettingsUi();
   renderToasts();
+  syncStickyLayout();
 }
 
 function renderTranscript() {
@@ -227,11 +233,6 @@ function renderTranscript() {
   }
 
   updateTranscriptItemUi(transcriptEntries, transcriptState.currentCueId);
-
-  if (shouldAutoScrollToCue(state.lastAutoScrollCueId, transcriptState.currentCueId)) {
-    scrollTranscriptCueIntoView(transcriptState.currentCueId, state.lastAutoScrollCueId == null ? 'auto' : 'smooth');
-  }
-  state.lastAutoScrollCueId = transcriptState.currentCueId ?? null;
 }
 
 function renderSettingsUi() {
@@ -610,6 +611,11 @@ function applyAppearanceSettings() {
   document.documentElement.style.removeProperty('--subtitle-card-font-family');
 }
 
+function syncStickyLayout() {
+  const heroHeight = elements.hero instanceof HTMLElement ? Math.ceil(elements.hero.offsetHeight) : 0;
+  document.documentElement.style.setProperty('--hero-sticky-height', `${heroHeight}px`);
+}
+
 function parseRequiredInteger(input, label) {
   const value = Number.parseInt(input.value, 10);
   if (!Number.isInteger(value)) {
@@ -795,17 +801,5 @@ function updateTranscriptItemUi(entries, currentCueId) {
     controls.checkbox.disabled = uiState.checkboxDisabled;
     controls.goToButton.disabled = uiState.goToDisabled;
     controls.mineButton.disabled = uiState.mineDisabled;
-  });
-}
-
-function scrollTranscriptCueIntoView(cueId, behavior) {
-  const controls = cueId ? state.renderedCueElements.get(cueId) : null;
-  if (!controls) {
-    return;
-  }
-
-  controls.item.scrollIntoView({
-    block: 'center',
-    behavior,
   });
 }

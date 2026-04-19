@@ -773,7 +773,7 @@ async function createServerHarness(t: TestContext) {
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${ankiAddress.port}`;
   const shutdownReasons: string[] = [];
-  const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
+  const transcriptStore = new TranscriptStore();
 
   const appServer = http.createServer(
     createRequestHandler({

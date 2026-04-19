@@ -16,6 +16,9 @@
   --subtitle-card-font-family: var(--app-font-family);
   --overlay: rgba(54, 58, 79, 0.92);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+  --sticky-top-gap: 20px;
+  --sticky-stack-gap: 14px;
+  --hero-sticky-height: 0px;
 }
 
 * {
@@ -54,6 +57,13 @@ body.modal-open {
   align-items: flex-start;
   gap: 18px;
   margin-bottom: 14px;
+  position: sticky;
+  top: var(--sticky-top-gap);
+  z-index: 4;
+  padding: 8px 4px 14px;
+  background:
+    linear-gradient(180deg, rgba(30, 32, 48, 0.98), rgba(30, 32, 48, 0.92) 78%, rgba(30, 32, 48, 0));
+  backdrop-filter: blur(18px);
 }
 
 .hero-actions {
@@ -97,6 +107,63 @@ h1 {
 
 .history-panel {
   padding: 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 130px);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sticky {
+  position: sticky;
+  top: calc(var(--sticky-top-gap) + var(--hero-sticky-height) + var(--sticky-stack-gap));
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: rgba(30, 32, 48, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  z-index: 3;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.history-item {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(30, 32, 48, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  scroll-margin-block: 110px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.history-item:hover {
+  border-color: rgba(245, 169, 127, 0.34);
+  background: rgba(36, 39, 58, 0.96);
+}
+
+.history-item-active {
+  border-color: rgba(166, 218, 149, 0.48);
+  background: rgba(54, 58, 79, 0.98);
+}
+
+.history-item-selected {
+  border-color: rgba(138, 173, 244, 0.48);
+  background: rgba(45, 48, 68, 0.98);
 }
 
 .status-card {
@@ -144,74 +211,6 @@ h1 {
   padding: 8px 12px;
   border-radius: 999px;
   box-shadow: none;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.sticky {
-  position: sticky;
-  top: 0;
-  padding: 11px 13px;
-  border-radius: 14px;
-  background: rgba(30, 32, 48, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  z-index: 1;
-}
-
-.history-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.history-panel {
-  max-height: min(68vh, 900px);
-  display: flex;
-  flex-direction: column;
-}
-
-.history-list {
-  overflow-y: auto;
-  display: grid;
-  gap: 8px;
-  padding-right: 4px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.history-list::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.history-item {
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(30, 32, 48, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  scroll-margin-block: 110px;
-  transition: border-color 160ms ease, background 160ms ease;
-}
-
-.history-item:hover {
-  border-color: rgba(245, 169, 127, 0.34);
-  background: rgba(36, 39, 58, 0.96);
-}
-
-.history-item-active {
-  border-color: rgba(166, 218, 149, 0.48);
-  background: rgba(54, 58, 79, 0.98);
-}
-
-.history-item-selected {
-  border-color: rgba(138, 173, 244, 0.48);
-  background: rgba(45, 48, 68, 0.98);
 }
 
 .history-item-head {
@@ -513,6 +512,11 @@ h1 {
 }
 
 @media (max-width: 780px) {
+  :root {
+    --sticky-top-gap: 12px;
+    --sticky-stack-gap: 10px;
+  }
+
   .app-shell {
     width: min(100vw - 20px, 1100px);
     padding-top: 16px;
@@ -520,6 +524,7 @@ h1 {
 
   .hero {
     flex-direction: column;
+    padding: 6px 2px 10px;
   }
 
   .hero-actions {

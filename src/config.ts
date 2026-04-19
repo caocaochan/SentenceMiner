@@ -44,9 +44,6 @@ export const DEFAULT_CONFIG: AppConfig = {
     captureAudio: true,
     captureImage: true,
   },
-  transcript: {
-    historyLimit: 250,
-  },
   appearance: {
     subtitleCardFontFamily: '',
   },
@@ -435,12 +432,6 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         imageIncludeSubtitles: parseBoolean(key, value),
       };
       return;
-    case 'transcript_history_limit':
-      config.transcript = {
-        ...config.transcript,
-        historyLimit: parseNumber(key, value),
-      };
-      return;
     case 'subtitle_card_font_family':
       config.appearance = {
         ...config.appearance,
@@ -550,10 +541,6 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
     runtime: {
       ...base.runtime,
       ...overrides.runtime,
-    },
-    transcript: {
-      ...base.transcript,
-      ...overrides.transcript,
     },
     appearance: {
       ...base.appearance,
