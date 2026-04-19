@@ -3,4 +3,3 @@ dist/
 coverage/
 tmp/
 .DS_Store
-sentenceminer.config.json
