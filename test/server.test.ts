@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { DEFAULT_CONFIG, getEditableSettings } from '../src/config.ts';
 import { PlayerCommandStore } from '../src/player-command-store.ts';
-import { createRequestHandler, listenForAppServer, probeRunningHelper, shouldAutoOpenBrowser } from '../src/server.ts';
+import { createRequestHandler, listenForAppServer, probeRunningHelper } from '../src/server.ts';
 import { TranscriptStore } from '../src/transcript-store.ts';
 import { WebSocketHub } from '../src/ws.ts';
 
@@ -181,21 +181,6 @@ test('listenForAppServer treats a healthy existing helper as already running', a
   });
 
   assert.equal(result, 'already-running');
-});
-
-test('shouldAutoOpenBrowser only opens the site for a fresh helper start', () => {
-  assert.equal(shouldAutoOpenBrowser('started', DEFAULT_CONFIG), true);
-  assert.equal(
-    shouldAutoOpenBrowser('started', {
-      ...DEFAULT_CONFIG,
-      runtime: {
-        ...DEFAULT_CONFIG.runtime,
-        enabled: false,
-      },
-    }),
-    false,
-  );
-  assert.equal(shouldAutoOpenBrowser('already-running', DEFAULT_CONFIG), false);
 });
 
 test('listenForAppServer still rejects port conflicts from non-SentenceMiner services', async (t) => {

@@ -4,4 +4,4 @@ Extract this zip directly into your `mpv` folder so the included `scripts/` and 
 
 Default shortcuts:
 - `Ctrl+m` mines the current subtitle.
-- `Ctrl+Shift+m` toggles SentenceMiner on or off and persists that state in `script-opts/sentenceminer.conf`.
+- `Ctrl+Shift+m` toggles SentenceMiner on or off for the current `mpv` session. SentenceMiner starts disabled each time `mpv` launches.

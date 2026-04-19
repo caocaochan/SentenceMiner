@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { mineHistoryEntry } from './history-mine.ts';
 import { listDeckNames, listModelFieldNames, listModelNames, mineToAnki } from './anki.ts';
-import { buildAppUrl, openUrlInBrowser } from './browser.ts';
+import { buildAppUrl } from './browser.ts';
 import {
   applyEditableSettings,
   getEditableSettings,
@@ -42,10 +42,6 @@ export interface ServerContext {
 }
 
 export type ListenResult = 'started' | 'already-running';
-
-export function shouldAutoOpenBrowser(listenResult: ListenResult, config: AppConfig): boolean {
-  return listenResult === 'started' && config.runtime.enabled;
-}
 
 export async function main(): Promise<void> {
   const parentPid = parseParentPidArg(process.argv.slice(2));
@@ -114,10 +110,6 @@ export async function main(): Promise<void> {
   }
 
   console.log(`SentenceMiner helper listening on ${appUrl}`);
-
-  if (shouldAutoOpenBrowser(listenResult, config) && !openUrlInBrowser(appUrl)) {
-    console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
-  }
 }
 
 export async function listenForAppServer(server: http.Server, config: ServerConfig): Promise<ListenResult> {

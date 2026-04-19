@@ -4,7 +4,6 @@ local options = require("mp.options")
 local utils = require("mp.utils")
 
 local opts = {
-    enabled = "yes",
     helper_url = "http://127.0.0.1:8766",
     helper_timeout_ms = 5000,
     helper_auto_start = "yes",
@@ -48,6 +47,8 @@ local opts = {
 options.read_options(opts, "sentenceminer")
 
 local state = {
+    enabled = false,
+    open_browser_when_ready = false,
     session_id = nil,
     session_generation = 0,
     last_subtitle_key = nil,
@@ -68,7 +69,7 @@ local function is_truthy(value)
 end
 
 local function is_sentence_miner_enabled()
-    return is_truthy(opts.enabled)
+    return state.enabled
 end
 
 local function is_windows()
@@ -216,17 +217,6 @@ local function write_file(path, content)
     return true
 end
 
-local function read_file(path)
-    local handle, err = io.open(path, "rb")
-    if not handle then
-        return nil, err
-    end
-
-    local content = handle:read("*a")
-    handle:close()
-    return content, nil
-end
-
 local function read_json_property(name)
     local value = mp.get_property_native(name)
     if value == nil then
@@ -312,73 +302,6 @@ local function helper_error_from_result(result)
     end
 
     return nil
-end
-
-local function resolve_config_path()
-    local script_dir = get_script_dir()
-    local candidates = {}
-
-    local function add_candidate(path)
-        if path and path ~= "" then
-            table.insert(candidates, expand_mpv_path(path))
-        end
-    end
-
-    if script_dir and script_dir ~= "" then
-        local parent = parent_dir(script_dir)
-        if parent then
-            add_candidate(utils.join_path(utils.join_path(parent, "script-opts"), "sentenceminer.conf"))
-        end
-
-        add_candidate(utils.join_path(utils.join_path(script_dir, "script-opts"), "sentenceminer.conf"))
-    end
-
-    add_candidate("~~/script-opts/sentenceminer.conf")
-
-    for _, candidate in ipairs(candidates) do
-        if file_exists(candidate) then
-            return candidate
-        end
-    end
-
-    return candidates[1], nil
-end
-
-local function update_config_option(key, value)
-    local config_path, path_err = resolve_config_path()
-    if not config_path or config_path == "" then
-        return nil, path_err or "could not resolve sentenceminer.conf"
-    end
-
-    local existing_content, _ = read_file(config_path)
-    existing_content = existing_content or ""
-
-    local newline = existing_content:find("\r\n", 1, true) and "\r\n" or "\n"
-    local lines = {}
-    if existing_content ~= "" then
-        for line in (existing_content .. "\n"):gmatch("(.-)\r?\n") do
-            table.insert(lines, line)
-        end
-    end
-
-    local escaped_key = key:gsub("([^%w])", "%%%1")
-    local replaced = false
-    for index, line in ipairs(lines) do
-        local trimmed = line:match("^%s*(.-)%s*$") or ""
-        if not trimmed:match("^[#;]") and trimmed:match("^" .. escaped_key .. "%s*=") then
-            lines[index] = key .. "=" .. value
-            replaced = true
-        end
-    end
-
-    if not replaced then
-        if #lines > 0 and lines[#lines] ~= "" then
-            table.insert(lines, "")
-        end
-        table.insert(lines, key .. "=" .. value)
-    end
-
-    return write_file(config_path, table.concat(lines, newline))
 end
 
 local function powershell_escape(value)
@@ -681,6 +604,37 @@ local function spawn_helper_process()
     return true, nil
 end
 
+local function open_helper_site()
+    if not is_windows() then
+        return nil, "automatic browser opening is currently implemented only on Windows"
+    end
+
+    local url = trim_trailing_slash(opts.helper_url or "")
+    if url == "" then
+        return nil, "helper_url is empty"
+    end
+
+    local result = utils.subprocess({
+        args = {
+            "powershell",
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            string.format("Start-Process '%s'", powershell_escape(url)),
+        },
+        cancellable = false,
+        playback_only = false,
+        max_size = 1024 * 1024,
+    })
+
+    if result.status ~= 0 then
+        return nil, result.error_string or result.stderr or "failed to open browser"
+    end
+
+    return true, nil
+end
+
 local function probe_helper()
     local response, err = helper_request("GET", "/api/state", nil, 1000)
     if response and response.success == true and response.state ~= nil and response.config ~= nil then
@@ -842,6 +796,16 @@ local function start_session()
             state.last_subtitle_key = nil
             msg.warn("could not start helper session: " .. tostring(request_err))
             mp.osd_message("SentenceMiner: could not start helper session", 4)
+            return
+        end
+
+        if state.open_browser_when_ready then
+            local _, open_err = open_helper_site()
+            if open_err then
+                msg.warn("could not open helper site: " .. tostring(open_err))
+            else
+                state.open_browser_when_ready = false
+            end
         end
     end)
 end
@@ -1101,37 +1065,26 @@ local function mine_current()
 end
 
 local function set_sentence_miner_enabled(enabled)
-    local serialized = enabled and "yes" or "no"
-    local ok, err = update_config_option("enabled", serialized)
-    if not ok then
-        return nil, err
-    end
-
-    opts.enabled = serialized
+    state.enabled = enabled
 
     if enabled then
+        state.open_browser_when_ready = true
         mp.osd_message("SentenceMiner: enabled", 2)
         if mp.get_property("path", "") ~= "" then
             start_session()
         end
-        return true, nil
+        return
     end
 
+    state.open_browser_when_ready = false
     stop_session()
     shutdown_helper()
     mp.osd_message("SentenceMiner: disabled", 2)
-    return true, nil
 end
 
 local function toggle_sentence_miner_enabled()
     local next_enabled = not is_sentence_miner_enabled()
-    local ok, err = set_sentence_miner_enabled(next_enabled)
-    if ok then
-        return
-    end
-
-    msg.error("could not update sentenceminer.conf: " .. tostring(err))
-    mp.osd_message("SentenceMiner: could not update sentenceminer.conf", 4)
+    set_sentence_miner_enabled(next_enabled)
 end
 
 mp.register_event("file-loaded", start_session)
