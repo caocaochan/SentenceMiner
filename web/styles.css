@@ -29,7 +29,7 @@ body {
     radial-gradient(circle at top right, rgba(138, 173, 244, 0.18), transparent 24%),
     linear-gradient(180deg, var(--mantle), var(--crust));
   color: var(--text);
-  font-family: "Yu Gothic UI", "Hiragino Sans", "Segoe UI", sans-serif;
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
 }
 
 body {

@@ -188,6 +188,11 @@ async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/favicon.svg') {
+    await serveStatic(response, 'favicon.svg', 'image/svg+xml; charset=utf-8');
+    return;
+  }
+
   respondJson(response, 404, {
     success: false,
     message: `Route not found: ${method} ${url.pathname}`,
