@@ -32,7 +32,7 @@ jobs:
 
       - name: Build latest zip
         shell: powershell
-        run: Compress-Archive -Path dist\SentenceMiner -DestinationPath SentenceMiner-latest.zip -Force
+        run: Compress-Archive -Path dist\SentenceMiner\* -DestinationPath SentenceMiner-latest.zip -Force
 
       - name: Update moving latest tag
         shell: bash

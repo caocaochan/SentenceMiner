@@ -45,20 +45,12 @@ Node.js is not required for the packaged Windows release.
 ## Windows Setup
 
 1. Download and extract `SentenceMiner-latest.zip`.
-2. Copy everything from `SentenceMiner/mpv/scripts/` into your `mpv/scripts/` directory.
-3. Copy `SentenceMiner/mpv/script-opts/sentenceminer.conf.example` to `mpv/script-opts/sentenceminer.conf`.
-4. Copy `mpv/scripts/sentenceminer-helper/sentenceminer.config.example.json` to `mpv/scripts/sentenceminer-helper/sentenceminer.config.json`.
-5. Edit `sentenceminer.config.json` with your Anki deck, note type, and field mappings.
-6. Bind a mining hotkey in `mpv/input.conf`:
+2. Extract it directly into your `mpv` folder so the zip's `scripts/` and `script-opts/` folders merge into `mpv/scripts/` and `mpv/script-opts/`.
+3. Edit `mpv/scripts/sentenceminer-helper/sentenceminer.config.json` with your Anki deck, note type, and field mappings.
+4. Play a video in `mpv`.
+5. Press `Ctrl+m` to mine the current subtitle, or open `http://127.0.0.1:8766` in your browser and use Yomitan on the live transcript.
 
-```conf
-Ctrl+m script-message-to sentenceminer mine
-```
-
-7. Play a video in `mpv`.
-8. Open `http://127.0.0.1:8766` in your browser and use Yomitan on the live transcript.
-
-The helper starts automatically on first playback. You should not need to run `SentenceMinerHelper.exe` yourself unless you are debugging.
+The helper starts automatically on first playback. You should not need to run `SentenceMinerHelper.exe` yourself unless you are debugging. The packaged release already includes `script-opts/sentenceminer.conf` with a relative helper path and a default `Ctrl+m` mining hotkey.
 
 ## Configuration
 
@@ -93,7 +85,7 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_image`
 - optional `bind_default_key`
 
-By default, `helper_exe_path` can stay empty. The script looks for `SentenceMinerHelper.exe` in a `sentenceminer-helper` folder next to `sentenceminer.lua`.
+In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe` and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and rely on auto-discovery.
 
 ## Developer Workflow
 

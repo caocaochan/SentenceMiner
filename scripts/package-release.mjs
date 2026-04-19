@@ -7,7 +7,7 @@ const distRoot = path.join(repoRoot, 'dist');
 const buildRoot = path.join(distRoot, 'build');
 const packageRoot = path.join(distRoot, 'SentenceMiner');
 const helperBuildRoot = path.join(buildRoot, 'helper');
-const helperSourceRoot = path.join(packageRoot, 'mpv', 'scripts', 'sentenceminer-helper');
+const helperSourceRoot = path.join(packageRoot, 'scripts', 'sentenceminer-helper');
 
 if (process.platform !== 'win32') {
   throw new Error('Windows release packaging is required for SentenceMiner-latest.zip.');
@@ -17,20 +17,17 @@ run(process.execPath, [path.join(repoRoot, 'scripts', 'build-helper.mjs')], 'bui
 
 await fs.rm(packageRoot, { recursive: true, force: true });
 await fs.mkdir(helperSourceRoot, { recursive: true });
-await fs.mkdir(path.join(packageRoot, 'mpv', 'script-opts'), { recursive: true });
+await fs.mkdir(path.join(packageRoot, 'script-opts'), { recursive: true });
 
 await copyIntoPackage('README.md', 'README.md');
-await copyIntoPackage('mpv/sentenceminer.lua', 'mpv/scripts/sentenceminer.lua');
-await copyIntoPackage('script-opts/sentenceminer.conf.example', 'mpv/script-opts/sentenceminer.conf.example');
+await copyIntoPackage('mpv/sentenceminer.lua', 'scripts/sentenceminer.lua');
 await copyIntoPackage(
   path.join(helperBuildRoot, 'SentenceMinerHelper.exe'),
-  'mpv/scripts/sentenceminer-helper/SentenceMinerHelper.exe',
+  'scripts/sentenceminer-helper/SentenceMinerHelper.exe',
 );
-await copyIntoPackage('web', 'mpv/scripts/sentenceminer-helper/web');
-await copyIntoPackage(
-  'sentenceminer.config.example.json',
-  'mpv/scripts/sentenceminer-helper/sentenceminer.config.example.json',
-);
+await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
+await writePackagedMpvConfig();
+await writePackagedHelperConfig();
 
 console.log(`Packaged release files into ${packageRoot}`);
 
@@ -45,6 +42,27 @@ async function copyIntoPackage(sourceRelativePath, destinationRelativePath) {
     recursive: true,
     force: true,
   });
+}
+
+async function writePackagedMpvConfig() {
+  const sourcePath = path.join(repoRoot, 'script-opts', 'sentenceminer.conf.example');
+  const destinationPath = path.join(packageRoot, 'script-opts', 'sentenceminer.conf');
+  const source = await fs.readFile(sourcePath, 'utf8');
+
+  const packaged = source
+    .replace(/^helper_exe_path=.*$/m, 'helper_exe_path=sentenceminer-helper/SentenceMinerHelper.exe')
+    .replace(/^bind_default_key=.*$/m, 'bind_default_key=yes')
+    .replace(/^default_key=.*$/m, 'default_key=Ctrl+m');
+
+  await fs.writeFile(destinationPath, packaged, 'utf8');
+}
+
+async function writePackagedHelperConfig() {
+  const sourcePath = path.join(repoRoot, 'sentenceminer.config.example.json');
+  const destinationPath = path.join(packageRoot, 'scripts', 'sentenceminer-helper', 'sentenceminer.config.json');
+  const source = await fs.readFile(sourcePath, 'utf8');
+
+  await fs.writeFile(destinationPath, source, 'utf8');
 }
 
 function run(command, args, step) {
