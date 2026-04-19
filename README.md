@@ -9,6 +9,13 @@ SentenceMiner is an `mpv`-first sentence mining workflow:
 
 The UI uses a Catppuccin Macchiato-inspired theme and keeps a running subtitle history for the current playback session.
 
+## Downloads
+
+- Latest packaged zip: `https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip`
+- Source snapshot of `main`: `https://github.com/caocaochan/SentenceMiner/archive/refs/heads/main.zip`
+
+The packaged release zip is the recommended download. It includes only the files an end user needs to run SentenceMiner, not tests or repository-only files.
+
 ## What v1 does
 
 - shows the current subtitle and transcript history on `localhost`
@@ -87,6 +94,7 @@ Ctrl+m script-message-to sentenceminer mine
 ```powershell
 node --experimental-strip-types src/server.ts
 node --experimental-strip-types --test test/*.test.ts
+node scripts/package-release.mjs
 ```
 
 ## Notes
@@ -95,3 +103,4 @@ node --experimental-strip-types --test test/*.test.ts
 - v1 keeps transcript history in memory only.
 - v1 only tracks the primary active subtitle.
 - The target note is the newest matching note returned by the configured deck, note type, and extra query.
+- The GitHub Actions workflow at `.github/workflows/release-latest.yml` rebuilds `SentenceMiner-latest.zip` on every push to `main`.

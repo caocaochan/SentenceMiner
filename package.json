@@ -5,6 +5,7 @@
   "type": "module",
   "description": "mpv subtitle mining helper with a live local transcript site and AnkiConnect integration.",
   "scripts": {
+    "package:release": "node scripts/package-release.mjs",
     "start": "node --experimental-strip-types src/server.ts",
     "test": "node --experimental-strip-types --test test/*.test.ts"
   },
