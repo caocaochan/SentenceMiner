@@ -1,8 +1,15 @@
+import {
+  buildBatchHistoryMineRequest,
+  buildHistoryEntryKey,
+  reconcileSelectedHistoryKeys,
+} from './history-selection.js';
+
 const state = {
   connection: 'connecting',
   app: null,
   autoScroll: true,
   pendingActions: new Set(),
+  selectedHistoryKeys: new Set(),
   settingsModalOpen: false,
   settingsOptions: {
     decks: [],
@@ -25,7 +32,9 @@ const elements = {
   currentTime: document.getElementById('current-time'),
   currentSubtitle: document.getElementById('current-subtitle'),
   historyCount: document.getElementById('history-count'),
+  historySelectionCount: document.getElementById('history-selection-count'),
   historyList: document.getElementById('history-list'),
+  historyMineSelected: document.getElementById('history-mine-selected'),
   settingsButton: document.getElementById('settings-button'),
   settingsModal: document.getElementById('settings-modal'),
   settingsBackdrop: document.getElementById('settings-backdrop'),
@@ -66,6 +75,9 @@ elements.historyList.addEventListener('scroll', () => {
 
 elements.settingsButton.addEventListener('click', () => {
   openSettingsModal();
+});
+elements.historyMineSelected.addEventListener('click', () => {
+  void runMineSelectedAction();
 });
 elements.settingsClose.addEventListener('click', closeSettingsModal);
 elements.settingsCancel.addEventListener('click', closeSettingsModal);
@@ -174,7 +186,10 @@ function render() {
 function renderTranscript() {
   const transcriptState = state.app?.state ?? { session: null, currentSubtitle: null, history: [] };
   const currentSubtitle = transcriptState.currentSubtitle;
-  const history = [...(transcriptState.history ?? [])].reverse();
+  const historyEntries = transcriptState.history ?? [];
+  state.selectedHistoryKeys = reconcileSelectedHistoryKeys(state.selectedHistoryKeys, historyEntries);
+  const selectedEntries = historyEntries.filter((entry) => state.selectedHistoryKeys.has(buildHistoryEntryKey(entry)));
+  const history = [...historyEntries].reverse();
 
   elements.connectionPill.textContent =
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
@@ -184,6 +199,9 @@ function renderTranscript() {
   elements.currentSubtitle.textContent = currentSubtitle?.text ?? 'Waiting for subtitles from mpv…';
   elements.currentSubtitle.className = `subtitle-display ${currentSubtitle?.text ? '' : 'empty'}`;
   elements.historyCount.textContent = `${history.length} ${history.length === 1 ? 'line' : 'lines'}`;
+  elements.historySelectionCount.textContent = `${selectedEntries.length} selected`;
+  elements.historyMineSelected.disabled =
+    selectedEntries.length === 0 || isAnyBatchHistoryActionPending('mine-selected');
 
   const previousScrollHeight = elements.historyList.scrollHeight;
   const previousScrollTop = elements.historyList.scrollTop;
@@ -195,10 +213,34 @@ function renderTranscript() {
     if (currentSubtitle && isSameSubtitle(currentSubtitle, entry)) {
       item.classList.add('history-item-active');
     }
+    const entryKey = buildHistoryEntryKey(entry);
+    if (state.selectedHistoryKeys.has(entryKey)) {
+      item.classList.add('history-item-selected');
+    }
+
+    const head = document.createElement('div');
+    head.className = 'history-item-head';
 
     const meta = document.createElement('div');
     meta.className = 'history-meta';
     meta.textContent = formatRange(entry.startMs, entry.endMs);
+
+    const checkboxLabel = document.createElement('label');
+    checkboxLabel.className = 'history-checkbox';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = state.selectedHistoryKeys.has(entryKey);
+    checkbox.setAttribute('aria-label', `Select subtitle line: ${entry.text}`);
+    checkbox.addEventListener('change', () => {
+      toggleHistorySelection(entry, checkbox.checked);
+    });
+
+    const checkboxText = document.createElement('span');
+    checkboxText.textContent = 'Select';
+
+    checkboxLabel.append(checkbox, checkboxText);
+    head.append(meta, checkboxLabel);
 
     const text = document.createElement('div');
     text.className = 'history-text';
@@ -211,7 +253,7 @@ function renderTranscript() {
     const mineButton = buildHistoryActionButton('Mine', 'mine', entry);
 
     actions.append(goToButton, mineButton);
-    item.append(meta, text, actions);
+    item.append(head, text, actions);
     item.dataset.index = String(index);
     elements.historyList.append(item);
   });
@@ -286,6 +328,41 @@ async function runHistoryAction(action, entry) {
   }
 }
 
+async function runMineSelectedAction() {
+  const historyEntries = state.app?.state?.history ?? [];
+  const request = buildBatchHistoryMineRequest(historyEntries, state.selectedHistoryKeys);
+  const pendingKey = buildBatchHistoryActionKey('mine-selected', request.entries);
+  if (request.entries.length === 0 || state.pendingActions.has(pendingKey)) {
+    return;
+  }
+
+  state.pendingActions.add(pendingKey);
+  render();
+
+  try {
+    const response = await fetch('/api/history/mine', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
+    }
+
+    state.selectedHistoryKeys.clear();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    window.alert(message);
+  } finally {
+    state.pendingActions.delete(pendingKey);
+    render();
+  }
+}
+
 function isHistoryActionPending(action, entry) {
   return state.pendingActions.has(buildHistoryActionKey(action, entry));
 }
@@ -294,8 +371,32 @@ function buildHistoryActionKey(action, entry) {
   return `${action}:${buildHistoryEntryKey(entry)}`;
 }
 
-function buildHistoryEntryKey(entry) {
-  return [entry.sessionId, entry.filePath, entry.startMs ?? 'nil', entry.endMs ?? 'nil', entry.text].join('::');
+function buildBatchHistoryActionKey(action, entries) {
+  return `${action}:${entries.map((entry) => buildHistoryEntryKey(entry)).join('|')}`;
+}
+
+function isBatchHistoryActionPending(action, entries) {
+  if (entries.length === 0) {
+    return false;
+  }
+
+  return state.pendingActions.has(buildBatchHistoryActionKey(action, entries));
+}
+
+function isAnyBatchHistoryActionPending(action) {
+  const prefix = `${action}:`;
+  return [...state.pendingActions].some((pendingKey) => pendingKey.startsWith(prefix));
+}
+
+function toggleHistorySelection(entry, checked) {
+  const entryKey = buildHistoryEntryKey(entry);
+  if (checked) {
+    state.selectedHistoryKeys.add(entryKey);
+  } else {
+    state.selectedHistoryKeys.delete(entryKey);
+  }
+
+  render();
 }
 
 function isSameSubtitle(a, b) {

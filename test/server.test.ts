@@ -153,6 +153,95 @@ test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
   assert.deepEqual(harness.shutdownReasons, ['runtime shutdown request']);
 });
 
+test('POST /api/history/mine accepts batch selections and updates Anki once', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      entries: [
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'later',
+          startMs: 2000,
+          endMs: 2400,
+          playbackTimeMs: 2200,
+        },
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'earlier',
+          startMs: 1000,
+          endMs: 1400,
+          playbackTimeMs: 1200,
+        },
+      ],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+
+  const updateRequest = harness.ankiRequests.find((request) => request.action === 'updateNoteFields');
+  assert.ok(updateRequest);
+  assert.equal(updateRequest?.params.note.fields.Sentence, 'earlier later');
+  assert.equal(updateRequest?.params.note.fields.Time, '00:01.000 - 00:02.400');
+});
+
+test('POST /api/history/mine still accepts single-entry payloads', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'single line',
+      startMs: 1000,
+      endMs: 1200,
+      playbackTimeMs: 1100,
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+});
+
+test('POST /api/history/mine rejects empty batch payloads', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      entries: [],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.success, false);
+  assert.match(payload.message, /Select at least one subtitle line/);
+});
+
 test('probeRunningHelper returns true for a live SentenceMiner instance', async (t) => {
   const harness = await createServerHarness(t);
   const address = new URL(harness.baseUrl);
@@ -218,9 +307,11 @@ async function createServerHarness(t: TestContext) {
   const configPath = path.join(tempRoot, 'sentenceminer.conf');
   await fs.writeFile(configPath, 'anki_deck=Anime\nanki_note_type=Sentence\ncapture_audio=yes\n', 'utf8');
 
+  const ankiRequests: Array<Record<string, any>> = [];
   const ankiServer = http.createServer(async (request, response) => {
     const body = await readRequestBody(request);
     const payload = body ? JSON.parse(body) : {};
+    ankiRequests.push(payload);
     const action = payload.action;
     let result;
 
@@ -233,6 +324,26 @@ async function createServerHarness(t: TestContext) {
         payload.params?.modelName === 'Vocab'
           ? ['Expression', 'Meaning', 'Audio']
           : ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'];
+    } else if (action === 'findNotes') {
+      result = [25];
+    } else if (action === 'notesInfo') {
+      result = [
+        {
+          noteId: 25,
+          fields: {
+            Sentence: { value: '' },
+            Audio: { value: '' },
+            Picture: { value: '' },
+            Source: { value: '' },
+            Time: { value: '' },
+            Filename: { value: '' },
+          },
+        },
+      ];
+    } else if (action === 'storeMediaFile') {
+      result = payload.params?.filename ?? null;
+    } else if (action === 'updateNoteFields') {
+      result = null;
     } else {
       result = null;
     }
@@ -250,12 +361,13 @@ async function createServerHarness(t: TestContext) {
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${ankiAddress.port}`;
   const shutdownReasons: string[] = [];
+  const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
 
   const appServer = http.createServer(
     createRequestHandler({
       config,
       configPath,
-      transcriptStore: new TranscriptStore(config.transcript.historyLimit),
+      transcriptStore,
       playerCommandStore: new PlayerCommandStore(),
       sockets: new WebSocketHub(),
       requestShutdown: (reason) => {
@@ -279,10 +391,12 @@ async function createServerHarness(t: TestContext) {
   });
 
   return {
+    ankiRequests,
     baseUrl: `http://127.0.0.1:${appAddress.port}`,
     config,
     configPath,
     shutdownReasons,
+    transcriptStore,
   };
 }
 

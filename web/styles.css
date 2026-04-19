@@ -164,6 +164,12 @@ h1 {
   z-index: 1;
 }
 
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .subtitle-display {
   min-height: 110px;
   padding: 22px;
@@ -220,6 +226,33 @@ h1 {
 .history-item-active {
   border-color: rgba(166, 218, 149, 0.48);
   background: rgba(54, 58, 79, 0.98);
+}
+
+.history-item-selected {
+  border-color: rgba(138, 173, 244, 0.48);
+  background: rgba(45, 48, 68, 0.98);
+}
+
+.history-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--subtext1);
+  cursor: pointer;
+}
+
+.history-checkbox input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .history-meta {
@@ -496,6 +529,15 @@ h1 {
   .modal-header,
   .modal-footer,
   .section-heading {
+    flex-direction: column;
+  }
+
+  .history-toolbar {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .history-item-head {
     flex-direction: column;
   }
 

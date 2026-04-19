@@ -20,6 +20,8 @@ import { TranscriptStore } from './transcript-store.ts';
 import type {
   AppConfig,
   EditableSettings,
+  HistoryMineBatchPayload,
+  HistoryMineRequest,
   MinePayload,
   ServerConfig,
   SessionPayload,
@@ -294,7 +296,8 @@ export async function routeRequest(
   }
 
   if (method === 'POST' && url.pathname === '/api/history/mine') {
-    const payload = await readJsonBody<SubtitleEventPayload>(request);
+    const payload = parseHistoryMineRequestPayload(await readJsonBody<unknown>(request));
+    assertActiveHistoryMineRequest(context.transcriptStore, payload);
     const result = await mineHistoryEntry(context.config, payload);
     respondJson(response, 200, result);
     return;
@@ -307,6 +310,11 @@ export async function routeRequest(
 
   if (method === 'GET' && url.pathname === '/app.js') {
     await serveStatic(response, 'app.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/history-selection.js') {
+    await serveStatic(response, 'history-selection.js', 'text/javascript; charset=utf-8');
     return;
   }
 
@@ -386,6 +394,21 @@ function assertActiveSession(transcriptStore: TranscriptStore, sessionId: string
   if (activeSessionId !== sessionId) {
     throw new HttpError(409, 'The requested history entry does not belong to the active session.');
   }
+}
+
+function assertActiveHistoryMineRequest(transcriptStore: TranscriptStore, payload: HistoryMineRequest): void {
+  if ('entries' in payload) {
+    if (payload.entries.length === 0) {
+      throw new HttpError(400, 'Select at least one subtitle line to mine.');
+    }
+
+    for (const entry of payload.entries) {
+      assertActiveSession(transcriptStore, entry.sessionId);
+    }
+    return;
+  }
+
+  assertActiveSession(transcriptStore, payload.sessionId);
 }
 
 class HttpError extends Error {
@@ -530,6 +553,39 @@ function getRecord(value: unknown, fieldName: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function parseHistoryMineRequestPayload(payload: unknown): HistoryMineRequest {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    !Array.isArray(payload) &&
+    'entries' in payload
+  ) {
+    const root = payload as Record<string, unknown>;
+    if (!Array.isArray(root.entries)) {
+      throw new HttpError(400, 'entries must be an array.');
+    }
+
+    return {
+      entries: root.entries.map((entry, index) => parseSubtitleEventPayload(entry, `entries[${index}]`)),
+    } satisfies HistoryMineBatchPayload;
+  }
+
+  return parseSubtitleEventPayload(payload, 'history mine payload');
+}
+
+function parseSubtitleEventPayload(value: unknown, fieldName: string): SubtitleEventPayload {
+  const root = getRecord(value, fieldName);
+
+  return {
+    sessionId: getString(root.sessionId, `${fieldName}.sessionId`, { allowEmpty: false }),
+    text: getString(root.text, `${fieldName}.text`),
+    startMs: getNullableInteger(root.startMs, `${fieldName}.startMs`),
+    endMs: getNullableInteger(root.endMs, `${fieldName}.endMs`),
+    playbackTimeMs: getNullableInteger(root.playbackTimeMs, `${fieldName}.playbackTimeMs`),
+    filePath: getString(root.filePath, `${fieldName}.filePath`, { allowEmpty: false }),
+  };
+}
+
 function getString(value: unknown, fieldName: string, options: { allowEmpty?: boolean } = {}): string {
   if (typeof value !== 'string') {
     throw new HttpError(400, `${fieldName} must be a string.`);
@@ -549,6 +605,14 @@ function getInteger(value: unknown, fieldName: string): number {
   }
 
   return value;
+}
+
+function getNullableInteger(value: unknown, fieldName: string): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  return getInteger(value, fieldName);
 }
 
 function getBoolean(value: unknown, fieldName: string): boolean {

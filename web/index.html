@@ -38,8 +38,14 @@
 
         <section class="history-panel">
           <div class="panel-header sticky">
-            <h2>Transcript History</h2>
-            <span id="history-count" class="muted">0 lines</span>
+            <div>
+              <h2>Transcript History</h2>
+              <span id="history-count" class="muted">0 lines</span>
+            </div>
+            <div class="history-toolbar">
+              <span id="history-selection-count" class="muted">0 selected</span>
+              <button id="history-mine-selected" class="history-button history-button-primary" type="button" disabled>Mine selected</button>
+            </div>
           </div>
           <div id="history-list" class="history-list"></div>
         </section>

@@ -22,6 +22,12 @@ export interface MinePayload extends SubtitleEventPayload {
   audioPath?: string | null;
 }
 
+export interface HistoryMineBatchPayload {
+  entries: SubtitleEventPayload[];
+}
+
+export type HistoryMineRequest = SubtitleEventPayload | HistoryMineBatchPayload;
+
 export interface FieldMapping {
   subtitle: string;
   audio: string;
