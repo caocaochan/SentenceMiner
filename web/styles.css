@@ -43,21 +43,21 @@ body.modal-open {
 .app-shell {
   width: min(1100px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 28px 0 40px;
+  padding: 20px 0 28px;
 }
 
 .hero {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24px;
-  margin-bottom: 20px;
+  gap: 18px;
+  margin-bottom: 14px;
 }
 
 .hero-actions {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .eyebrow {
@@ -81,7 +81,7 @@ h1 {
 
 .layout {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .current-panel,
@@ -96,27 +96,27 @@ h1 {
 
 .current-panel,
 .history-panel {
-  padding: 18px;
+  padding: 14px;
 }
 
 .status-card {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 10px;
-  padding: 16px 18px;
-  min-width: 240px;
+  gap: 8px;
+  padding: 13px 16px;
+  min-width: 224px;
 }
 
 .icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 54px;
-  height: 54px;
-  min-width: 54px;
-  min-height: 54px;
-  flex: 0 0 54px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
   aspect-ratio: 1;
   border: 1px solid rgba(138, 173, 244, 0.24);
   border-radius: 999px;
@@ -134,14 +134,14 @@ h1 {
 }
 
 .icon-button svg {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 .icon-button-subtle {
   width: auto;
   height: auto;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 999px;
   box-shadow: none;
 }
@@ -150,15 +150,15 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .sticky {
   position: sticky;
   top: 0;
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 11px 13px;
+  border-radius: 14px;
   background: rgba(30, 32, 48, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.05);
   z-index: 1;
@@ -167,19 +167,19 @@ h1 {
 .history-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .subtitle-display {
-  min-height: 110px;
-  padding: 22px;
-  border-radius: 18px;
+  min-height: 92px;
+  padding: 16px 18px;
+  border-radius: 16px;
   background:
     linear-gradient(135deg, rgba(138, 173, 244, 0.16), rgba(198, 160, 246, 0.1)),
     rgba(24, 25, 38, 0.7);
   border: 1px solid rgba(138, 173, 244, 0.22);
-  font-size: clamp(1.35rem, 1.4vw + 1rem, 2.25rem);
-  line-height: 1.55;
+  font-size: clamp(1.18rem, 1.1vw + 1rem, 1.9rem);
+  line-height: 1.42;
   letter-spacing: 0.01em;
   white-space: pre-wrap;
   word-break: break-word;
@@ -198,7 +198,7 @@ h1 {
 .history-list {
   overflow-y: auto;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding-right: 4px;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -210,8 +210,8 @@ h1 {
 }
 
 .history-item {
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 10px 12px;
+  border-radius: 14px;
   background: rgba(30, 32, 48, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
@@ -237,28 +237,29 @@ h1 {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .history-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--subtext1);
   cursor: pointer;
+  font-size: 0.9rem;
 }
 
 .history-checkbox input {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin: 0;
   accent-color: var(--accent);
 }
 
 .history-meta {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--peach);
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -266,26 +267,26 @@ h1 {
 .history-text {
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 1.15rem;
-  line-height: 1.65;
+  font-size: 1rem;
+  line-height: 1.4;
   color: var(--subtext1);
 }
 
 .history-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .history-button {
   appearance: none;
   border: 1px solid rgba(138, 173, 244, 0.22);
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 6px 10px;
   background: rgba(54, 58, 79, 0.82);
   color: var(--text);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   line-height: 1;
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
@@ -491,7 +492,7 @@ h1 {
 @media (max-width: 780px) {
   .app-shell {
     width: min(100vw - 20px, 1100px);
-    padding-top: 20px;
+    padding-top: 16px;
   }
 
   .hero {
@@ -510,12 +511,34 @@ h1 {
 
   .current-panel,
   .history-panel {
-    padding: 14px;
+    padding: 12px;
   }
 
   .subtitle-display {
-    padding: 16px;
-    min-height: 88px;
+    padding: 14px;
+    min-height: 78px;
+    font-size: clamp(1.05rem, 1.2vw + 0.95rem, 1.5rem);
+  }
+
+  .sticky {
+    padding: 10px 12px;
+  }
+
+  .history-list {
+    gap: 7px;
+  }
+
+  .history-item {
+    padding: 9px 10px;
+  }
+
+  .history-text {
+    font-size: 0.96rem;
+    line-height: 1.36;
+  }
+
+  .history-actions {
+    margin-top: 7px;
   }
 
   .modal-shell {
