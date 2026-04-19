@@ -30,6 +30,7 @@ const state = {
   renderedTranscriptSignature: '',
   renderedCueElements: new Map(),
   autoScrollFrameId: null,
+  lastScrolledCueId: null,
 };
 const STATE_POLL_INTERVAL_MS = 2000;
 let reconnectTimerId = null;
@@ -231,10 +232,14 @@ function renderTranscript() {
   if (shouldRebuildTranscriptList(state.renderedTranscriptSignature, transcriptEntries)) {
     rebuildTranscriptList(transcriptEntries);
     state.renderedTranscriptSignature = buildTranscriptStructureSignature(transcriptEntries);
+    state.lastScrolledCueId = null;
   }
 
   updateTranscriptItemUi(transcriptEntries, transcriptState.currentCueId);
-  syncCurrentCueScroll(transcriptState.currentCueId);
+  if (transcriptState.currentCueId !== state.lastScrolledCueId) {
+    state.lastScrolledCueId = transcriptState.currentCueId;
+    syncCurrentCueScroll(transcriptState.currentCueId);
+  }
 }
 
 function renderSettingsUi() {
