@@ -145,6 +145,14 @@ local function is_absolute_path(path)
     return path:sub(1, 1) == "/"
 end
 
+local function is_path_like(path)
+    if not path or path == "" then
+        return false
+    end
+
+    return path:match("^[.~]") ~= nil or path:match("[/\\]") ~= nil or path:match("^%a:") ~= nil
+end
+
 local function expand_mpv_path(path)
     if not path or path == "" or not path:match("^~~") then
         return path
@@ -553,6 +561,88 @@ local function resolve_helper_exe_path()
     return nil, "could not find SentenceMinerHelper.exe; copy sentenceminer-helper next to sentenceminer.lua or set helper_exe_path"
 end
 
+local function resolve_ffmpeg_path()
+    local configured = trim_output(opts.ffmpeg_path) or "ffmpeg"
+    local script_dir = get_script_dir()
+
+    local function bundled_candidates()
+        local candidates = {}
+
+        local function add_candidate(candidate)
+            if candidate and candidate ~= "" then
+                table.insert(candidates, expand_mpv_path(candidate))
+            end
+        end
+
+        if script_dir and script_dir ~= "" then
+            add_candidate(utils.join_path(utils.join_path(script_dir, "sentenceminer-helper"), "ffmpeg.exe"))
+            add_candidate(utils.join_path(script_dir, "ffmpeg.exe"))
+
+            local parent = parent_dir(script_dir)
+            if parent then
+                add_candidate(utils.join_path(utils.join_path(utils.join_path(parent, "scripts"), "sentenceminer-helper"), "ffmpeg.exe"))
+            end
+        end
+
+        return candidates
+    end
+
+    if configured:lower() == "ffmpeg" or configured:lower() == "ffmpeg.exe" then
+        for _, candidate in ipairs(bundled_candidates()) do
+            if file_exists(candidate) then
+                return candidate, nil
+            end
+        end
+
+        return configured, nil
+    end
+
+    if not is_path_like(configured) then
+        return configured, nil
+    end
+
+    local candidates = {}
+
+    local function add_candidate(candidate)
+        if candidate and candidate ~= "" then
+            table.insert(candidates, expand_mpv_path(candidate))
+        end
+    end
+
+    add_candidate(configured)
+    if not configured:lower():match("ffmpeg%.exe$") then
+        add_candidate(utils.join_path(configured, "ffmpeg.exe"))
+    end
+
+    if script_dir and script_dir ~= "" and not is_absolute_path(configured) then
+        local relative = utils.join_path(script_dir, configured)
+        add_candidate(relative)
+        if not configured:lower():match("ffmpeg%.exe$") then
+            add_candidate(utils.join_path(relative, "ffmpeg.exe"))
+        end
+
+        local parent = parent_dir(script_dir)
+        if parent then
+            local parent_relative = utils.join_path(parent, configured)
+            add_candidate(parent_relative)
+            if not configured:lower():match("ffmpeg%.exe$") then
+                add_candidate(utils.join_path(parent_relative, "ffmpeg.exe"))
+            end
+        end
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if file_exists(candidate) then
+            return candidate, nil
+        end
+    end
+
+    return nil, string.format(
+        "ffmpeg_path='%s' did not resolve to ffmpeg.exe; set it to ffmpeg.exe, a folder containing ffmpeg.exe, or leave it as ffmpeg to auto-discover the bundled copy",
+        configured
+    )
+end
+
 local function spawn_helper_process()
     if not is_windows() then
         return nil, "helper auto-start is currently implemented only on Windows"
@@ -890,8 +980,12 @@ local function capture_audio(payload, capture)
 
     local extension = tostring(capture.audioFormat or "mp3")
     local output_path = make_temp_path("audio", extension)
+    local ffmpeg_path, ffmpeg_err = resolve_ffmpeg_path()
+    if not ffmpeg_path then
+        error(ffmpeg_err)
+    end
     local args = {
-        opts.ffmpeg_path,
+        ffmpeg_path,
         "-y",
         "-ss",
         format_seconds(clip_start_ms / 1000),
@@ -920,11 +1014,15 @@ local function capture_image(capture)
     local output_extension = tostring(capture.imageFormat or "jpg")
     local output_path = make_temp_path("shot", output_extension)
     local screenshot_mode = capture.imageIncludeSubtitles == false and "video" or "subtitles"
+    local ffmpeg_path, ffmpeg_err = resolve_ffmpeg_path()
+    if not ffmpeg_path then
+        error(ffmpeg_err)
+    end
 
     mp.commandv("screenshot-to-file", raw_path, screenshot_mode)
 
     local args = {
-        opts.ffmpeg_path,
+        ffmpeg_path,
         "-y",
         "-i",
         raw_path,

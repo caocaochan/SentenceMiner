@@ -10,7 +10,9 @@ import {
   loadConfig,
   mergeEditableSettingsIntoConfig,
   resolveAppRoot,
+  resolveBundledFfmpegPath,
   resolveConfigPath,
+  resolveFfmpegPath,
   saveEditableSettings,
 } from '../src/config.ts';
 
@@ -60,6 +62,62 @@ test('resolveConfigPath defaults next to the packaged helper', (t) => {
 
   const configPath = resolveConfigPath([], 'C:\\mpv\\scripts\\sentenceminer-helper');
   assert.equal(configPath, 'C:\\mpv\\script-opts\\sentenceminer.conf');
+});
+
+test('resolveBundledFfmpegPath finds ffmpeg.exe next to the packaged helper', async (t) => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-ffmpeg-'));
+  const helperRoot = path.join(tempRoot, 'scripts', 'sentenceminer-helper');
+  const ffmpegPath = path.join(helperRoot, 'ffmpeg.exe');
+
+  t.after(async () => {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(helperRoot, { recursive: true });
+  await fs.writeFile(ffmpegPath, '');
+
+  assert.equal(resolveBundledFfmpegPath(helperRoot), ffmpegPath);
+});
+
+test('resolveFfmpegPath prefers the bundled ffmpeg for packaged helpers', async (t) => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-ffmpeg-path-'));
+  const helperRoot = path.join(tempRoot, 'scripts', 'sentenceminer-helper');
+  const ffmpegPath = path.join(helperRoot, 'ffmpeg.exe');
+
+  t.after(async () => {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(helperRoot, { recursive: true });
+  await fs.writeFile(ffmpegPath, '');
+
+  assert.equal(resolveFfmpegPath('ffmpeg', { appRoot: helperRoot }), ffmpegPath);
+  assert.equal(resolveFfmpegPath('ffmpeg.exe', { appRoot: helperRoot }), ffmpegPath);
+});
+
+test('resolveFfmpegPath resolves config-relative ffmpeg paths', async (t) => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-ffmpeg-config-'));
+  const configRoot = path.join(tempRoot, 'script-opts');
+  const helperRoot = path.join(tempRoot, 'scripts', 'sentenceminer-helper');
+  const configPath = path.join(configRoot, 'sentenceminer.conf');
+  const ffmpegPath = path.join(helperRoot, 'ffmpeg.exe');
+
+  t.after(async () => {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await fs.mkdir(configRoot, { recursive: true });
+  await fs.mkdir(helperRoot, { recursive: true });
+  await fs.writeFile(configPath, '');
+  await fs.writeFile(ffmpegPath, '');
+
+  assert.equal(
+    resolveFfmpegPath('../scripts/sentenceminer-helper/ffmpeg.exe', {
+      appRoot: helperRoot,
+      configPath,
+    }),
+    ffmpegPath,
+  );
 });
 
 test('loadConfig reads helper and runtime settings from sentenceminer.conf', async (t) => {

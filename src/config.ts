@@ -50,9 +50,21 @@ export const DEFAULT_CONFIG: AppConfig = {
 };
 
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
-  const configPath = resolveConfigPath(argv);
+  const appRoot = resolveAppRoot();
+  const configPath = resolveConfigPath(argv, appRoot);
   const fileConfig = await readOptionalConfig(configPath);
-  return mergeConfig(DEFAULT_CONFIG, fileConfig ?? {});
+  const config = mergeConfig(DEFAULT_CONFIG, fileConfig ?? {});
+
+  return {
+    ...config,
+    runtime: {
+      ...config.runtime,
+      ffmpegPath: resolveFfmpegPath(config.runtime.ffmpegPath, {
+        appRoot,
+        configPath,
+      }),
+    },
+  };
 }
 
 export function getEditableSettings(config: AppConfig): EditableSettings {
@@ -149,6 +161,58 @@ export function resolveConfigPath(argv: string[], appRoot: string = resolveAppRo
   }
 
   return directPath;
+}
+
+export function resolveBundledFfmpegPath(appRoot: string = resolveAppRoot()): string | null {
+  const candidates = [
+    path.resolve(appRoot, 'ffmpeg.exe'),
+    path.resolve(appRoot, 'bin', 'ffmpeg.exe'),
+    path.resolve(appRoot, 'sentenceminer-helper', 'ffmpeg.exe'),
+    path.resolve(appRoot, '..', 'scripts', 'sentenceminer-helper', 'ffmpeg.exe'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+export function resolveFfmpegPath(
+  configuredPath: string,
+  options: {
+    appRoot?: string;
+    configPath?: string;
+  } = {},
+): string {
+  const appRoot = options.appRoot ?? resolveAppRoot();
+  const configPath = options.configPath;
+  const normalized = configuredPath.trim() || DEFAULT_CONFIG.runtime.ffmpegPath;
+
+  if (isDefaultFfmpegCommand(normalized)) {
+    return resolveBundledFfmpegPath(appRoot) ?? normalized;
+  }
+
+  if (!isPathLike(normalized)) {
+    return normalized;
+  }
+
+  const resolutionBases = [
+    configPath ? path.dirname(configPath) : null,
+    appRoot,
+  ].filter((value): value is string => Boolean(value));
+
+  for (const base of resolutionBases) {
+    const candidate = path.resolve(base, normalized);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  const preferredBase = resolutionBases[0];
+  return preferredBase ? path.resolve(preferredBase, normalized) : path.resolve(normalized);
 }
 
 async function readOptionalConfig(filePath: string): Promise<Partial<AppConfig> | null> {
@@ -424,6 +488,15 @@ function parseBoolean(key: string, value: string): boolean {
   }
 
   throw new Error(`Invalid boolean value for ${key}: ${value}`);
+}
+
+function isDefaultFfmpegCommand(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'ffmpeg' || normalized === 'ffmpeg.exe';
+}
+
+function isPathLike(value: string): boolean {
+  return /^[.~]/.test(value) || /[\\/]/.test(value) || /^[a-z]:/i.test(value);
 }
 
 function isMissingFile(error: unknown): error is NodeJS.ErrnoException {

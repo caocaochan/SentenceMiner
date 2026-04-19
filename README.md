@@ -14,7 +14,7 @@ The UI uses a Catppuccin Macchiato-inspired theme and keeps a running subtitle h
 - Latest packaged zip: `https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip`
 - Source snapshot of `main`: `https://github.com/caocaochan/SentenceMiner/archive/refs/heads/main.zip`
 
-The packaged zip is the recommended Windows download. It includes a self-contained `SentenceMinerHelper.exe`, so end users do not need to install Node.js or start a separate `.bat` file.
+The packaged zip is the recommended Windows download. It includes a self-contained `SentenceMinerHelper.exe` and a bundled `ffmpeg.exe`, so end users do not need to install Node.js or provide `ffmpeg` separately.
 
 ## What v1 does
 
@@ -38,10 +38,9 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 
 - Windows
 - `mpv`
-- `ffmpeg`
 - Anki with AnkiConnect enabled
 
-Node.js is not required for the packaged Windows release.
+Node.js and `ffmpeg` are not required for the packaged Windows release.
 
 ## Windows Setup
 
@@ -88,11 +87,11 @@ If you change the helper listen host or port, keep `helper_url` aligned with `se
 
 Setting `enabled=no` disables SentenceMiner across launches. While disabled, the mpv script stops starting helper sessions, auto-launching the helper, and opening the helper site until you toggle it back on.
 
-In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe` and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and rely on auto-discovery.
+In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe`, `ffmpeg_path` points at the bundled `ffmpeg.exe`, and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and `ffmpeg_path=ffmpeg` to rely on auto-discovery and `PATH`.
 
 ## Developer Workflow
 
-For source development you still need Node.js 24 or newer.
+For source development you still need Node.js 24 or newer. You also need `ffmpeg` on `PATH` or a custom `ffmpeg_path` in `script-opts/sentenceminer.conf`.
 
 ```powershell
 npm install
@@ -109,6 +108,7 @@ node scripts/package-release.mjs
 - The helper defaults to port `8766` so it does not collide with AnkiConnect on `8765`.
 - If another process is already using the helper port, `mpv` will show a startup error instead of silently failing.
 - The packaged helper resolves `web/` assets relative to `SentenceMinerHelper.exe` and loads config from `mpv/script-opts/sentenceminer.conf`.
+- The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, and `ffmpeg.exe.README` inside `mpv/scripts/sentenceminer-helper/`.
 - v1 keeps transcript history in memory only.
 - v1 only tracks the primary active subtitle.
 - The target note is the newest matching note returned by the configured deck, note type, and extra query.

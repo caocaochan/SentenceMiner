@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import ffmpegStatic from 'ffmpeg-static';
 
 const repoRoot = process.cwd();
 const distRoot = path.join(repoRoot, 'dist');
@@ -25,6 +26,7 @@ await copyIntoPackage(
   path.join(helperBuildRoot, 'SentenceMinerHelper.exe'),
   'scripts/sentenceminer-helper/SentenceMinerHelper.exe',
 );
+await copyBundledFfmpeg();
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
 await writePackagedHelperEntryPoint();
@@ -51,6 +53,7 @@ async function writePackagedMpvConfig() {
 
   const packaged = source
     .replace(/^helper_exe_path=.*$/m, 'helper_exe_path=sentenceminer-helper/SentenceMinerHelper.exe')
+    .replace(/^ffmpeg_path=.*$/m, 'ffmpeg_path=../scripts/sentenceminer-helper/ffmpeg.exe')
     .replace(/^bind_default_key=.*$/m, 'bind_default_key=yes')
     .replace(/^default_key=.*$/m, 'default_key=Ctrl+m');
 
@@ -63,6 +66,18 @@ async function writePackagedHelperEntryPoint() {
 
   await fs.writeFile(destinationPath, source, 'utf8');
 }
+
+async function copyBundledFfmpeg() {
+  if (typeof ffmpegStatic !== 'string' || ffmpegStatic === '') {
+    throw new Error('ffmpeg-static did not provide a Windows ffmpeg binary path.');
+  }
+
+  const ffmpegDirectory = path.dirname(ffmpegStatic);
+  await copyIntoPackage(ffmpegStatic, 'scripts/sentenceminer-helper/ffmpeg.exe');
+  await copyIntoPackage(path.join(ffmpegDirectory, 'ffmpeg.exe.LICENSE'), 'scripts/sentenceminer-helper/ffmpeg.exe.LICENSE');
+  await copyIntoPackage(path.join(ffmpegDirectory, 'ffmpeg.exe.README'), 'scripts/sentenceminer-helper/ffmpeg.exe.README');
+}
+
 function run(command, args, step) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
