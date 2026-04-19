@@ -27,7 +27,6 @@ await copyIntoPackage(
 );
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
-await writePackagedHelperConfig();
 
 console.log(`Packaged release files into ${packageRoot}`);
 
@@ -45,7 +44,7 @@ async function copyIntoPackage(sourceRelativePath, destinationRelativePath) {
 }
 
 async function writePackagedMpvConfig() {
-  const sourcePath = path.join(repoRoot, 'script-opts', 'sentenceminer.conf.example');
+  const sourcePath = path.join(repoRoot, 'script-opts', 'sentenceminer.conf');
   const destinationPath = path.join(packageRoot, 'script-opts', 'sentenceminer.conf');
   const source = await fs.readFile(sourcePath, 'utf8');
 
@@ -55,14 +54,6 @@ async function writePackagedMpvConfig() {
     .replace(/^default_key=.*$/m, 'default_key=Ctrl+m');
 
   await fs.writeFile(destinationPath, packaged, 'utf8');
-}
-
-async function writePackagedHelperConfig() {
-  const sourcePath = path.join(repoRoot, 'sentenceminer.config.example.json');
-  const destinationPath = path.join(packageRoot, 'scripts', 'sentenceminer-helper', 'sentenceminer.config.json');
-  const source = await fs.readFile(sourcePath, 'utf8');
-
-  await fs.writeFile(destinationPath, source, 'utf8');
 }
 
 function run(command, args, step) {

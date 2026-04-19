@@ -46,7 +46,7 @@ Node.js is not required for the packaged Windows release.
 
 1. Download and extract `SentenceMiner-latest.zip`.
 2. Extract it directly into your `mpv` folder so the zip's `scripts/` and `script-opts/` folders merge into `mpv/scripts/` and `mpv/script-opts/`.
-3. Edit `mpv/scripts/sentenceminer-helper/sentenceminer.config.json` with your Anki deck, note type, and field mappings.
+3. Edit `mpv/script-opts/sentenceminer.conf` with your Anki deck, note type, field mappings, and any script options you want to customize.
 4. Play a video in `mpv`.
 5. Press `Ctrl+m` to mine the current subtitle, or open `http://127.0.0.1:8766` in your browser and use Yomitan on the live transcript.
 
@@ -54,25 +54,21 @@ The helper starts automatically on first playback. You should not need to run `S
 
 ## Configuration
 
-### Helper config
+### Shared config
 
-`sentenceminer.config.json` includes:
+`script-opts/sentenceminer.conf` is the only config file. It includes the mpv script options plus the helper settings below:
 
-- `server.host`, `server.port`
-- `anki.url`, `anki.apiKey`
-- `anki.deck`, `anki.noteType`, `anki.extraQuery`
-- `anki.fields.subtitle`, `anki.fields.audio`, `anki.fields.image`
-- optional `anki.fields.source`, `anki.fields.time`, `anki.fields.filename`
-- `anki.filenameTemplate`
-- `capture.audioPrePaddingMs`, `capture.audioPostPaddingMs`
-- `capture.audioFormat`, `capture.audioCodec`, `capture.audioBitrate`
-- `capture.imageFormat`, `capture.imageQuality`, `capture.imageMaxWidth`, `capture.imageMaxHeight`
-- `capture.imageIncludeSubtitles`
-- `transcript.historyLimit`
-
-### mpv script options
-
-`script-opts/sentenceminer.conf` includes:
+- `server_host`, `server_port`
+- `anki_url`, `anki_api_key`
+- `anki_deck`, `anki_note_type`, `anki_extra_query`
+- `anki_field_subtitle`, `anki_field_audio`, `anki_field_image`
+- optional `anki_field_source`, `anki_field_time`, `anki_field_filename`
+- `anki_filename_template`
+- `capture_audio_pre_padding_ms`, `capture_audio_post_padding_ms`
+- `capture_audio_format`, `capture_audio_codec`, `capture_audio_bitrate`
+- `capture_image_format`, `capture_image_quality`, `capture_image_max_width`, `capture_image_max_height`
+- `capture_image_include_subtitles`
+- `transcript_history_limit`
 
 - `helper_url`
 - `helper_timeout_ms`
@@ -84,6 +80,8 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_audio`
 - `capture_image`
 - optional `bind_default_key`
+
+If you change the helper listen host or port, keep `helper_url` aligned with `server_host` and `server_port`.
 
 In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe` and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and rely on auto-discovery.
 
@@ -105,7 +103,7 @@ node scripts/package-release.mjs
 
 - The helper defaults to port `8766` so it does not collide with AnkiConnect on `8765`.
 - If another process is already using the helper port, `mpv` will show a startup error instead of silently failing.
-- The packaged helper resolves `web/` assets and `sentenceminer.config.json` relative to `SentenceMinerHelper.exe`, so it can be launched from `mpv` without depending on the current working directory.
+- The packaged helper resolves `web/` assets relative to `SentenceMinerHelper.exe` and loads config from `mpv/script-opts/sentenceminer.conf`.
 - v1 keeps transcript history in memory only.
 - v1 only tracks the primary active subtitle.
 - The target note is the newest matching note returned by the configured deck, note type, and extra query.
