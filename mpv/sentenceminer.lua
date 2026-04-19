@@ -111,6 +111,22 @@ local function is_absolute_path(path)
     return path:sub(1, 1) == "/"
 end
 
+local function expand_mpv_path(path)
+    if not path or path == "" or not path:match("^~~") then
+        return path
+    end
+
+    local ok, expanded = pcall(mp.command_native, {
+        name = "expand-path",
+        args = { path },
+    })
+    if ok and type(expanded) == "string" and expanded ~= "" then
+        return expanded
+    end
+
+    return path
+end
+
 local function stem(path)
     local name = basename(path)
     return name:gsub("%.[^.]+$", "")
@@ -121,7 +137,7 @@ local function file_exists(path)
         return false
     end
 
-    local handle = io.open(path, "rb")
+    local handle = io.open(expand_mpv_path(path), "rb")
     if not handle then
         return false
     end
@@ -323,12 +339,12 @@ end
 local function resolve_helper_exe_path()
     if opts.helper_exe_path ~= nil and opts.helper_exe_path ~= "" then
         local configured = opts.helper_exe_path
-        local script_dir = mp.get_script_directory()
+        local script_dir = expand_mpv_path(mp.get_script_directory())
         local candidates = {}
 
         local function add_candidate(path)
             if path and path ~= "" then
-                table.insert(candidates, path)
+                table.insert(candidates, expand_mpv_path(path))
             end
         end
 
@@ -366,7 +382,7 @@ local function resolve_helper_exe_path()
         )
     end
 
-    local script_dir = mp.get_script_directory()
+    local script_dir = expand_mpv_path(mp.get_script_directory())
     local candidates = {}
     if script_dir and script_dir ~= "" then
         table.insert(candidates, utils.join_path(utils.join_path(script_dir, "sentenceminer-helper"), "SentenceMinerHelper.exe"))
@@ -397,7 +413,7 @@ local function spawn_helper_process()
         return nil, resolve_err
     end
 
-    local working_dir = parent_dir(helper_exe_path) or mp.get_script_directory() or "."
+    local working_dir = parent_dir(helper_exe_path) or expand_mpv_path(mp.get_script_directory()) or "."
     local result = utils.subprocess({
         args = {
             "powershell",
