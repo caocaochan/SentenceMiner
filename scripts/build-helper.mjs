@@ -10,7 +10,7 @@ const bundlePath = path.join(buildRoot, 'SentenceMinerHelper.cjs');
 const seaConfigPath = path.join(buildRoot, 'sea-config.json');
 const seaBlobPath = path.join(buildRoot, 'sea-prep.blob');
 const helperExePath = path.join(buildRoot, 'SentenceMinerHelper.exe');
-const postjectBinary = path.join(repoRoot, 'node_modules', '.bin', 'postject.cmd');
+const postjectCliPath = path.join(repoRoot, 'node_modules', 'postject', 'dist', 'cli.js');
 
 if (process.platform !== 'win32') {
   throw new Error('SentenceMinerHelper.exe packaging currently supports Windows builds only.');
@@ -47,8 +47,9 @@ await fs.writeFile(
 run(process.execPath, ['--experimental-sea-config', seaConfigPath], 'generate SEA blob');
 await fs.copyFile(process.execPath, helperExePath);
 run(
-  postjectBinary,
+  process.execPath,
   [
+    postjectCliPath,
     helperExePath,
     'NODE_SEA_BLOB',
     seaBlobPath,
@@ -56,7 +57,6 @@ run(
     'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
   ],
   'inject SEA blob',
-  { shell: true },
 );
 
 console.log(`Built helper executable at ${helperExePath}`);
