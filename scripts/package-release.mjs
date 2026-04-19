@@ -27,6 +27,7 @@ await copyIntoPackage(
 );
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
+await writePackagedHelperEntryPoint();
 
 console.log(`Packaged release files into ${packageRoot}`);
 
@@ -56,6 +57,12 @@ async function writePackagedMpvConfig() {
   await fs.writeFile(destinationPath, packaged, 'utf8');
 }
 
+async function writePackagedHelperEntryPoint() {
+  const destinationPath = path.join(packageRoot, 'scripts', 'sentenceminer-helper', 'main.lua');
+  const source = "-- Placeholder entry point so mpv treats this helper asset folder as a valid script directory.\n";
+
+  await fs.writeFile(destinationPath, source, 'utf8');
+}
 function run(command, args, step) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',

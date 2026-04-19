@@ -247,6 +247,39 @@ local function parse_json_output(output)
     return utils.parse_json(output)
 end
 
+local function trim_output(value)
+    if not value or value == "" then
+        return nil
+    end
+
+    return tostring(value):gsub("%s+$", "")
+end
+
+local function helper_error_from_result(result)
+    local decoded_stdout = parse_json_output(result and result.stdout or nil)
+    if decoded_stdout and type(decoded_stdout) == "table" and decoded_stdout.message then
+        return tostring(decoded_stdout.message)
+    end
+
+    local decoded_stderr = parse_json_output(result and result.stderr or nil)
+    if decoded_stderr and type(decoded_stderr) == "table" and decoded_stderr.message then
+        return tostring(decoded_stderr.message)
+    end
+
+    local stderr = trim_output(result and result.stderr or nil)
+    if stderr then
+        stderr = stderr:gsub("^curl:%s*%(%d+%)%s*", "")
+        return stderr
+    end
+
+    local error_string = trim_output(result and result.error_string or nil)
+    if error_string then
+        return error_string
+    end
+
+    return nil
+end
+
 local function powershell_escape(value)
     return tostring(value):gsub("'", "''")
 end
@@ -264,105 +297,39 @@ local function helper_request(method, endpoint, payload, timeout_ms)
         end
     end
 
-    local result
-    if is_windows() then
-        local script = {
-            "$ErrorActionPreference='Stop'",
-            "$ProgressPreference='SilentlyContinue'",
-            string.format("$uri='%s'", powershell_escape(url)),
-            string.format("$requestArgs = @{ Method = '%s'; Uri = $uri; TimeoutSec = %d; ErrorAction = 'Stop' }", method, timeout_seconds),
-        }
-
-        if body_path then
-            table.insert(
-                script,
-                string.format(
-                    "$requestArgs['ContentType'] = 'application/json'; $requestArgs['Body'] = Get-Content -Raw -LiteralPath '%s'",
-                    powershell_escape(body_path)
-                )
-            )
-        end
-
-        table.insert(script, [[
-try {
-    $resp = Invoke-RestMethod @requestArgs
-    $resp | ConvertTo-Json -Depth 16 -Compress
-} catch {
-    $statusCode = $null
-    if ($_.Exception -and $_.Exception.Response -and $_.Exception.Response.StatusCode) {
-        $statusCode = [int]$_.Exception.Response.StatusCode
+    local args = {
+        is_windows() and "curl.exe" or "curl",
+        "-sS",
+        "--fail-with-body",
+        "-X",
+        method,
+        "--max-time",
+        tostring(timeout_seconds),
+        "-H",
+        "Accept: application/json",
+        url,
     }
 
-    $message = $null
-    if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
-        $details = $_.ErrorDetails.Message
-        try {
-            $parsed = $details | ConvertFrom-Json
-            if ($parsed -and $parsed.message) {
-                $message = [string]$parsed.message
-            }
-        } catch {
-        }
-
-        if (-not $message) {
-            $message = $details
-        }
-    }
-
-    if (-not $message -and $_.Exception) {
-        $message = $_.Exception.Message
-    }
-
-    if (-not $message) {
-        $message = 'Unknown helper request failure.'
-    }
-
-    if ($statusCode) {
-        $message = "HTTP ${statusCode}: $message"
-    }
-
-    [Console]::Error.WriteLine($message)
-    exit 1
-}
-]])
-        result = utils.subprocess({
-            args = { "powershell", "-NoProfile", "-Command", table.concat(script, "; ") },
-            cancellable = false,
-            max_size = 1024 * 1024 * 8,
-            playback_only = false,
-        })
-    else
-        local args = {
-            "curl",
-            "-sS",
-            "-X",
-            method,
-            "--max-time",
-            tostring(timeout_seconds),
-            url,
-        }
-
-        if body_path then
-            table.insert(args, "-H")
-            table.insert(args, "Content-Type: application/json")
-            table.insert(args, "--data-binary")
-            table.insert(args, "@" .. body_path)
-        end
-
-        result = utils.subprocess({
-            args = args,
-            cancellable = false,
-            max_size = 1024 * 1024 * 8,
-            playback_only = false,
-        })
+    if body_path then
+        table.insert(args, "-H")
+        table.insert(args, "Content-Type: application/json")
+        table.insert(args, "--data-binary")
+        table.insert(args, "@" .. body_path)
     end
+
+    local result = utils.subprocess({
+        args = args,
+        cancellable = false,
+        max_size = 1024 * 1024 * 8,
+        playback_only = false,
+    })
 
     if body_path then
         cleanup_file(body_path)
     end
 
     if result.status ~= 0 then
-        return nil, result.error_string or result.stderr or ("helper request failed with status " .. tostring(result.status))
+        return nil, helper_error_from_result(result) or ("helper request failed with status " .. tostring(result.status))
     end
 
     local decoded = parse_json_output(result.stdout)
