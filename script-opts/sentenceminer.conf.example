@@ -1,5 +1,8 @@
 helper_url=http://127.0.0.1:8766
 helper_timeout_ms=5000
+helper_auto_start=yes
+helper_exe_path=
+helper_start_timeout_ms=15000
 ffmpeg_path=ffmpeg
 temp_dir=
 capture_audio=yes

@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release-latest:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Check out repository
@@ -24,18 +24,18 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install dependencies
+        run: npm install
+
       - name: Package end-user files
         run: node scripts/package-release.mjs
 
-      - name: Mark Unix launcher executable
-        run: chmod +x dist/SentenceMiner/start-helper.sh
-
       - name: Build latest zip
-        run: |
-          cd dist
-          zip -r ../SentenceMiner-latest.zip SentenceMiner
+        shell: powershell
+        run: Compress-Archive -Path dist\SentenceMiner -DestinationPath SentenceMiner-latest.zip -Force
 
       - name: Update moving latest tag
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -45,6 +45,7 @@ jobs:
       - name: Create or update latest release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           NOTES=$(cat <<EOF
           Automatic latest package from commit ${GITHUB_SHA}.

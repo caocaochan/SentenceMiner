@@ -6,6 +6,9 @@ local utils = require("mp.utils")
 local opts = {
     helper_url = "http://127.0.0.1:8766",
     helper_timeout_ms = 5000,
+    helper_auto_start = "yes",
+    helper_exe_path = "",
+    helper_start_timeout_ms = 15000,
     ffmpeg_path = "ffmpeg",
     temp_dir = "",
     capture_audio = "yes",
@@ -18,9 +21,13 @@ options.read_options(opts, "sentenceminer")
 
 local state = {
     session_id = nil,
+    session_generation = 0,
     last_subtitle_key = nil,
     capture = nil,
     last_capture_fetch = 0,
+    helper_ready = false,
+    helper_starting = false,
+    helper_waiters = {},
 }
 
 math.randomseed(os.time())
@@ -74,9 +81,37 @@ local function basename(path)
     return normalized:match("([^/]+)$") or normalized
 end
 
+local function parent_dir(path)
+    if not path or path == "" then
+        return nil
+    end
+
+    local normalized = path:gsub("[/\\]+$", "")
+    local trimmed = normalized:gsub("[/\\][^/\\]+$", "")
+    if trimmed == normalized then
+        return nil
+    end
+
+    return trimmed
+end
+
 local function stem(path)
     local name = basename(path)
     return name:gsub("%.[^.]+$", "")
+end
+
+local function file_exists(path)
+    if not path or path == "" then
+        return false
+    end
+
+    local handle = io.open(path, "rb")
+    if not handle then
+        return false
+    end
+
+    handle:close()
+    return true
 end
 
 local function write_file(path, content)
@@ -142,9 +177,9 @@ local function powershell_escape(value)
     return tostring(value):gsub("'", "''")
 end
 
-local function helper_request(method, endpoint, payload)
+local function helper_request(method, endpoint, payload, timeout_ms)
     local url = join_url(opts.helper_url, endpoint)
-    local timeout_seconds = math.max(1, math.floor((tonumber(opts.helper_timeout_ms) or 5000) / 1000))
+    local timeout_seconds = math.max(1, math.floor((tonumber(timeout_ms) or tonumber(opts.helper_timeout_ms) or 5000) / 1000))
     local body_path = nil
 
     if payload ~= nil then
@@ -251,6 +286,155 @@ local function subtitle_key(payload)
     }, "::")
 end
 
+local function helper_port_hint()
+    local port = tostring(opts.helper_url or ""):match(":(%d+)")
+    if not port then
+        return ""
+    end
+
+    return " Check whether another process is already using port " .. port .. "."
+end
+
+local function flush_helper_waiters(ok, err)
+    local waiters = state.helper_waiters
+    state.helper_waiters = {}
+
+    for _, waiter in ipairs(waiters) do
+        waiter(ok, err)
+    end
+end
+
+local function resolve_helper_exe_path()
+    if opts.helper_exe_path ~= nil and opts.helper_exe_path ~= "" then
+        return opts.helper_exe_path
+    end
+
+    local script_dir = mp.get_script_directory()
+    local candidates = {}
+    if script_dir and script_dir ~= "" then
+        table.insert(candidates, utils.join_path(utils.join_path(script_dir, "sentenceminer-helper"), "SentenceMinerHelper.exe"))
+        table.insert(candidates, utils.join_path(script_dir, "SentenceMinerHelper.exe"))
+
+        local parent = parent_dir(script_dir)
+        if parent then
+            table.insert(candidates, utils.join_path(utils.join_path(parent, "sentenceminer-helper"), "SentenceMinerHelper.exe"))
+        end
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if file_exists(candidate) then
+            return candidate
+        end
+    end
+
+    return nil
+end
+
+local function spawn_helper_process()
+    if not is_windows() then
+        return nil, "helper auto-start is currently implemented only on Windows"
+    end
+
+    local helper_exe_path = resolve_helper_exe_path()
+    if not helper_exe_path then
+        return nil, "could not find SentenceMinerHelper.exe; copy sentenceminer-helper next to sentenceminer.lua or set helper_exe_path"
+    end
+
+    local working_dir = parent_dir(helper_exe_path) or mp.get_script_directory() or "."
+    local result = utils.subprocess({
+        args = {
+            "powershell",
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            string.format(
+                "Start-Process -FilePath '%s' -WorkingDirectory '%s' -WindowStyle Hidden",
+                powershell_escape(helper_exe_path),
+                powershell_escape(working_dir)
+            ),
+        },
+        cancellable = false,
+        playback_only = false,
+        max_size = 1024 * 1024,
+    })
+
+    if result.status ~= 0 then
+        return nil, result.error_string or result.stderr or "failed to start helper"
+    end
+
+    return true, nil
+end
+
+local function probe_helper()
+    local response, err = helper_request("GET", "/api/state", nil, 1000)
+    if response and response.success == true and response.state ~= nil and response.config ~= nil then
+        state.helper_ready = true
+        return true, nil
+    end
+
+    state.helper_ready = false
+    if response then
+        return false, "helper URL responded, but it was not a SentenceMiner helper." .. helper_port_hint()
+    end
+
+    return false, err
+end
+
+local function ensure_helper_ready(on_ready)
+    local ready, ready_err = probe_helper()
+    if ready then
+        on_ready(true, nil)
+        return
+    end
+
+    if ready_err and tostring(ready_err):find("not a SentenceMiner helper", 1, true) then
+        on_ready(false, ready_err)
+        return
+    end
+
+    if not is_truthy(opts.helper_auto_start) then
+        on_ready(false, "helper is not running and helper_auto_start is disabled")
+        return
+    end
+
+    table.insert(state.helper_waiters, on_ready)
+    if state.helper_starting then
+        return
+    end
+
+    state.helper_starting = true
+    local started, start_err = spawn_helper_process()
+    if not started then
+        state.helper_starting = false
+        flush_helper_waiters(false, "could not auto-start helper: " .. tostring(start_err))
+        return
+    end
+
+    local deadline = mp.get_time() + ((tonumber(opts.helper_start_timeout_ms) or 15000) / 1000)
+    local function poll()
+        local poll_ready, poll_err = probe_helper()
+        if poll_ready then
+            state.helper_starting = false
+            flush_helper_waiters(true, nil)
+            return
+        end
+
+        if mp.get_time() >= deadline then
+            state.helper_starting = false
+            flush_helper_waiters(
+                false,
+                "helper did not become ready in time." .. helper_port_hint() .. " Last error: " .. tostring(poll_err)
+            )
+            return
+        end
+
+        mp.add_timeout(0.35, poll)
+    end
+
+    mp.add_timeout(0.35, poll)
+end
+
 local function fetch_capture_settings()
     local now = os.time()
     if state.capture and (now - state.last_capture_fetch) < 10 then
@@ -287,23 +471,46 @@ local function start_session()
         return
     end
 
+    state.session_generation = state.session_generation + 1
+    local generation = state.session_generation
+
     state.session_id = string.format("%d-%d", os.time(), math.random(100000, 999999))
     state.last_subtitle_key = nil
 
-    local _, err = helper_request("POST", "/api/session", {
-        action = "start",
-        sessionId = state.session_id,
-        filePath = path,
-        durationMs = read_time_property_ms("duration/full"),
-        playbackTimeMs = read_time_property_ms("playback-time/full"),
-    })
+    ensure_helper_ready(function(ok, err)
+        if generation ~= state.session_generation or not state.session_id then
+            return
+        end
 
-    if err then
-        msg.warn("could not start helper session: " .. tostring(err))
-    end
+        if not ok then
+            state.session_id = nil
+            state.last_subtitle_key = nil
+            mp.osd_message("SentenceMiner: " .. tostring(err), 5)
+            msg.warn("could not prepare helper session: " .. tostring(err))
+            return
+        end
+
+        local _, request_err = helper_request("POST", "/api/session", {
+            action = "start",
+            sessionId = state.session_id,
+            filePath = path,
+            durationMs = read_time_property_ms("duration/full"),
+            playbackTimeMs = read_time_property_ms("playback-time/full"),
+        })
+
+        if request_err then
+            state.helper_ready = false
+            state.session_id = nil
+            state.last_subtitle_key = nil
+            msg.warn("could not start helper session: " .. tostring(request_err))
+            mp.osd_message("SentenceMiner: could not start helper session", 4)
+        end
+    end)
 end
 
 local function stop_session()
+    state.session_generation = state.session_generation + 1
+
     if not state.session_id then
         return
     end
@@ -322,7 +529,7 @@ local function stop_session()
 end
 
 local function sync_subtitle_state()
-    if not state.session_id then
+    if not state.session_id or not state.helper_ready then
         return
     end
 
@@ -335,6 +542,7 @@ local function sync_subtitle_state()
     state.last_subtitle_key = key
     local _, err = helper_request("POST", "/api/subtitle-event", payload)
     if err then
+        state.helper_ready = false
         msg.warn("could not post subtitle event: " .. tostring(err))
     end
 end
@@ -475,6 +683,7 @@ local function mine_current()
     cleanup_file(image_path)
 
     if not response then
+        state.helper_ready = false
         mp.osd_message("SentenceMiner: " .. tostring(request_err), 4)
         return
     end

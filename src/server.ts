@@ -3,48 +3,62 @@ import http from 'node:http';
 import path from 'node:path';
 
 import { mineToAnki } from './anki.ts';
-import { loadConfig } from './config.ts';
+import { loadConfig, resolveAppRoot } from './config.ts';
 import { TranscriptStore } from './transcript-store.ts';
 import type { MinePayload, SessionPayload, SubtitleEventPayload } from './types.ts';
 import { WebSocketHub } from './ws.ts';
 
-const WEB_ROOT = path.resolve(process.cwd(), 'web');
+const APP_ROOT = resolveAppRoot();
+const WEB_ROOT = path.join(APP_ROOT, 'web');
 
-const config = await loadConfig();
-const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
-const sockets = new WebSocketHub();
-
-const server = http.createServer(async (request, response) => {
-  try {
-    await routeRequest(request, response);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    respondJson(response, 500, {
-      success: false,
-      message,
-    });
-  }
+void main().catch((error) => {
+  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  process.exitCode = 1;
 });
 
-server.on('upgrade', (request, socket) => {
-  if (request.url !== '/ws') {
-    socket.destroy();
-    return;
-  }
+async function main(): Promise<void> {
+  const config = await loadConfig();
+  const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
+  const sockets = new WebSocketHub();
 
-  sockets.handleUpgrade(request, socket);
-});
+  const server = http.createServer(async (request, response) => {
+    try {
+      await routeRequest(config, transcriptStore, sockets, request, response);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      respondJson(response, 500, {
+        success: false,
+        message,
+      });
+    }
+  });
 
-server.listen(config.server.port, config.server.host, () => {
-  console.log(`SentenceMiner helper listening on http://${config.server.host}:${config.server.port}`);
-});
+  server.on('upgrade', (request, socket) => {
+    if (request.url !== '/ws') {
+      socket.destroy();
+      return;
+    }
 
-async function routeRequest(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
+    sockets.handleUpgrade(request, socket);
+  });
+
+  server.listen(config.server.port, config.server.host, () => {
+    console.log(`SentenceMiner helper listening on http://${config.server.host}:${config.server.port}`);
+  });
+}
+
+async function routeRequest(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  transcriptStore: TranscriptStore,
+  sockets: WebSocketHub,
+  request: http.IncomingMessage,
+  response: http.ServerResponse,
+): Promise<void> {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? `${config.server.host}:${config.server.port}`}`);
 
   if (method === 'GET' && url.pathname === '/api/state') {
-    respondJson(response, 200, buildStatePayload());
+    respondJson(response, 200, buildStatePayload(config, transcriptStore));
     return;
   }
 
@@ -55,7 +69,7 @@ async function routeRequest(request: http.IncomingMessage, response: http.Server
     } else {
       transcriptStore.stopSession(payload.sessionId);
     }
-    broadcastState();
+    broadcastState(config, transcriptStore, sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Session updated.',
@@ -67,7 +81,7 @@ async function routeRequest(request: http.IncomingMessage, response: http.Server
   if (method === 'POST' && url.pathname === '/api/subtitle-event') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
     transcriptStore.pushSubtitle(payload);
-    broadcastState();
+    broadcastState(config, transcriptStore, sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Subtitle event recorded.',
@@ -132,7 +146,7 @@ function respondJson(response: http.ServerResponse, statusCode: number, payload:
   response.end(JSON.stringify(payload));
 }
 
-function buildStatePayload() {
+function buildStatePayload(config: Awaited<ReturnType<typeof loadConfig>>, transcriptStore: TranscriptStore) {
   return {
     success: true,
     config: {
@@ -144,9 +158,13 @@ function buildStatePayload() {
   };
 }
 
-function broadcastState(): void {
+function broadcastState(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  transcriptStore: TranscriptStore,
+  sockets: WebSocketHub,
+): void {
   sockets.broadcastJson({
     type: 'state',
-    payload: buildStatePayload(),
+    payload: buildStatePayload(config, transcriptStore),
   });
 }

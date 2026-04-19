@@ -47,7 +47,20 @@ export async function loadConfig(argv: string[] = process.argv.slice(2)): Promis
   return mergeConfig(DEFAULT_CONFIG, fileConfig ?? {});
 }
 
-function resolveConfigPath(argv: string[]): string {
+export function resolveAppRoot(execPath: string = process.execPath, cwd: string = process.cwd()): string {
+  if (process.env.SENTENCEMINER_ROOT) {
+    return path.resolve(process.env.SENTENCEMINER_ROOT);
+  }
+
+  const executableName = path.basename(execPath).toLowerCase();
+  if (!/^node(?:\.exe)?$/.test(executableName)) {
+    return path.dirname(execPath);
+  }
+
+  return path.resolve(cwd);
+}
+
+export function resolveConfigPath(argv: string[], appRoot: string = resolveAppRoot()): string {
   const explicitArgIndex = argv.findIndex((arg) => arg === '--config');
   if (explicitArgIndex !== -1 && argv[explicitArgIndex + 1]) {
     return path.resolve(argv[explicitArgIndex + 1]);
@@ -57,7 +70,7 @@ function resolveConfigPath(argv: string[]): string {
     return path.resolve(process.env.SENTENCEMINER_CONFIG);
   }
 
-  return path.resolve(process.cwd(), 'sentenceminer.config.json');
+  return path.resolve(appRoot, 'sentenceminer.config.json');
 }
 
 async function readOptionalJson<T>(filePath: string): Promise<T | null> {
