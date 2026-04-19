@@ -19,7 +19,7 @@ await fs.rm(packageRoot, { recursive: true, force: true });
 await fs.mkdir(helperSourceRoot, { recursive: true });
 await fs.mkdir(path.join(packageRoot, 'script-opts'), { recursive: true });
 
-await copyIntoPackage('README.md', 'README.md');
+await copyIntoPackage('packaging/README.md', 'README.md');
 await copyIntoPackage('mpv/sentenceminer.lua', 'scripts/sentenceminer.lua');
 await copyIntoPackage(
   path.join(helperBuildRoot, 'SentenceMinerHelper.exe'),
