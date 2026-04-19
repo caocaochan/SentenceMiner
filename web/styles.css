@@ -114,8 +114,12 @@ h1 {
   justify-content: center;
   width: 54px;
   height: 54px;
+  min-width: 54px;
+  min-height: 54px;
+  flex: 0 0 54px;
+  aspect-ratio: 1;
   border: 1px solid rgba(138, 173, 244, 0.24);
-  border-radius: 18px;
+  border-radius: 999px;
   background: rgba(54, 58, 79, 0.82);
   color: var(--text);
   cursor: pointer;
