@@ -2,7 +2,14 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 
-import { NoMatchingCardError, listDeckNames, listModelFieldNames, listModelNames, mineToAnki } from './anki.ts';
+import {
+  InvalidAnkiMiningConfigError,
+  NoMatchingCardError,
+  listDeckNames,
+  listModelFieldNames,
+  listModelNames,
+  mineToAnki,
+} from './anki.ts';
 import { mineHistoryEntry } from './history-mine.ts';
 import { buildAppUrl } from './browser.ts';
 import {
@@ -557,6 +564,10 @@ async function mapMineErrorToHttp<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
+    if (error instanceof InvalidAnkiMiningConfigError) {
+      throw new HttpError(400, error.message);
+    }
+
     if (error instanceof NoMatchingCardError) {
       throw new HttpError(404, error.message);
     }

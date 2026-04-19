@@ -408,6 +408,69 @@ test('POST /api/history/mine rejects empty batch payloads', async (t) => {
   assert.match(payload.message, /Select at least one subtitle line/);
 });
 
+test('POST /api/mine returns 400 when the configured deck does not exist in Anki', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.config.anki.deck = 'Missing Deck';
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'single line',
+      startMs: 1000,
+      endMs: 1200,
+      playbackTimeMs: 1100,
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.success, false);
+  assert.equal(payload.message, 'Configured deck "Missing Deck" does not exist in Anki.');
+
+  const findNotesRequest = harness.ankiRequests.find((request) => request.action === 'findNotes');
+  assert.equal(findNotesRequest, undefined);
+});
+
+test('POST /api/history/mine returns 400 when a configured field does not exist on the note type', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.config.anki.fields.image = 'MissingField';
+  harness.ankiNotes[0].fields.Sentence.value = 'single line';
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'single line',
+      startMs: 1000,
+      endMs: 1200,
+      playbackTimeMs: 1100,
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.success, false);
+  assert.equal(payload.message, 'Configured image field "MissingField" does not exist on Anki note type "Sentence".');
+
+  const findNotesRequest = harness.ankiRequests.find((request) => request.action === 'findNotes');
+  assert.equal(findNotesRequest, undefined);
+});
+
 test('probeRunningHelper returns true for a live SentenceMiner instance', async (t) => {
   const harness = await createServerHarness(t);
   const address = new URL(harness.baseUrl);

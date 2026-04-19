@@ -1,7 +1,12 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { NO_MATCHING_CARD_MESSAGE, NoMatchingCardError, mineToAnki } from '../src/anki.ts';
+import {
+  InvalidAnkiMiningConfigError,
+  NO_MATCHING_CARD_MESSAGE,
+  NoMatchingCardError,
+  mineToAnki,
+} from '../src/anki.ts';
 import type { AnkiConfig, MinePayload } from '../src/types.ts';
 import { applyFilenameTemplate, buildSearchQuery, normalizeSubtitleForMatching } from '../src/utils.ts';
 
@@ -49,6 +54,9 @@ test('applyFilenameTemplate sanitizes file names and keeps extension', () => {
 
 test('mineToAnki only inspects and updates the newest note returned by the deck query', async (t) => {
   const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
     findNotes: [10, 25, 17],
     notesInfo: [note(25, 'hello world')],
     updateNoteFields: null,
@@ -69,6 +77,9 @@ test('mineToAnki only inspects and updates the newest note returned by the deck 
 
 test('mineToAnki does not fall back to an older matching duplicate when the newest note differs', async (t) => {
   const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
     findNotes: [10, 25, 17],
     notesInfo: [note(25, 'different sentence')],
   });
@@ -84,6 +95,9 @@ test('mineToAnki does not fall back to an older matching duplicate when the newe
 
 test('mineToAnki throws when no candidate note sentence matches', async (t) => {
   const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
     findNotes: [25],
     notesInfo: [note(25, 'not this one')],
   });
@@ -100,6 +114,9 @@ test('mineToAnki throws when no candidate note sentence matches', async (t) => {
 
 test('mineToAnki matches note sentences after HTML and whitespace normalization', async (t) => {
   const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
     findNotes: [25],
     notesInfo: [note(25, '<div>hello<br>   world &amp; friends</div>')],
     updateNoteFields: null,
@@ -120,6 +137,9 @@ test('mineToAnki matches note sentences after HTML and whitespace normalization'
 
 test('mineToAnki updates the sentence to the combined batch text when one selected subtitle line matches', async (t) => {
   const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
     findNotes: [25],
     notesInfo: [note(25, 'earlier')],
     updateNoteFields: null,
@@ -140,6 +160,9 @@ test('mineToAnki updates the sentence to the combined batch text when one select
 
 test('mineToAnki keeps the combined sentence when the full batch text matches', async (t) => {
   const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
     findNotes: [25],
     notesInfo: [note(25, 'earlier later')],
     updateNoteFields: null,
@@ -156,6 +179,40 @@ test('mineToAnki keeps the combined sentence when the full batch text matches', 
   const updateRequest = requests.find((request) => request.action === 'updateNoteFields');
   assert.equal(updateRequest?.params.note.fields.Sentence, 'earlier later');
   assert.equal(updateRequest?.params.note.fields.Source, 'episode');
+});
+
+test('mineToAnki rejects mining when the configured deck does not exist', async (t) => {
+  const { requests } = installFetchMock(t, {
+    deckNames: ['Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'],
+  });
+
+  await assert.rejects(() => mineToAnki(config, buildPayload()), (error: unknown) => {
+    assert.ok(error instanceof InvalidAnkiMiningConfigError);
+    assert.equal(error.message, 'Configured deck "Anime" does not exist in Anki.');
+    return true;
+  });
+
+  assert.equal(requests.some((request) => request.action === 'findNotes'), false);
+  assert.equal(requests.some((request) => request.action === 'storeMediaFile'), false);
+});
+
+test('mineToAnki rejects mining when a configured field does not exist on the note type', async (t) => {
+  const { requests } = installFetchMock(t, {
+    deckNames: ['Anime', 'Mining'],
+    modelNames: ['Sentence', 'Vocab'],
+    modelFieldNames: ['Sentence', 'Audio', 'Source', 'Time', 'Filename'],
+  });
+
+  await assert.rejects(() => mineToAnki(config, buildPayload()), (error: unknown) => {
+    assert.ok(error instanceof InvalidAnkiMiningConfigError);
+    assert.equal(error.message, 'Configured image field "Picture" does not exist on Anki note type "Sentence".');
+    return true;
+  });
+
+  assert.equal(requests.some((request) => request.action === 'findNotes'), false);
+  assert.equal(requests.some((request) => request.action === 'storeMediaFile'), false);
 });
 
 function buildPayload(): MinePayload {

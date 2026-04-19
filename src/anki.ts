@@ -34,8 +34,16 @@ export class NoMatchingCardError extends Error {
   }
 }
 
+export class InvalidAnkiMiningConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidAnkiMiningConfigError';
+  }
+}
+
 export async function mineToAnki(config: AnkiConfig, payload: MinePayload): Promise<MineResult> {
   validateMinePayload(config, payload);
+  await validateMiningTarget(config);
 
   const matchingNote = await findMatchingNote(config, payload);
   if (!matchingNote) {
@@ -190,6 +198,41 @@ function validateConfiguredFields(config: AnkiConfig, note: NoteInfo): void {
   for (const fieldName of expectedFields) {
     if (!noteFieldNames.has(fieldName)) {
       throw new Error(`Configured field "${fieldName}" does not exist on note ${note.noteId}.`);
+    }
+  }
+}
+
+async function validateMiningTarget(config: AnkiConfig): Promise<void> {
+  const [deckNames, modelNames] = await Promise.all([listDeckNames(config), listModelNames(config)]);
+
+  if (!deckNames.includes(config.deck)) {
+    throw new InvalidAnkiMiningConfigError(`Configured deck "${config.deck}" does not exist in Anki.`);
+  }
+
+  if (!modelNames.includes(config.noteType)) {
+    throw new InvalidAnkiMiningConfigError(`Configured note type "${config.noteType}" does not exist in Anki.`);
+  }
+
+  const noteFields = await listModelFieldNames(config, config.noteType);
+  const noteFieldSet = new Set(noteFields);
+  const fieldEntries = [
+    ['subtitle', config.fields.subtitle],
+    ['audio', config.fields.audio],
+    ['image', config.fields.image],
+    ['source', config.fields.source ?? ''],
+    ['time', config.fields.time ?? ''],
+    ['filename', config.fields.filename ?? ''],
+  ] as const;
+
+  for (const [fieldKey, fieldName] of fieldEntries) {
+    if (!fieldName) {
+      continue;
+    }
+
+    if (!noteFieldSet.has(fieldName)) {
+      throw new InvalidAnkiMiningConfigError(
+        `Configured ${fieldKey} field "${fieldName}" does not exist on Anki note type "${config.noteType}".`,
+      );
     }
   }
 }

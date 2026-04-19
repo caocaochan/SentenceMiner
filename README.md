@@ -113,6 +113,7 @@ node scripts/package-release.mjs
 - v1 keeps transcript history in memory only.
 - v1 only tracks the primary active subtitle.
 - SentenceMiner first looks for matching notes returned by the configured deck, note type, and extra query.
+- Mining is blocked unless the configured deck, note type, and mapped fields currently exist in Anki.
 - SentenceMiner only inspects the newest note returned by the configured deck, note type, and extra query.
 - That newest note is only updated when its configured subtitle field matches the mined sentence after HTML and whitespace normalization.
 - If no note matches, SentenceMiner returns `No matching card exists.` instead of overwriting an unrelated note.
