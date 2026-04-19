@@ -95,6 +95,22 @@ local function parent_dir(path)
     return trimmed
 end
 
+local function is_absolute_path(path)
+    if not path or path == "" then
+        return false
+    end
+
+    if path:match("^%a:[/\\]") then
+        return true
+    end
+
+    if path:match("^[/\\][/\\]") then
+        return true
+    end
+
+    return path:sub(1, 1) == "/"
+end
+
 local function stem(path)
     local name = basename(path)
     return name:gsub("%.[^.]+$", "")
@@ -306,7 +322,48 @@ end
 
 local function resolve_helper_exe_path()
     if opts.helper_exe_path ~= nil and opts.helper_exe_path ~= "" then
-        return opts.helper_exe_path
+        local configured = opts.helper_exe_path
+        local script_dir = mp.get_script_directory()
+        local candidates = {}
+
+        local function add_candidate(path)
+            if path and path ~= "" then
+                table.insert(candidates, path)
+            end
+        end
+
+        add_candidate(configured)
+        if not configured:lower():match("%.exe$") then
+            add_candidate(utils.join_path(configured, "SentenceMinerHelper.exe"))
+        end
+
+        if script_dir and script_dir ~= "" and not is_absolute_path(configured) then
+            local relative = utils.join_path(script_dir, configured)
+            add_candidate(relative)
+            if not configured:lower():match("%.exe$") then
+                add_candidate(utils.join_path(relative, "SentenceMinerHelper.exe"))
+            end
+
+            local parent = parent_dir(script_dir)
+            if parent then
+                local parent_relative = utils.join_path(parent, configured)
+                add_candidate(parent_relative)
+                if not configured:lower():match("%.exe$") then
+                    add_candidate(utils.join_path(parent_relative, "SentenceMinerHelper.exe"))
+                end
+            end
+        end
+
+        for _, candidate in ipairs(candidates) do
+            if file_exists(candidate) then
+                return candidate
+            end
+        end
+
+        return nil, string.format(
+            "helper_exe_path='%s' did not resolve to SentenceMinerHelper.exe; set it to the .exe path, the helper folder, or leave it empty for auto-discovery",
+            configured
+        )
     end
 
     local script_dir = mp.get_script_directory()
@@ -327,7 +384,7 @@ local function resolve_helper_exe_path()
         end
     end
 
-    return nil
+    return nil, "could not find SentenceMinerHelper.exe; copy sentenceminer-helper next to sentenceminer.lua or set helper_exe_path"
 end
 
 local function spawn_helper_process()
@@ -335,9 +392,9 @@ local function spawn_helper_process()
         return nil, "helper auto-start is currently implemented only on Windows"
     end
 
-    local helper_exe_path = resolve_helper_exe_path()
+    local helper_exe_path, resolve_err = resolve_helper_exe_path()
     if not helper_exe_path then
-        return nil, "could not find SentenceMinerHelper.exe; copy sentenceminer-helper next to sentenceminer.lua or set helper_exe_path"
+        return nil, resolve_err
     end
 
     local working_dir = parent_dir(helper_exe_path) or mp.get_script_directory() or "."
