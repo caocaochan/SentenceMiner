@@ -73,7 +73,6 @@ export class TranscriptStore {
       : null;
 
     if (!payload.text.trim()) {
-      this.#state.currentSubtitle = null;
       return this.getState();
     }
 

@@ -2,6 +2,7 @@ const state = {
   connection: 'connecting',
   app: null,
   autoScroll: true,
+  pendingActions: new Set(),
 };
 
 const elements = {
@@ -15,9 +16,7 @@ const elements = {
 
 elements.historyList.addEventListener('scroll', () => {
   const threshold = 40;
-  const distanceFromBottom =
-    elements.historyList.scrollHeight - elements.historyList.scrollTop - elements.historyList.clientHeight;
-  state.autoScroll = distanceFromBottom < threshold;
+  state.autoScroll = elements.historyList.scrollTop < threshold;
 });
 
 bootstrap();
@@ -65,7 +64,7 @@ function connectWebSocket() {
 function render() {
   const transcriptState = state.app?.state ?? { session: null, currentSubtitle: null, history: [] };
   const currentSubtitle = transcriptState.currentSubtitle;
-  const history = transcriptState.history ?? [];
+  const history = [...(transcriptState.history ?? [])].reverse();
 
   elements.connectionPill.textContent = state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
   elements.connectionPill.className = `pill ${state.connection === 'live' ? 'pill-success' : 'pill-muted'}`;
@@ -94,17 +93,80 @@ function render() {
     text.className = 'history-text';
     text.textContent = entry.text;
 
-    item.append(meta, text);
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
+
+    const goToButton = buildHistoryActionButton('Go to', 'go-to', entry);
+    const mineButton = buildHistoryActionButton('Mine', 'mine', entry);
+
+    actions.append(goToButton, mineButton);
+    item.append(meta, text, actions);
     item.dataset.index = String(index);
     elements.historyList.append(item);
   });
 
   if (state.autoScroll) {
-    elements.historyList.scrollTop = elements.historyList.scrollHeight;
+    elements.historyList.scrollTop = 0;
   } else {
     const delta = elements.historyList.scrollHeight - previousScrollHeight;
     elements.historyList.scrollTop = previousScrollTop + delta;
   }
+}
+
+function buildHistoryActionButton(label, action, entry) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'history-button';
+  button.textContent = label;
+  button.disabled = isHistoryActionPending(action, entry);
+  button.addEventListener('click', () => {
+    void runHistoryAction(action, entry);
+  });
+  return button;
+}
+
+async function runHistoryAction(action, entry) {
+  const pendingKey = buildHistoryActionKey(action, entry);
+  if (state.pendingActions.has(pendingKey)) {
+    return;
+  }
+
+  state.pendingActions.add(pendingKey);
+  render();
+
+  try {
+    const endpoint = action === 'go-to' ? '/api/history/go-to' : '/api/history/mine';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(entry),
+    });
+
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    window.alert(message);
+  } finally {
+    state.pendingActions.delete(pendingKey);
+    render();
+  }
+}
+
+function isHistoryActionPending(action, entry) {
+  return state.pendingActions.has(buildHistoryActionKey(action, entry));
+}
+
+function buildHistoryActionKey(action, entry) {
+  return `${action}:${buildHistoryEntryKey(entry)}`;
+}
+
+function buildHistoryEntryKey(entry) {
+  return [entry.sessionId, entry.filePath, entry.startMs ?? 'nil', entry.endMs ?? 'nil', entry.text].join('::');
 }
 
 function isSameSubtitle(a, b) {

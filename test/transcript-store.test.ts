@@ -40,7 +40,7 @@ test('TranscriptStore keeps current subtitle and bounded history', () => {
   );
 });
 
-test('TranscriptStore clears current subtitle on empty text without dropping history', () => {
+test('TranscriptStore keeps the last non-empty subtitle on empty text without dropping history', () => {
   const store = new TranscriptStore(10);
   store.startSession({ action: 'start', sessionId: 's1', filePath: 'episode.mkv' });
   store.pushSubtitle({
@@ -61,6 +61,26 @@ test('TranscriptStore clears current subtitle on empty text without dropping his
   });
 
   const state = store.getState();
-  assert.equal(state.currentSubtitle, null);
+  assert.equal(state.currentSubtitle?.text, 'hello');
   assert.equal(state.history.length, 1);
+});
+
+test('TranscriptStore session reset clears current subtitle and history', () => {
+  const store = new TranscriptStore(10);
+  store.startSession({ action: 'start', sessionId: 's1', filePath: 'episode-1.mkv' });
+  store.pushSubtitle({
+    sessionId: 's1',
+    filePath: 'episode-1.mkv',
+    text: 'hello',
+    startMs: 100,
+    endMs: 200,
+    playbackTimeMs: 150,
+  });
+
+  store.startSession({ action: 'start', sessionId: 's2', filePath: 'episode-2.mkv' });
+
+  const state = store.getState();
+  assert.equal(state.currentSubtitle, null);
+  assert.deepEqual(state.history, []);
+  assert.equal(state.session?.sessionId, 's2');
 });

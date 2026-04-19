@@ -37,6 +37,12 @@ export const DEFAULT_CONFIG: AppConfig = {
     imageMaxHeight: 900,
     imageIncludeSubtitles: true,
   },
+  runtime: {
+    ffmpegPath: 'ffmpeg',
+    tempDir: '',
+    captureAudio: true,
+    captureImage: true,
+  },
   transcript: {
     historyLimit: 250,
   },
@@ -294,6 +300,30 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         historyLimit: parseNumber(key, value),
       };
       return;
+    case 'ffmpeg_path':
+      config.runtime = {
+        ...config.runtime,
+        ffmpegPath: value,
+      };
+      return;
+    case 'temp_dir':
+      config.runtime = {
+        ...config.runtime,
+        tempDir: value,
+      };
+      return;
+    case 'capture_audio':
+      config.runtime = {
+        ...config.runtime,
+        captureAudio: parseBoolean(key, value),
+      };
+      return;
+    case 'capture_image':
+      config.runtime = {
+        ...config.runtime,
+        captureImage: parseBoolean(key, value),
+      };
+      return;
     default:
       return;
   }
@@ -342,6 +372,10 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
     capture: {
       ...base.capture,
       ...overrides.capture,
+    },
+    runtime: {
+      ...base.runtime,
+      ...overrides.runtime,
     },
     transcript: {
       ...base.transcript,

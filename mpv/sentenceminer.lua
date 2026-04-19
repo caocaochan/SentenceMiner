@@ -55,6 +55,8 @@ local state = {
     helper_waiters = {},
 }
 
+local JSON_NULL = {}
+
 math.randomseed(os.time())
 
 local function is_truthy(value)
@@ -255,6 +257,12 @@ local function trim_output(value)
     return tostring(value):gsub("%s+$", "")
 end
 
+local function url_encode_component(value)
+    return tostring(value):gsub("([^%w%-_%.~])", function(char)
+        return string.format("%%%02X", string.byte(char))
+    end)
+end
+
 local function helper_error_from_result(result)
     local decoded_stdout = parse_json_output(result and result.stdout or nil)
     if decoded_stdout and type(decoded_stdout) == "table" and decoded_stdout.message then
@@ -332,7 +340,12 @@ local function helper_request(method, endpoint, payload, timeout_ms)
         return nil, helper_error_from_result(result) or ("helper request failed with status " .. tostring(result.status))
     end
 
-    local decoded = parse_json_output(result.stdout)
+    local stdout = result.stdout or ""
+    if stdout:match("^%s*null%s*$") then
+        return JSON_NULL, nil
+    end
+
+    local decoded = parse_json_output(stdout)
     if not decoded then
         return nil, "helper returned invalid JSON"
     end
@@ -674,6 +687,28 @@ local function sync_subtitle_state()
     end
 end
 
+local function sync_player_command()
+    if not state.session_id or not state.helper_ready then
+        return
+    end
+
+    local response, err = helper_request(
+        "GET",
+        "/api/player-command?sessionId=" .. url_encode_component(state.session_id),
+        nil,
+        1000
+    )
+    if err then
+        state.helper_ready = false
+        msg.warn("could not poll helper player command: " .. tostring(err))
+        return
+    end
+
+    if response ~= JSON_NULL and response.type == "seek" and response.startMs ~= nil then
+        mp.commandv("seek", format_seconds((tonumber(response.startMs) or 0) / 1000), "absolute+exact")
+    end
+end
+
 local function run_ffmpeg(args, description)
     local result = utils.subprocess({
         args = args,
@@ -825,7 +860,10 @@ end
 mp.register_event("file-loaded", start_session)
 mp.register_event("end-file", stop_session)
 mp.register_event("shutdown", stop_session)
-mp.add_periodic_timer(0.2, sync_subtitle_state)
+mp.add_periodic_timer(0.2, function()
+    sync_subtitle_state()
+    sync_player_command()
+end)
 
 mp.register_script_message("mine", mine_current)
 

@@ -146,6 +146,13 @@ h1 {
   display: grid;
   gap: 10px;
   padding-right: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.history-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .history-item {
@@ -181,6 +188,37 @@ h1 {
   font-size: 1.15rem;
   line-height: 1.65;
   color: var(--subtext1);
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.history-button {
+  appearance: none;
+  border: 1px solid rgba(138, 173, 244, 0.22);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(54, 58, 79, 0.82);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.history-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(91, 96, 120, 0.88);
+  border-color: rgba(245, 169, 127, 0.34);
+}
+
+.history-button:disabled {
+  opacity: 0.58;
+  cursor: wait;
 }
 
 .pill {

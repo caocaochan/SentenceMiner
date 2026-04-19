@@ -54,6 +54,13 @@ export interface CaptureConfig {
   imageIncludeSubtitles: boolean;
 }
 
+export interface RuntimeConfig {
+  ffmpegPath: string;
+  tempDir: string;
+  captureAudio: boolean;
+  captureImage: boolean;
+}
+
 export interface TranscriptConfig {
   historyLimit: number;
 }
@@ -67,6 +74,7 @@ export interface AppConfig {
   server: ServerConfig;
   anki: AnkiConfig;
   capture: CaptureConfig;
+  runtime: RuntimeConfig;
   transcript: TranscriptConfig;
 }
 

@@ -54,7 +54,7 @@ test('resolveConfigPath defaults next to the packaged helper', (t) => {
   assert.equal(configPath, 'C:\\mpv\\script-opts\\sentenceminer.conf');
 });
 
-test('loadConfig reads helper settings from sentenceminer.conf and ignores mpv-only keys', async (t) => {
+test('loadConfig reads helper and runtime settings from sentenceminer.conf', async (t) => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-config-'));
   const configPath = path.join(tempRoot, 'sentenceminer.conf');
   const originalConfig = process.env.SENTENCEMINER_CONFIG;
@@ -76,6 +76,10 @@ test('loadConfig reads helper settings from sentenceminer.conf and ignores mpv-o
       'server_port=9001',
       'anki_deck=Mining',
       'anki_field_subtitle=Expression',
+      'ffmpeg_path=C:\\Tools\\ffmpeg.exe',
+      'temp_dir=C:\\Temp\\SentenceMiner',
+      'capture_audio=no',
+      'capture_image=yes',
       'capture_audio_pre_padding_ms=400',
       'capture_image_include_subtitles=no',
       'transcript_history_limit=40',
@@ -90,6 +94,10 @@ test('loadConfig reads helper settings from sentenceminer.conf and ignores mpv-o
   assert.equal(config.server.port, 9001);
   assert.equal(config.anki.deck, 'Mining');
   assert.equal(config.anki.fields.subtitle, 'Expression');
+  assert.equal(config.runtime.ffmpegPath, 'C:\\Tools\\ffmpeg.exe');
+  assert.equal(config.runtime.tempDir, 'C:\\Temp\\SentenceMiner');
+  assert.equal(config.runtime.captureAudio, false);
+  assert.equal(config.runtime.captureImage, true);
   assert.equal(config.capture.audioPrePaddingMs, 400);
   assert.equal(config.capture.imageIncludeSubtitles, false);
   assert.equal(config.transcript.historyLimit, 40);

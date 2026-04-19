@@ -2,10 +2,12 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 
+import { mineHistoryEntry } from './history-mine.ts';
 import { mineToAnki } from './anki.ts';
 import { buildAppUrl, openUrlInBrowser } from './browser.ts';
 import { loadConfig, resolveAppRoot } from './config.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
+import { PlayerCommandStore } from './player-command-store.ts';
 import { TranscriptStore } from './transcript-store.ts';
 import type { MinePayload, SessionPayload, SubtitleEventPayload } from './types.ts';
 import { WebSocketHub } from './ws.ts';
@@ -22,11 +24,12 @@ async function main(): Promise<void> {
   const parentPid = parseParentPidArg(process.argv.slice(2));
   const config = await loadConfig();
   const transcriptStore = new TranscriptStore(config.transcript.historyLimit);
+  const playerCommandStore = new PlayerCommandStore();
   const sockets = new WebSocketHub();
 
   const server = http.createServer(async (request, response) => {
     try {
-      await routeRequest(config, transcriptStore, sockets, request, response);
+      await routeRequest(config, transcriptStore, playerCommandStore, sockets, request, response);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const statusCode = error instanceof HttpError ? error.statusCode : 500;
@@ -93,6 +96,7 @@ async function main(): Promise<void> {
 async function routeRequest(
   config: Awaited<ReturnType<typeof loadConfig>>,
   transcriptStore: TranscriptStore,
+  playerCommandStore: PlayerCommandStore,
   sockets: WebSocketHub,
   request: http.IncomingMessage,
   response: http.ServerResponse,
@@ -107,6 +111,7 @@ async function routeRequest(
 
   if (method === 'POST' && url.pathname === '/api/session') {
     const payload = await readJsonBody<SessionPayload>(request);
+    playerCommandStore.clearAll();
     if (payload.action === 'start') {
       transcriptStore.startSession(payload);
     } else {
@@ -136,6 +141,34 @@ async function routeRequest(
   if (method === 'POST' && url.pathname === '/api/mine') {
     const payload = await readJsonBody<MinePayload>(request);
     const result = await mineToAnki(config.anki, payload);
+    respondJson(response, 200, result);
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/history/go-to') {
+    const payload = await readJsonBody<SubtitleEventPayload>(request);
+    assertActiveSession(transcriptStore, payload.sessionId);
+    const command = playerCommandStore.queueSeek(payload);
+    respondJson(response, 200, {
+      success: true,
+      message: `Queued seek to ${command.startMs} ms.`,
+    });
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/api/player-command') {
+    const sessionId = url.searchParams.get('sessionId');
+    if (!sessionId) {
+      throw new HttpError(400, 'Expected sessionId query parameter.');
+    }
+
+    respondJson(response, 200, playerCommandStore.claim(sessionId));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/history/mine') {
+    const payload = await readJsonBody<SubtitleEventPayload>(request);
+    const result = await mineHistoryEntry(config, payload);
     respondJson(response, 200, result);
     return;
   }
@@ -191,6 +224,17 @@ function respondJson(response: http.ServerResponse, statusCode: number, payload:
     'cache-control': 'no-store',
   });
   response.end(JSON.stringify(payload));
+}
+
+function assertActiveSession(transcriptStore: TranscriptStore, sessionId: string): void {
+  const activeSessionId = transcriptStore.getState().session?.sessionId;
+  if (!activeSessionId) {
+    throw new HttpError(409, 'No active transcript session is available.');
+  }
+
+  if (activeSessionId !== sessionId) {
+    throw new HttpError(409, 'The requested history entry does not belong to the active session.');
+  }
 }
 
 class HttpError extends Error {
