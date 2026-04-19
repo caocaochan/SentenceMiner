@@ -69,6 +69,7 @@ const elements = {
   settingsCaptureImageMaxWidth: document.getElementById('settings-capture-image-max-width'),
   settingsCaptureImageMaxHeight: document.getElementById('settings-capture-image-max-height'),
   settingsCaptureImageIncludeSubtitles: document.getElementById('settings-capture-image-include-subtitles'),
+  settingsAppearanceSubtitleCardFontFamily: document.getElementById('settings-appearance-subtitle-card-font-family'),
 };
 
 elements.historyList.addEventListener('scroll', () => {
@@ -187,6 +188,7 @@ function startStatePolling() {
 }
 
 function render() {
+  applyAppearanceSettings();
   renderTranscript();
   renderSettingsUi();
   renderToasts();
@@ -495,6 +497,7 @@ function hydrateSettingsForm() {
   elements.settingsCaptureImageMaxWidth.value = String(settings.capture.imageMaxWidth ?? 0);
   elements.settingsCaptureImageMaxHeight.value = String(settings.capture.imageMaxHeight ?? 0);
   elements.settingsCaptureImageIncludeSubtitles.checked = Boolean(settings.capture.imageIncludeSubtitles);
+  elements.settingsAppearanceSubtitleCardFontFamily.value = settings.appearance.subtitleCardFontFamily ?? '';
 }
 
 async function refreshSettingsOptions(noteType, deck) {
@@ -636,7 +639,20 @@ function collectSettingsPayload() {
       captureAudio: elements.settingsRuntimeCaptureAudio.checked,
       captureImage: elements.settingsRuntimeCaptureImage.checked,
     },
+    appearance: {
+      subtitleCardFontFamily: elements.settingsAppearanceSubtitleCardFontFamily.value.trim(),
+    },
   };
+}
+
+function applyAppearanceSettings() {
+  const subtitleCardFontFamily = state.app?.config?.settings?.appearance?.subtitleCardFontFamily?.trim() ?? '';
+  if (subtitleCardFontFamily) {
+    document.documentElement.style.setProperty('--subtitle-card-font-family', subtitleCardFontFamily);
+    return;
+  }
+
+  document.documentElement.style.removeProperty('--subtitle-card-font-family');
 }
 
 function parseRequiredInteger(input, label) {

@@ -73,6 +73,10 @@ export interface TranscriptConfig {
   historyLimit: number;
 }
 
+export interface AppearanceConfig {
+  subtitleCardFontFamily: string;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -84,6 +88,7 @@ export interface AppConfig {
   capture: CaptureConfig;
   runtime: RuntimeConfig;
   transcript: TranscriptConfig;
+  appearance: AppearanceConfig;
 }
 
 export interface EditableAnkiSettings {
@@ -103,6 +108,7 @@ export interface EditableSettings {
   anki: EditableAnkiSettings;
   capture: CaptureConfig;
   runtime: EditableRuntimeSettings;
+  appearance: AppearanceConfig;
 }
 
 export interface SettingsOptions {
@@ -119,6 +125,7 @@ export interface StatePayload {
     capture: CaptureConfig;
     transcript: TranscriptConfig;
     server: ServerConfig;
+    appearance: AppearanceConfig;
     settings: EditableSettings;
   };
   state: TranscriptState;

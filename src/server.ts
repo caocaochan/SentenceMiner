@@ -467,6 +467,7 @@ export function buildStatePayload(config: AppConfig, transcriptStore: Transcript
       capture: config.capture,
       transcript: config.transcript,
       server: config.server,
+      appearance: config.appearance,
       settings: getEditableSettings(config),
     },
     state: transcriptStore.getState(),
@@ -503,6 +504,7 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
   const fields = getRecord(anki.fields, 'anki.fields');
   const capture = getRecord(root.capture, 'capture');
   const runtime = getRecord(root.runtime, 'runtime');
+  const appearance = getRecord(root.appearance, 'appearance');
 
   return {
     anki: {
@@ -534,6 +536,9 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
     runtime: {
       captureAudio: getBoolean(runtime.captureAudio, 'runtime.captureAudio'),
       captureImage: getBoolean(runtime.captureImage, 'runtime.captureImage'),
+    },
+    appearance: {
+      subtitleCardFontFamily: getString(appearance.subtitleCardFontFamily, 'appearance.subtitleCardFontFamily'),
     },
   };
 }
@@ -586,6 +591,7 @@ function replaceConfig(target: AppConfig, next: AppConfig): void {
   target.capture = next.capture;
   target.runtime = next.runtime;
   target.transcript = next.transcript;
+  target.appearance = next.appearance;
 }
 
 async function refreshConfigFromDisk(context: ServerContext): Promise<void> {

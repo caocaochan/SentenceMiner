@@ -12,6 +12,8 @@
   --green: #a6da95;
   --peach: #f5a97f;
   --mauve: #c6a0f6;
+  --app-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  --subtitle-card-font-family: var(--app-font-family);
   --overlay: rgba(54, 58, 79, 0.92);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
 }
@@ -29,7 +31,7 @@ body {
     radial-gradient(circle at top right, rgba(138, 173, 244, 0.18), transparent 24%),
     linear-gradient(180deg, var(--mantle), var(--crust));
   color: var(--text);
-  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: var(--app-font-family);
 }
 
 body {
@@ -249,6 +251,7 @@ h1 {
   font-size: 1rem;
   line-height: 1.4;
   color: var(--subtext1);
+  font-family: var(--subtitle-card-font-family);
 }
 
 .history-actions {

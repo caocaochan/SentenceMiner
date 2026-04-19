@@ -47,6 +47,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   transcript: {
     historyLimit: 250,
   },
+  appearance: {
+    subtitleCardFontFamily: '',
+  },
 };
 
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
@@ -100,6 +103,9 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
       captureAudio: config.runtime.captureAudio,
       captureImage: config.runtime.captureImage,
     },
+    appearance: {
+      subtitleCardFontFamily: config.appearance.subtitleCardFontFamily,
+    },
   };
 }
 
@@ -123,6 +129,10 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
       ...config.runtime,
       captureAudio: settings.runtime.captureAudio,
       captureImage: settings.runtime.captureImage,
+    },
+    appearance: {
+      ...config.appearance,
+      subtitleCardFontFamily: settings.appearance.subtitleCardFontFamily,
     },
   });
 }
@@ -431,6 +441,12 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         historyLimit: parseNumber(key, value),
       };
       return;
+    case 'subtitle_card_font_family':
+      config.appearance = {
+        ...config.appearance,
+        subtitleCardFontFamily: value,
+      };
+      return;
     case 'ffmpeg_path':
       config.runtime = {
         ...config.runtime,
@@ -539,6 +555,10 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
       ...base.transcript,
       ...overrides.transcript,
     },
+    appearance: {
+      ...base.appearance,
+      ...overrides.appearance,
+    },
   };
 }
 
@@ -570,6 +590,7 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'capture_image_max_width', value: (settings) => String(settings.capture.imageMaxWidth) },
   { key: 'capture_image_max_height', value: (settings) => String(settings.capture.imageMaxHeight) },
   { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
+  { key: 'subtitle_card_font_family', value: (settings) => settings.appearance.subtitleCardFontFamily },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {

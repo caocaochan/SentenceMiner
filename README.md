@@ -70,6 +70,7 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_audio_format`, `capture_audio_codec`, `capture_audio_bitrate`
 - `capture_image_format`, `capture_image_quality`, `capture_image_max_width`, `capture_image_max_height`
 - `capture_image_include_subtitles`
+- `subtitle_card_font_family`
 - `transcript_history_limit`
 
 - `helper_url`
