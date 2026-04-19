@@ -3,6 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import { mineToAnki } from './anki.ts';
+import { buildAppUrl, openUrlInBrowser } from './browser.ts';
 import { loadConfig, resolveAppRoot } from './config.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { TranscriptStore } from './transcript-store.ts';
@@ -80,7 +81,12 @@ async function main(): Promise<void> {
   }
 
   server.listen(config.server.port, config.server.host, () => {
-    console.log(`SentenceMiner helper listening on http://${config.server.host}:${config.server.port}`);
+    const appUrl = buildAppUrl(config.server);
+    console.log(`SentenceMiner helper listening on ${appUrl}`);
+
+    if (!openUrlInBrowser(appUrl)) {
+      console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
+    }
   });
 }
 
