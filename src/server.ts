@@ -26,7 +26,11 @@ async function main(): Promise<void> {
       await routeRequest(config, transcriptStore, sockets, request, response);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      respondJson(response, 500, {
+      const statusCode = error instanceof HttpError ? error.statusCode : 500;
+      if (statusCode >= 500) {
+        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+      }
+      respondJson(response, statusCode, {
         success: false,
         message,
       });
@@ -126,10 +130,14 @@ async function readJsonBody<T>(request: http.IncomingMessage): Promise<T> {
 
   const body = Buffer.concat(chunks).toString('utf8');
   if (!body) {
-    throw new Error('Expected a JSON request body.');
+    throw new HttpError(400, 'Expected a JSON request body.');
   }
 
-  return JSON.parse(body) as T;
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new HttpError(400, 'Invalid JSON request body.');
+  }
 }
 
 async function serveStatic(response: http.ServerResponse, filename: string, contentType: string): Promise<void> {
@@ -144,6 +152,16 @@ function respondJson(response: http.ServerResponse, statusCode: number, payload:
     'cache-control': 'no-store',
   });
   response.end(JSON.stringify(payload));
+}
+
+class HttpError extends Error {
+  readonly statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.statusCode = statusCode;
+  }
 }
 
 function buildStatePayload(config: Awaited<ReturnType<typeof loadConfig>>, transcriptStore: TranscriptStore) {

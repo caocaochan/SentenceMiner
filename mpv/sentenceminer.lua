@@ -225,21 +225,64 @@ local function helper_request(method, endpoint, payload, timeout_ms)
     local result
     if is_windows() then
         local script = {
+            "$ErrorActionPreference='Stop'",
             "$ProgressPreference='SilentlyContinue'",
             string.format("$uri='%s'", powershell_escape(url)),
-            string.format("$resp = Invoke-RestMethod -Method %s -Uri $uri -TimeoutSec %d", method, timeout_seconds),
+            string.format("$requestArgs = @{ Method = '%s'; Uri = $uri; TimeoutSec = %d; ErrorAction = 'Stop' }", method, timeout_seconds),
         }
 
         if body_path then
-            script[3] = string.format(
-                "$resp = Invoke-RestMethod -Method %s -Uri $uri -TimeoutSec %d -ContentType 'application/json' -Body (Get-Content -Raw -LiteralPath '%s')",
-                method,
-                timeout_seconds,
-                powershell_escape(body_path)
+            table.insert(
+                script,
+                string.format(
+                    "$requestArgs['ContentType'] = 'application/json'; $requestArgs['Body'] = Get-Content -Raw -LiteralPath '%s'",
+                    powershell_escape(body_path)
+                )
             )
         end
 
-        table.insert(script, "$resp | ConvertTo-Json -Depth 16 -Compress")
+        table.insert(script, [[
+try {
+    $resp = Invoke-RestMethod @requestArgs
+    $resp | ConvertTo-Json -Depth 16 -Compress
+} catch {
+    $statusCode = $null
+    if ($_.Exception -and $_.Exception.Response -and $_.Exception.Response.StatusCode) {
+        $statusCode = [int]$_.Exception.Response.StatusCode
+    }
+
+    $message = $null
+    if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+        $details = $_.ErrorDetails.Message
+        try {
+            $parsed = $details | ConvertFrom-Json
+            if ($parsed -and $parsed.message) {
+                $message = [string]$parsed.message
+            }
+        } catch {
+        }
+
+        if (-not $message) {
+            $message = $details
+        }
+    }
+
+    if (-not $message -and $_.Exception) {
+        $message = $_.Exception.Message
+    }
+
+    if (-not $message) {
+        $message = 'Unknown helper request failure.'
+    }
+
+    if ($statusCode) {
+        $message = "HTTP ${statusCode}: $message"
+    }
+
+    [Console]::Error.WriteLine($message)
+    exit 1
+}
+]])
         result = utils.subprocess({
             args = { "powershell", "-NoProfile", "-Command", table.concat(script, "; ") },
             cancellable = false,
