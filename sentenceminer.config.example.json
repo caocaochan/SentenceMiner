@@ -1,0 +1,37 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8766
+  },
+  "anki": {
+    "url": "http://127.0.0.1:8765",
+    "apiKey": "",
+    "deck": "Anime",
+    "noteType": "Sentence",
+    "extraQuery": "",
+    "fields": {
+      "subtitle": "Sentence",
+      "audio": "Audio",
+      "image": "Picture",
+      "source": "Source",
+      "time": "Time",
+      "filename": "Filename"
+    },
+    "filenameTemplate": "{basename}-{startMs}-{kind}.{ext}"
+  },
+  "capture": {
+    "audioPrePaddingMs": 250,
+    "audioPostPaddingMs": 250,
+    "audioFormat": "mp3",
+    "audioCodec": "libmp3lame",
+    "audioBitrate": "128k",
+    "imageFormat": "jpg",
+    "imageQuality": 2,
+    "imageMaxWidth": 1600,
+    "imageMaxHeight": 900,
+    "imageIncludeSubtitles": true
+  },
+  "transcript": {
+    "historyLimit": 250
+  }
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentenceMiner</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">SentenceMiner</p>
+          <h1>Live subtitle mining view</h1>
+        </div>
+        <div class="status-card">
+          <span id="connection-pill" class="pill pill-muted">Connecting</span>
+          <span id="file-name" class="muted">No file loaded</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="current-panel">
+          <div class="panel-header">
+            <span class="pill pill-accent">Now Playing</span>
+            <span id="current-time" class="muted">--:--.--</span>
+          </div>
+          <div id="current-subtitle" class="subtitle-display empty">Waiting for subtitles from mpv…</div>
+        </section>
+
+        <section class="history-panel">
+          <div class="panel-header sticky">
+            <h2>Transcript History</h2>
+            <span id="history-count" class="muted">0 lines</span>
+          </div>
+          <div id="history-list" class="history-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
