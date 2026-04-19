@@ -22,6 +22,7 @@ import type {
   MinePayload,
   ServerConfig,
   SessionPayload,
+  SettingsOptions,
   StatePayload,
   SubtitleEventPayload,
 } from './types.ts';
@@ -205,20 +206,13 @@ export async function routeRequest(
   }
 
   if (method === 'GET' && url.pathname === '/api/settings/options') {
-    const noteType = url.searchParams.get('noteType')?.trim() || context.config.anki.noteType;
-    const [decks, noteTypes, noteFields] = await Promise.all([
-      listDeckNames(context.config.anki),
-      listModelNames(context.config.anki),
-      listModelFieldNames(context.config.anki, noteType),
-    ]);
-
     respondJson(response, 200, {
       success: true,
-      options: {
-        decks,
-        noteTypes,
-        noteFields,
-      },
+      options: await getSettingsOptions(
+        context.config,
+        url.searchParams.get('deck')?.trim() || context.config.anki.deck,
+        url.searchParams.get('noteType')?.trim() || context.config.anki.noteType,
+      ),
     });
     return;
   }
@@ -365,6 +359,25 @@ function respondJson(response: http.ServerResponse, statusCode: number, payload:
     'cache-control': 'no-store',
   });
   response.end(JSON.stringify(payload));
+}
+
+async function getSettingsOptions(
+  config: AppConfig,
+  requestedDeck: string,
+  requestedNoteType: string,
+): Promise<SettingsOptions> {
+  const [decks, noteTypes] = await Promise.all([listDeckNames(config.anki), listModelNames(config.anki)]);
+  const selectedDeck = decks.includes(requestedDeck) ? requestedDeck : (decks[0] ?? '');
+  const selectedNoteType = noteTypes.includes(requestedNoteType) ? requestedNoteType : (noteTypes[0] ?? '');
+  const noteFields = selectedNoteType ? await listModelFieldNames(config.anki, selectedNoteType) : [];
+
+  return {
+    decks,
+    noteTypes,
+    noteFields,
+    selectedDeck,
+    selectedNoteType,
+  };
 }
 
 function assertActiveSession(transcriptStore: TranscriptStore, sessionId: string): void {

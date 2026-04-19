@@ -72,7 +72,7 @@ elements.settingsForm.addEventListener('submit', (event) => {
   void saveSettings();
 });
 elements.settingsAnkiNoteType.addEventListener('change', () => {
-  void refreshSettingsOptions(elements.settingsAnkiNoteType.value);
+  void refreshSettingsOptions(elements.settingsAnkiNoteType.value, elements.settingsAnkiDeck.value);
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && state.settingsModalOpen && !state.settingsSaving) {
@@ -85,7 +85,7 @@ bootstrap();
 async function bootstrap() {
   await refreshState();
   connectWebSocket();
-  void refreshSettingsOptions(state.app?.config?.settings?.anki?.noteType);
+  void refreshSettingsOptions(state.app?.config?.settings?.anki?.noteType, state.app?.config?.settings?.anki?.deck);
 }
 
 async function refreshState() {
@@ -267,7 +267,10 @@ function openSettingsModal() {
   state.settingsSaveError = '';
   hydrateSettingsForm();
   render();
-  void refreshSettingsOptions(elements.settingsAnkiNoteType.value || state.app?.config?.settings?.anki?.noteType);
+  void refreshSettingsOptions(
+    elements.settingsAnkiNoteType.value || state.app?.config?.settings?.anki?.noteType,
+    elements.settingsAnkiDeck.value || state.app?.config?.settings?.anki?.deck,
+  );
 }
 
 function closeSettingsModal() {
@@ -306,7 +309,7 @@ function hydrateSettingsForm() {
   elements.settingsCaptureImageIncludeSubtitles.checked = Boolean(settings.capture.imageIncludeSubtitles);
 }
 
-async function refreshSettingsOptions(noteType) {
+async function refreshSettingsOptions(noteType, deck) {
   const requestId = ++state.settingsRequestId;
   state.settingsOptionsLoading = true;
   state.settingsOptionsError = '';
@@ -316,6 +319,9 @@ async function refreshSettingsOptions(noteType) {
     const search = new URLSearchParams();
     if (noteType) {
       search.set('noteType', noteType);
+    }
+    if (deck) {
+      search.set('deck', deck);
     }
 
     const response = await fetch(`/api/settings/options?${search.toString()}`);
@@ -328,15 +334,33 @@ async function refreshSettingsOptions(noteType) {
       return;
     }
 
-    state.settingsOptions = payload.options ?? { decks: [], noteTypes: [], noteFields: [] };
-    populateSelect(elements.settingsAnkiDeck, state.settingsOptions.decks, elements.settingsAnkiDeck.value, {
-      allowBlank: false,
-    });
+    state.settingsOptions = payload.options ?? {
+      decks: [],
+      noteTypes: [],
+      noteFields: [],
+      selectedDeck: '',
+      selectedNoteType: '',
+    };
     populateSelect(
       elements.settingsAnkiNoteType,
       state.settingsOptions.noteTypes,
-      elements.settingsAnkiNoteType.value || noteType || state.app?.config?.settings?.anki?.noteType,
-      { allowBlank: false },
+      state.settingsOptions.selectedNoteType ||
+        elements.settingsAnkiNoteType.value ||
+        noteType ||
+        state.app?.config?.settings?.anki?.noteType,
+      {
+        allowBlank: false,
+        preserveUnknown: false,
+      },
+    );
+    populateSelect(
+      elements.settingsAnkiDeck,
+      state.settingsOptions.decks,
+      state.settingsOptions.selectedDeck || elements.settingsAnkiDeck.value || deck || state.app?.config?.settings?.anki?.deck,
+      {
+        allowBlank: false,
+        preserveUnknown: false,
+      },
     );
     populateFieldSelects(state.settingsOptions.noteFields, {
       subtitle: elements.settingsFieldSubtitle.value,
@@ -464,7 +488,7 @@ function populateFieldSelects(noteFields, currentFields) {
 
 function populateSelect(select, options, currentValue, config = {}) {
   const values = [...new Set(options.filter(Boolean))];
-  if (currentValue && !values.includes(currentValue)) {
+  if (config.preserveUnknown !== false && currentValue && !values.includes(currentValue)) {
     values.unshift(currentValue);
   }
 
@@ -478,7 +502,11 @@ function populateSelect(select, options, currentValue, config = {}) {
     select.append(buildOption(value, value));
   });
 
-  select.value = currentValue ?? '';
+  const selectedValue = values.includes(currentValue)
+    ? currentValue
+    : (config.allowBlank ? '' : (values[0] ?? ''));
+  select.value = selectedValue;
+  return selectedValue;
 }
 
 function buildOption(value, label) {

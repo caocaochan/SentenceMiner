@@ -35,6 +35,24 @@ test('GET /api/settings/options returns live Anki deck and note type options', a
   assert.deepEqual(payload.options.decks, ['Anime', 'Mining']);
   assert.deepEqual(payload.options.noteTypes, ['Sentence', 'Vocab']);
   assert.deepEqual(payload.options.noteFields, ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
+  assert.equal(payload.options.selectedDeck, 'Anime');
+  assert.equal(payload.options.selectedNoteType, 'Sentence');
+});
+
+test('GET /api/settings/options falls back to live Anki defaults when configured values are missing', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.anki.deck = 'Missing Deck';
+  harness.config.anki.noteType = 'Missing Note Type';
+
+  const response = await fetch(`${harness.baseUrl}/api/settings/options`);
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload.options.decks, ['Anime', 'Mining']);
+  assert.deepEqual(payload.options.noteTypes, ['Sentence', 'Vocab']);
+  assert.deepEqual(payload.options.noteFields, ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
+  assert.equal(payload.options.selectedDeck, 'Anime');
+  assert.equal(payload.options.selectedNoteType, 'Sentence');
 });
 
 test('POST /api/settings persists settings and updates in-memory config', async (t) => {

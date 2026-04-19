@@ -101,6 +101,8 @@ export interface SettingsOptions {
   decks: string[];
   noteTypes: string[];
   noteFields: string[];
+  selectedDeck: string;
+  selectedNoteType: string;
 }
 
 export interface StatePayload {
