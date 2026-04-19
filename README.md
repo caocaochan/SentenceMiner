@@ -28,6 +28,7 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 ## Project Layout
 
 - [src/server.ts](C:/Users/CaoCao/Downloads/SentenceMiner/src/server.ts) helper server, API routes, and WebSocket fanout
+- [src/main.ts](C:/Users/CaoCao/Downloads/SentenceMiner/src/main.ts) executable entrypoint for development and packaged helpers
 - [src/anki.ts](C:/Users/CaoCao/Downloads/SentenceMiner/src/anki.ts) AnkiConnect note lookup and updates
 - [web/index.html](C:/Users/CaoCao/Downloads/SentenceMiner/web/index.html) local Yomitan-facing subtitle site
 - [mpv/sentenceminer.lua](C:/Users/CaoCao/Downloads/SentenceMiner/mpv/sentenceminer.lua) `mpv` integration and capture workflow
@@ -91,7 +92,7 @@ For source development you still need Node.js 24 or newer.
 
 ```powershell
 npm install
-node --experimental-strip-types src/server.ts
+node --experimental-strip-types src/main.ts
 node --experimental-strip-types --test test/*.test.ts
 node scripts/build-helper.mjs
 node scripts/package-release.mjs

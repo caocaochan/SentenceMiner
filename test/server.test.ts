@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { DEFAULT_CONFIG, getEditableSettings } from '../src/config.ts';
 import { PlayerCommandStore } from '../src/player-command-store.ts';
-import { createRequestHandler } from '../src/server.ts';
+import { createRequestHandler, listenForAppServer, probeRunningHelper } from '../src/server.ts';
 import { TranscriptStore } from '../src/transcript-store.ts';
 import { WebSocketHub } from '../src/ws.ts';
 
@@ -88,6 +88,66 @@ test('POST /api/settings rejects invalid note field mappings with a 400', async 
   assert.equal(response.status, 400);
   assert.equal(body.success, false);
   assert.match(body.message, /does not exist on Anki note type/);
+});
+
+test('probeRunningHelper returns true for a live SentenceMiner instance', async (t) => {
+  const harness = await createServerHarness(t);
+  const address = new URL(harness.baseUrl);
+
+  const running = await probeRunningHelper({
+    host: address.hostname,
+    port: Number(address.port),
+  });
+
+  assert.equal(running, true);
+});
+
+test('listenForAppServer treats a healthy existing helper as already running', async (t) => {
+  const harness = await createServerHarness(t);
+  const address = new URL(harness.baseUrl);
+  const duplicateServer = http.createServer((_request, response) => {
+    response.writeHead(200);
+    response.end('unexpected duplicate listener');
+  });
+
+  t.after(() => closeServer(duplicateServer).catch(() => {}));
+
+  const result = await listenForAppServer(duplicateServer, {
+    host: address.hostname,
+    port: Number(address.port),
+  });
+
+  assert.equal(result, 'already-running');
+});
+
+test('listenForAppServer still rejects port conflicts from non-SentenceMiner services', async (t) => {
+  const busyServer = http.createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end('hello');
+  });
+
+  await listen(busyServer);
+  const busyAddress = busyServer.address();
+  if (!busyAddress || typeof busyAddress === 'string') {
+    throw new Error('Expected a TCP address for the busy server.');
+  }
+
+  const duplicateServer = http.createServer((_request, response) => {
+    response.writeHead(200);
+    response.end('unexpected duplicate listener');
+  });
+
+  t.after(async () => {
+    await Promise.all([closeServer(duplicateServer).catch(() => {}), closeServer(busyServer)]);
+  });
+
+  await assert.rejects(
+    listenForAppServer(duplicateServer, {
+      host: '127.0.0.1',
+      port: busyAddress.port,
+    }),
+    (error: NodeJS.ErrnoException) => error.code === 'EADDRINUSE',
+  );
 });
 
 async function createServerHarness(t: TestContext) {

@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { mineHistoryEntry } from './history-mine.ts';
 import { listDeckNames, listModelFieldNames, listModelNames, mineToAnki } from './anki.ts';
@@ -21,6 +20,7 @@ import type {
   AppConfig,
   EditableSettings,
   MinePayload,
+  ServerConfig,
   SessionPayload,
   StatePayload,
   SubtitleEventPayload,
@@ -38,7 +38,9 @@ export interface ServerContext {
   sockets: WebSocketHub;
 }
 
-async function main(): Promise<void> {
+export type ListenResult = 'started' | 'already-running';
+
+export async function main(): Promise<void> {
   const parentPid = parseParentPidArg(process.argv.slice(2));
   const configPath = resolveConfigPath(process.argv.slice(2));
   const config = await loadConfig();
@@ -95,14 +97,75 @@ async function main(): Promise<void> {
     });
   }
 
-  server.listen(config.server.port, config.server.host, () => {
-    const appUrl = buildAppUrl(config.server);
-    console.log(`SentenceMiner helper listening on ${appUrl}`);
-
+  const appUrl = buildAppUrl(config.server);
+  const listenResult = await listenForAppServer(server, config.server);
+  if (listenResult === 'already-running') {
+    console.log(`SentenceMiner helper is already running on ${appUrl}`);
     if (!openUrlInBrowser(appUrl)) {
       console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
     }
-  });
+    stopParentWatch?.();
+    return;
+  }
+
+  console.log(`SentenceMiner helper listening on ${appUrl}`);
+
+  if (!openUrlInBrowser(appUrl)) {
+    console.warn(`SentenceMiner helper could not auto-open a browser for ${appUrl}.`);
+  }
+}
+
+export async function listenForAppServer(server: http.Server, config: ServerConfig): Promise<ListenResult> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const handleError = (error: Error) => {
+        server.off('listening', handleListening);
+        reject(error);
+      };
+      const handleListening = () => {
+        server.off('error', handleError);
+        resolve();
+      };
+
+      server.once('error', handleError);
+      server.once('listening', handleListening);
+      server.listen(config.port, config.host);
+    });
+
+    return 'started';
+  } catch (error) {
+    if (isAddressInUseError(error) && (await probeRunningHelper(config))) {
+      return 'already-running';
+    }
+
+    throw error;
+  }
+}
+
+export async function probeRunningHelper(config: ServerConfig): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  timeout.unref?.();
+
+  try {
+    const response = await fetch(new URL('/api/state', buildAppUrl(config)), {
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = await response.json();
+    return Boolean(payload?.success === true && payload?.config && payload?.state);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isAddressInUseError(error: unknown): error is NodeJS.ErrnoException {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'EADDRINUSE');
 }
 
 export function createRequestHandler(context: ServerContext) {
@@ -464,11 +527,4 @@ function getBoolean(value: unknown, fieldName: string): boolean {
   }
 
   return value;
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().catch((error) => {
-    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-    process.exitCode = 1;
-  });
 }

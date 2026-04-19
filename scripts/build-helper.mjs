@@ -10,6 +10,7 @@ const bundlePath = path.join(buildRoot, 'SentenceMinerHelper.cjs');
 const seaConfigPath = path.join(buildRoot, 'sea-config.json');
 const seaBlobPath = path.join(buildRoot, 'sea-prep.blob');
 const helperExePath = path.join(buildRoot, 'SentenceMinerHelper.exe');
+const helperWebPath = path.join(buildRoot, 'web');
 const postjectCliPath = path.join(repoRoot, 'node_modules', 'postject', 'dist', 'cli.js');
 
 if (process.platform !== 'win32') {
@@ -20,7 +21,7 @@ await fs.rm(buildRoot, { recursive: true, force: true });
 await fs.mkdir(buildRoot, { recursive: true });
 
 await build({
-  entryPoints: [path.join(repoRoot, 'src', 'server.ts')],
+  entryPoints: [path.join(repoRoot, 'src', 'main.ts')],
   outfile: bundlePath,
   bundle: true,
   format: 'cjs',
@@ -58,6 +59,10 @@ run(
   ],
   'inject SEA blob',
 );
+await fs.cp(path.join(repoRoot, 'web'), helperWebPath, {
+  recursive: true,
+  force: true,
+});
 
 console.log(`Built helper executable at ${helperExePath}`);
 

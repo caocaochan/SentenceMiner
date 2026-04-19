@@ -1,2 +1,2 @@
 @echo off
-node --experimental-strip-types src/server.ts %*
+node --experimental-strip-types src/main.ts %*
