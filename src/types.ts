@@ -1,4 +1,18 @@
 export type SessionAction = 'start' | 'stop';
+export type TranscriptStatus = 'loading' | 'ready' | 'unavailable' | 'error';
+export type SubtitleTrackKind = 'external' | 'embedded' | 'none';
+
+export interface SubtitleTrackPayload {
+  sessionId: string;
+  filePath: string;
+  kind: SubtitleTrackKind;
+  externalFilePath?: string | null;
+  trackId?: number | null;
+  ffIndex?: number | null;
+  codec?: string | null;
+  title?: string | null;
+  lang?: string | null;
+}
 
 export interface SessionPayload {
   action: SessionAction;
@@ -6,6 +20,7 @@ export interface SessionPayload {
   filePath?: string;
   durationMs?: number | null;
   playbackTimeMs?: number | null;
+  subtitleTrack?: SubtitleTrackPayload | null;
 }
 
 export interface SubtitleEventPayload {
@@ -136,15 +151,25 @@ export interface SettingsOptionsPayload {
   options: SettingsOptions;
 }
 
+export interface TranscriptCue extends SubtitleEventPayload {
+  id: string;
+  orderIndex: number;
+}
+
 export interface TranscriptState {
   session: {
     sessionId: string;
     filePath: string;
     durationMs: number | null;
     playbackTimeMs: number | null;
+    subtitleTrack: SubtitleTrackPayload | null;
   } | null;
   currentSubtitle: SubtitleEventPayload | null;
-  history: SubtitleEventPayload[];
+  transcript: TranscriptCue[];
+  history: TranscriptCue[];
+  currentCueId: string | null;
+  transcriptStatus: TranscriptStatus;
+  transcriptMessage: string | null;
 }
 
 export interface MineResult {

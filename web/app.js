@@ -1,15 +1,19 @@
 import {
   buildBatchHistoryMineRequest,
   buildHistoryEntryKey,
-  isHistorySelectionToggleAllowed,
   reconcileSelectedHistoryKeys,
   toggleSelectedHistoryKeys,
 } from './history-selection.js';
+import {
+  buildTranscriptStructureSignature,
+  computeTranscriptItemUiState,
+  shouldAutoScrollToCue,
+  shouldRebuildTranscriptList,
+} from './transcript-render.js';
 
 const state = {
   connection: 'connecting',
   app: null,
-  autoScroll: true,
   pendingActions: new Set(),
   selectedHistoryKeys: new Set(),
   toasts: [],
@@ -24,6 +28,9 @@ const state = {
   settingsSaving: false,
   settingsSaveError: '',
   settingsRequestId: 0,
+  renderedTranscriptSignature: '',
+  renderedCueElements: new Map(),
+  lastAutoScrollCueId: null,
 };
 const STATE_POLL_INTERVAL_MS = 2000;
 let reconnectTimerId = null;
@@ -34,6 +41,7 @@ const elements = {
   connectionPill: document.getElementById('connection-pill'),
   fileName: document.getElementById('file-name'),
   historyCount: document.getElementById('history-count'),
+  transcriptStatus: document.getElementById('transcript-status'),
   historySelectionCount: document.getElementById('history-selection-count'),
   historyList: document.getElementById('history-list'),
   historyMineSelected: document.getElementById('history-mine-selected'),
@@ -71,11 +79,6 @@ const elements = {
   settingsCaptureImageIncludeSubtitles: document.getElementById('settings-capture-image-include-subtitles'),
   settingsAppearanceSubtitleCardFontFamily: document.getElementById('settings-appearance-subtitle-card-font-family'),
 };
-
-elements.historyList.addEventListener('scroll', () => {
-  const threshold = 40;
-  state.autoScroll = elements.historyList.scrollTop < threshold;
-});
 
 elements.settingsButton.addEventListener('click', () => {
   openSettingsModal();
@@ -195,84 +198,40 @@ function render() {
 }
 
 function renderTranscript() {
-  const transcriptState = state.app?.state ?? { session: null, currentSubtitle: null, history: [] };
-  const currentSubtitle = transcriptState.currentSubtitle;
-  const historyEntries = transcriptState.history ?? [];
-  state.selectedHistoryKeys = reconcileSelectedHistoryKeys(state.selectedHistoryKeys, historyEntries);
-  const selectedEntries = historyEntries.filter((entry) => state.selectedHistoryKeys.has(buildHistoryEntryKey(entry)));
-  const history = [...historyEntries].reverse();
+  const transcriptState = state.app?.state ?? {
+    session: null,
+    currentSubtitle: null,
+    transcript: [],
+    currentCueId: null,
+    transcriptStatus: 'unavailable',
+    transcriptMessage: '',
+  };
+  const transcriptEntries = transcriptState.transcript ?? transcriptState.history ?? [];
+  state.selectedHistoryKeys = reconcileSelectedHistoryKeys(state.selectedHistoryKeys, transcriptEntries);
+  const selectedEntries = transcriptEntries.filter((entry) => state.selectedHistoryKeys.has(buildHistoryEntryKey(entry)));
 
   elements.connectionPill.textContent =
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
   elements.connectionPill.className = `pill ${state.connection === 'live' ? 'pill-success' : 'pill-muted'}`;
   elements.fileName.textContent = transcriptState.session?.filePath ?? 'No file loaded';
-  elements.historyCount.textContent = `${history.length} ${history.length === 1 ? 'line' : 'lines'}`;
+  elements.historyCount.textContent = `${transcriptEntries.length} ${transcriptEntries.length === 1 ? 'line' : 'lines'}`;
+  elements.transcriptStatus.textContent = buildTranscriptStatusLabel(transcriptState);
+  elements.transcriptStatus.hidden = !elements.transcriptStatus.textContent;
   elements.historySelectionCount.textContent = `${selectedEntries.length} selected`;
   elements.historyMineSelected.disabled =
     selectedEntries.length === 0 || isAnyBatchHistoryActionPending('mine-selected');
 
-  const previousScrollHeight = elements.historyList.scrollHeight;
-  const previousScrollTop = elements.historyList.scrollTop;
-
-  elements.historyList.innerHTML = '';
-  history.forEach((entry, index) => {
-    const item = document.createElement('article');
-    item.className = 'history-item';
-    if (currentSubtitle && isSameSubtitle(currentSubtitle, entry)) {
-      item.classList.add('history-item-active');
-    }
-    const entryKey = buildHistoryEntryKey(entry);
-    if (state.selectedHistoryKeys.has(entryKey)) {
-      item.classList.add('history-item-selected');
-    }
-
-    const head = document.createElement('div');
-    head.className = 'history-item-head';
-
-    const meta = document.createElement('div');
-    meta.className = 'history-meta';
-    meta.textContent = formatRange(entry.startMs, entry.endMs);
-
-    const checkboxLabel = document.createElement('label');
-    checkboxLabel.className = 'history-checkbox';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = state.selectedHistoryKeys.has(entryKey);
-    checkbox.disabled = !isHistorySelectionToggleAllowed(historyEntries, state.selectedHistoryKeys, entry, checkbox.checked);
-    checkbox.setAttribute('aria-label', `Select subtitle line: ${entry.text}`);
-    checkbox.addEventListener('change', () => {
-      applyHistorySelectionToggle(historyEntries, entry, checkbox.checked);
-    });
-
-    const checkboxText = document.createElement('span');
-    checkboxText.textContent = 'Select';
-
-    checkboxLabel.append(checkbox, checkboxText);
-    head.append(meta, checkboxLabel);
-
-    const text = document.createElement('div');
-    text.className = 'history-text';
-    text.textContent = entry.text;
-
-    const actions = document.createElement('div');
-    actions.className = 'history-actions';
-
-    const goToButton = buildHistoryActionButton('Go to', 'go-to', entry);
-    const mineButton = buildHistoryActionButton('Mine', 'mine', entry);
-
-    actions.append(goToButton, mineButton);
-    item.append(head, text, actions);
-    item.dataset.index = String(index);
-    elements.historyList.append(item);
-  });
-
-  if (state.autoScroll) {
-    elements.historyList.scrollTop = 0;
-  } else {
-    const delta = elements.historyList.scrollHeight - previousScrollHeight;
-    elements.historyList.scrollTop = previousScrollTop + delta;
+  if (shouldRebuildTranscriptList(state.renderedTranscriptSignature, transcriptEntries)) {
+    rebuildTranscriptList(transcriptEntries);
+    state.renderedTranscriptSignature = buildTranscriptStructureSignature(transcriptEntries);
   }
+
+  updateTranscriptItemUi(transcriptEntries, transcriptState.currentCueId);
+
+  if (shouldAutoScrollToCue(state.lastAutoScrollCueId, transcriptState.currentCueId)) {
+    scrollTranscriptCueIntoView(transcriptState.currentCueId, state.lastAutoScrollCueId == null ? 'auto' : 'smooth');
+  }
+  state.lastAutoScrollCueId = transcriptState.currentCueId ?? null;
 }
 
 function renderSettingsUi() {
@@ -338,8 +297,8 @@ async function runHistoryAction(action, entry) {
 }
 
 async function runMineSelectedAction() {
-  const historyEntries = state.app?.state?.history ?? [];
-  const request = buildBatchHistoryMineRequest(historyEntries, state.selectedHistoryKeys);
+  const transcriptEntries = state.app?.state?.transcript ?? state.app?.state?.history ?? [];
+  const request = buildBatchHistoryMineRequest(transcriptEntries, state.selectedHistoryKeys);
   const pendingKey = buildBatchHistoryActionKey('mine-selected', request.entries);
   if (request.entries.length === 0 || state.pendingActions.has(pendingKey)) {
     return;
@@ -400,10 +359,6 @@ function isAnyBatchHistoryActionPending(action) {
 function applyHistorySelectionToggle(entries, entry, checked) {
   state.selectedHistoryKeys = toggleSelectedHistoryKeys(entries, state.selectedHistoryKeys, entry, checked);
   render();
-}
-
-function isSameSubtitle(a, b) {
-  return a.sessionId === b.sessionId && a.startMs === b.startMs && a.endMs === b.endMs && a.text === b.text;
 }
 
 function renderToasts() {
@@ -748,4 +703,109 @@ function formatTimestamp(ms) {
   }
 
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+}
+
+function buildTranscriptStatusLabel(transcriptState) {
+  const status = transcriptState.transcriptStatus ?? 'unavailable';
+  const message = transcriptState.transcriptMessage?.trim() ?? '';
+
+  if (status === 'ready') {
+    return message;
+  }
+
+  if (status === 'loading') {
+    return message || 'Loading active subtitle track…';
+  }
+
+  if (status === 'error') {
+    return message || 'The active subtitle track could not be loaded.';
+  }
+
+  return message || 'No active subtitle track is selected.';
+}
+
+function rebuildTranscriptList(entries) {
+  state.renderedCueElements = new Map();
+  elements.historyList.innerHTML = '';
+
+  entries.forEach((entry) => {
+    const item = document.createElement('article');
+    item.className = 'history-item';
+    item.dataset.entryKey = buildHistoryEntryKey(entry);
+    item.dataset.cueId = entry.id;
+
+    const head = document.createElement('div');
+    head.className = 'history-item-head';
+
+    const meta = document.createElement('div');
+    meta.className = 'history-meta';
+    meta.textContent = formatRange(entry.startMs, entry.endMs);
+
+    const checkboxLabel = document.createElement('label');
+    checkboxLabel.className = 'history-checkbox';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.setAttribute('aria-label', `Select subtitle line: ${entry.text}`);
+    checkbox.addEventListener('change', () => {
+      const transcriptEntries = state.app?.state?.transcript ?? state.app?.state?.history ?? [];
+      applyHistorySelectionToggle(transcriptEntries, entry, checkbox.checked);
+    });
+
+    const checkboxText = document.createElement('span');
+    checkboxText.textContent = 'Select';
+
+    checkboxLabel.append(checkbox, checkboxText);
+    head.append(meta, checkboxLabel);
+
+    const text = document.createElement('div');
+    text.className = 'history-text';
+    text.textContent = entry.text;
+
+    const actions = document.createElement('div');
+    actions.className = 'history-actions';
+
+    const goToButton = buildHistoryActionButton('Go to', 'go-to', entry);
+    const mineButton = buildHistoryActionButton('Mine', 'mine', entry);
+
+    actions.append(goToButton, mineButton);
+    item.append(head, text, actions);
+    elements.historyList.append(item);
+    state.renderedCueElements.set(entry.id, {
+      item,
+      checkbox,
+      goToButton,
+      mineButton,
+    });
+  });
+}
+
+function updateTranscriptItemUi(entries, currentCueId) {
+  entries.forEach((entry) => {
+    const controls = state.renderedCueElements.get(entry.id);
+    if (!controls) {
+      return;
+    }
+
+    const uiState = computeTranscriptItemUiState(entries, state.selectedHistoryKeys, state.pendingActions, currentCueId, entry);
+    controls.item.classList.toggle('history-item-active', uiState.active);
+    controls.item.classList.toggle('history-item-selected', uiState.selected);
+    controls.item.setAttribute('aria-current', uiState.active ? 'true' : 'false');
+    controls.checkbox.checked = uiState.selected;
+    controls.checkbox.disabled = uiState.checkboxDisabled;
+    controls.goToButton.disabled = uiState.goToDisabled;
+    controls.mineButton.disabled = uiState.mineDisabled;
+  });
+}
+
+function scrollTranscriptCueIntoView(cueId, behavior) {
+  const controls = cueId ? state.renderedCueElements.get(cueId) : null;
+  if (!controls) {
+    return;
+  }
+
+  controls.item.scrollIntoView({
+    block: 'center',
+    behavior,
+  });
 }

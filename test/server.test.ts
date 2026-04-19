@@ -143,6 +143,46 @@ test('POST /api/session reloads config from disk before a new playback session s
   assert.equal(harness.config.runtime.captureAudio, false);
 });
 
+test('POST /api/subtitle-track reloads the active transcript for the current session', async (t) => {
+  const harness = await createServerHarness(t);
+  await fetch(`${harness.baseUrl}/api/session`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'start',
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      durationMs: 60000,
+      playbackTimeMs: 0,
+    }),
+  });
+
+  const response = await fetch(`${harness.baseUrl}/api/subtitle-track`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      kind: 'external',
+      externalFilePath: 'C:\\Videos\\episode.srt',
+      trackId: 1,
+      ffIndex: null,
+      codec: 'subrip',
+      title: 'English',
+      lang: 'en',
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.equal(payload.state.transcriptStatus, 'error');
+});
+
 test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
   const harness = await createServerHarness(t);
 
@@ -827,7 +867,27 @@ function seedTranscriptHistory(transcriptStore: TranscriptStore, entries: Array<
   endMs: number;
   playbackTimeMs: number;
 }>): void {
-  for (const entry of entries) {
-    transcriptStore.pushSubtitle(entry);
+  const [first] = entries;
+  if (!first) {
+    return;
   }
+
+  transcriptStore.setTranscript(
+    {
+      sessionId: first.sessionId,
+      filePath: first.filePath,
+      kind: 'external',
+      externalFilePath: `${first.filePath}.srt`,
+      trackId: 1,
+      ffIndex: null,
+      codec: 'subrip',
+      title: 'English',
+      lang: 'en',
+    },
+    entries.map((entry, index) => ({
+      id: `${entry.sessionId}:${index}:${entry.startMs}`,
+      orderIndex: index,
+      ...entry,
+    })),
+  );
 }

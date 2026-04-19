@@ -54,6 +54,7 @@ local state = {
     session_id = nil,
     session_generation = 0,
     last_subtitle_key = nil,
+    last_subtitle_track_key = nil,
     capture = nil,
     last_capture_fetch = 0,
     helper_ready = false,
@@ -391,6 +392,63 @@ local function current_subtitle_payload()
     }
 end
 
+local function normalize_optional_string(value)
+    if value == nil then
+        return nil
+    end
+
+    local normalized = tostring(value)
+    if normalized == "" then
+        return nil
+    end
+
+    return normalized
+end
+
+local function current_subtitle_track_payload()
+    local payload = {
+        sessionId = state.session_id,
+        filePath = mp.get_property("path", "") or "",
+        kind = "none",
+        externalFilePath = nil,
+        trackId = nil,
+        ffIndex = nil,
+        codec = nil,
+        title = nil,
+        lang = nil,
+    }
+
+    local track_list = read_json_property("track-list")
+    if type(track_list) ~= "table" then
+        return payload
+    end
+
+    for _, track in ipairs(track_list) do
+        if type(track) == "table" and track.type == "sub" and track.selected then
+            local main_selection = tonumber(track["main-selection"])
+            if main_selection == nil or main_selection == 0 then
+                payload.trackId = track.id ~= nil and tonumber(track.id) or nil
+                payload.ffIndex = track["ff-index"] ~= nil and tonumber(track["ff-index"]) or nil
+                payload.codec = normalize_optional_string(track.codec)
+                payload.title = normalize_optional_string(track.title)
+                payload.lang = normalize_optional_string(track.lang)
+
+                local external_filename = normalize_optional_string(track["external-filename"])
+                if track.external and external_filename then
+                    payload.kind = "external"
+                    payload.externalFilePath = expand_mpv_path(external_filename)
+                else
+                    payload.kind = "embedded"
+                end
+
+                return payload
+            end
+        end
+    end
+
+    return payload
+end
+
 local function subtitle_key(payload)
     return table.concat({
         payload.sessionId or "",
@@ -398,6 +456,20 @@ local function subtitle_key(payload)
         tostring(payload.startMs),
         tostring(payload.endMs),
         payload.text or "",
+    }, "::")
+end
+
+local function subtitle_track_key(payload)
+    return table.concat({
+        payload.sessionId or "",
+        payload.filePath or "",
+        payload.kind or "",
+        payload.externalFilePath or "",
+        tostring(payload.trackId),
+        tostring(payload.ffIndex),
+        payload.codec or "",
+        payload.title or "",
+        payload.lang or "",
     }, "::")
 end
 
@@ -770,6 +842,7 @@ local function start_session()
 
     state.session_id = string.format("%d-%d", os.time(), math.random(100000, 999999))
     state.last_subtitle_key = nil
+    state.last_subtitle_track_key = nil
 
     ensure_helper_ready(function(ok, err)
         if generation ~= state.session_generation or not state.session_id then
@@ -790,6 +863,7 @@ local function start_session()
             filePath = path,
             durationMs = read_time_property_ms("duration/full"),
             playbackTimeMs = read_time_property_ms("playback-time/full"),
+            subtitleTrack = current_subtitle_track_payload(),
         })
 
         if request_err then
@@ -800,6 +874,8 @@ local function start_session()
             mp.osd_message("SentenceMiner: could not start helper session", 4)
             return
         end
+
+        state.last_subtitle_track_key = subtitle_track_key(current_subtitle_track_payload())
 
         if state.open_browser_when_ready then
             local _, open_err = open_helper_site()
@@ -830,6 +906,7 @@ local function stop_session()
 
     state.session_id = nil
     state.last_subtitle_key = nil
+    state.last_subtitle_track_key = nil
 end
 
 local function shutdown_helper()
@@ -877,6 +954,31 @@ local function sync_subtitle_state()
     end
 
     state.last_subtitle_key = key
+end
+
+local function sync_subtitle_track_state()
+    if not is_sentence_miner_enabled() then
+        return
+    end
+
+    if not state.session_id or not state.helper_ready then
+        return
+    end
+
+    local payload = current_subtitle_track_payload()
+    local key = subtitle_track_key(payload)
+    if key == state.last_subtitle_track_key then
+        return
+    end
+
+    local _, err = helper_request("POST", "/api/subtitle-track", payload)
+    if err then
+        state.helper_ready = false
+        msg.warn("could not post subtitle track update: " .. tostring(err))
+        return
+    end
+
+    state.last_subtitle_track_key = key
 end
 
 local function sync_player_command()
@@ -1098,6 +1200,7 @@ mp.register_event("shutdown", function()
     shutdown_helper()
 end)
 mp.add_periodic_timer(0.2, function()
+    sync_subtitle_track_state()
     sync_subtitle_state()
     sync_player_command()
 end)

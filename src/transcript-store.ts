@@ -1,18 +1,24 @@
-import type { SessionPayload, SubtitleEventPayload, TranscriptState } from './types.ts';
-import { payloadKey } from './utils.ts';
+import type {
+  SessionPayload,
+  SubtitleEventPayload,
+  SubtitleTrackPayload,
+  TranscriptCue,
+  TranscriptState,
+  TranscriptStatus,
+} from './types.ts';
 
 export class TranscriptStore {
   #state: TranscriptState = {
     session: null,
     currentSubtitle: null,
+    transcript: [],
     history: [],
+    currentCueId: null,
+    transcriptStatus: 'unavailable',
+    transcriptMessage: 'No active subtitle track is selected.',
   };
 
-  readonly #historyLimit: number;
-
-  constructor(historyLimit: number) {
-    this.#historyLimit = Math.max(1, historyLimit);
-  }
+  constructor(_historyLimit: number) {}
 
   startSession(payload: SessionPayload): TranscriptState {
     this.#state = {
@@ -21,10 +27,19 @@ export class TranscriptStore {
         filePath: payload.filePath ?? this.#state.session?.filePath ?? '',
         durationMs: payload.durationMs ?? null,
         playbackTimeMs: payload.playbackTimeMs ?? null,
+        subtitleTrack: payload.subtitleTrack ?? null,
       },
       currentSubtitle: null,
+      transcript: [],
       history: [],
+      currentCueId: null,
+      transcriptStatus: 'loading',
+      transcriptMessage: 'Loading active subtitle track…',
     };
+
+    if (!payload.subtitleTrack || payload.subtitleTrack.kind === 'none') {
+      this.setTranscriptUnavailable(payload.subtitleTrack ?? buildMissingTrackPayload(payload), 'No active subtitle track is selected.');
+    }
 
     return this.getState();
   }
@@ -37,7 +52,11 @@ export class TranscriptStore {
     this.#state = {
       session: null,
       currentSubtitle: null,
+      transcript: [],
       history: [],
+      currentCueId: null,
+      transcriptStatus: 'unavailable',
+      transcriptMessage: 'No active subtitle track is selected.',
     };
 
     return this.getState();
@@ -52,7 +71,57 @@ export class TranscriptStore {
       ...this.#state.session,
       playbackTimeMs,
     };
+    this.#state.currentCueId = matchTranscriptCueId(this.#state.transcript, this.#state.currentSubtitle, playbackTimeMs);
     return this.getState();
+  }
+
+  setSubtitleTrack(track: SubtitleTrackPayload): TranscriptState {
+    if (!this.#state.session || this.#state.session.sessionId !== track.sessionId) {
+      return this.getState();
+    }
+
+    this.#state.session = {
+      ...this.#state.session,
+      filePath: track.filePath,
+      subtitleTrack: { ...track },
+    };
+    this.#state.transcript = [];
+    this.#state.history = [];
+    this.#state.currentCueId = null;
+    this.#state.transcriptStatus = 'loading';
+    this.#state.transcriptMessage =
+      track.kind === 'none' ? 'No active subtitle track is selected.' : 'Loading active subtitle track…';
+    return this.getState();
+  }
+
+  setTranscript(track: SubtitleTrackPayload, transcript: TranscriptCue[]): TranscriptState {
+    if (!this.#state.session || this.#state.session.sessionId !== track.sessionId) {
+      return this.getState();
+    }
+
+    this.#state.session = {
+      ...this.#state.session,
+      filePath: track.filePath,
+      subtitleTrack: { ...track },
+    };
+    this.#state.transcript = transcript.map((cue) => ({ ...cue }));
+    this.#state.history = this.#state.transcript.map((cue) => ({ ...cue }));
+    this.#state.transcriptStatus = 'ready';
+    this.#state.transcriptMessage = null;
+    this.#state.currentCueId = matchTranscriptCueId(
+      this.#state.transcript,
+      this.#state.currentSubtitle,
+      this.#state.session.playbackTimeMs,
+    );
+    return this.getState();
+  }
+
+  setTranscriptUnavailable(track: SubtitleTrackPayload, message: string): TranscriptState {
+    return this.#setTranscriptNotReady('unavailable', track, message);
+  }
+
+  setTranscriptError(track: SubtitleTrackPayload, message: string): TranscriptState {
+    return this.#setTranscriptNotReady('error', track, message);
   }
 
   pushSubtitle(payload: SubtitleEventPayload): TranscriptState {
@@ -61,6 +130,7 @@ export class TranscriptStore {
         action: 'start',
         sessionId: payload.sessionId,
         filePath: payload.filePath,
+        playbackTimeMs: payload.playbackTimeMs,
       });
     }
 
@@ -72,36 +142,105 @@ export class TranscriptStore {
         }
       : null;
 
-    if (!payload.text.trim()) {
-      return this.getState();
-    }
-
-    const currentKey = this.#state.currentSubtitle ? payloadKey(this.#state.currentSubtitle) : null;
-    const nextKey = payloadKey(payload);
-    this.#state.currentSubtitle = payload;
-
-    if (currentKey === nextKey) {
-      return this.getState();
-    }
-
-    const existingIndex = this.#state.history.findIndex((entry) => payloadKey(entry) === nextKey);
-    if (existingIndex === -1) {
-      this.#state.history.push(payload);
-      if (this.#state.history.length > this.#historyLimit) {
-        this.#state.history = this.#state.history.slice(-this.#historyLimit);
-      }
-    } else {
-      this.#state.history[existingIndex] = payload;
-    }
+    this.#state.currentSubtitle = payload.text.trim()
+      ? {
+          ...payload,
+        }
+      : null;
+    this.#state.currentCueId = matchTranscriptCueId(this.#state.transcript, payload, payload.playbackTimeMs);
 
     return this.getState();
   }
 
   getState(): TranscriptState {
     return {
-      session: this.#state.session ? { ...this.#state.session } : null,
+      session: this.#state.session
+        ? {
+            ...this.#state.session,
+            subtitleTrack: this.#state.session.subtitleTrack ? { ...this.#state.session.subtitleTrack } : null,
+          }
+        : null,
       currentSubtitle: this.#state.currentSubtitle ? { ...this.#state.currentSubtitle } : null,
-      history: this.#state.history.map((entry) => ({ ...entry })),
+      transcript: this.#state.transcript.map((cue) => ({ ...cue })),
+      history: this.#state.history.map((cue) => ({ ...cue })),
+      currentCueId: this.#state.currentCueId,
+      transcriptStatus: this.#state.transcriptStatus,
+      transcriptMessage: this.#state.transcriptMessage,
     };
   }
+
+  #setTranscriptNotReady(status: Exclude<TranscriptStatus, 'ready' | 'loading'>, track: SubtitleTrackPayload, message: string) {
+    if (!this.#state.session || this.#state.session.sessionId !== track.sessionId) {
+      return this.getState();
+    }
+
+    this.#state.session = {
+      ...this.#state.session,
+      filePath: track.filePath,
+      subtitleTrack: { ...track },
+    };
+    this.#state.transcript = [];
+    this.#state.history = [];
+    this.#state.currentCueId = null;
+    this.#state.transcriptStatus = status;
+    this.#state.transcriptMessage = message;
+    return this.getState();
+  }
+}
+
+function buildMissingTrackPayload(payload: SessionPayload): SubtitleTrackPayload {
+  return {
+    sessionId: payload.sessionId,
+    filePath: payload.filePath ?? '',
+    kind: 'none',
+    externalFilePath: null,
+    trackId: null,
+    ffIndex: null,
+    codec: null,
+    title: null,
+    lang: null,
+  };
+}
+
+function matchTranscriptCueId(
+  transcript: TranscriptCue[],
+  subtitle: SubtitleEventPayload | null,
+  playbackTimeMs: number | null,
+): string | null {
+  if (transcript.length === 0) {
+    return null;
+  }
+
+  const subtitleStart = subtitle?.startMs;
+  const subtitleEnd = subtitle?.endMs;
+  const subtitleText = subtitle?.text.trim() ?? '';
+  const pointInTime = subtitle?.playbackTimeMs ?? playbackTimeMs;
+
+  const candidates = transcript.filter((cue) => {
+    if (subtitleStart != null && subtitleEnd != null) {
+      return cue.startMs <= subtitleEnd && cue.endMs >= subtitleStart;
+    }
+
+    if (pointInTime != null) {
+      return cue.startMs <= pointInTime && cue.endMs >= pointInTime;
+    }
+
+    return false;
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  if (candidates.length === 1 || !subtitleText) {
+    return candidates[0].id;
+  }
+
+  const normalizedSubtitle = normalizeComparableText(subtitleText);
+  const textMatch = candidates.find((cue) => normalizeComparableText(cue.text) === normalizedSubtitle);
+  return textMatch?.id ?? candidates[0].id;
+}
+
+function normalizeComparableText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }

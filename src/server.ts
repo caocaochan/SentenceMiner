@@ -23,6 +23,7 @@ import {
 } from './config.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { PlayerCommandStore } from './player-command-store.ts';
+import { loadSubtitleTranscript } from './subtitle-transcript.ts';
 import { TranscriptStore } from './transcript-store.ts';
 import type {
   AppConfig,
@@ -35,6 +36,7 @@ import type {
   SettingsOptions,
   StatePayload,
   SubtitleEventPayload,
+  SubtitleTrackPayload,
 } from './types.ts';
 import { payloadKey } from './utils.ts';
 import { WebSocketHub } from './ws.ts';
@@ -235,17 +237,21 @@ export async function routeRequest(
   }
 
   if (method === 'POST' && url.pathname === '/api/session') {
-    const payload = await readJsonBody<SessionPayload>(request);
+    const payload = parseSessionPayload(await readJsonBody<unknown>(request));
     if (payload.action === 'start') {
       await refreshConfigFromDisk(context);
     }
     context.playerCommandStore.clearAll();
     if (payload.action === 'start') {
       context.transcriptStore.startSession(payload);
+      broadcastState(context.config, context.transcriptStore, context.sockets);
+      if (payload.subtitleTrack) {
+        await syncTranscriptTrack(context, payload.subtitleTrack);
+      }
     } else {
       context.transcriptStore.stopSession(payload.sessionId);
+      broadcastState(context.config, context.transcriptStore, context.sockets);
     }
-    broadcastState(context.config, context.transcriptStore, context.sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Session updated.',
@@ -261,6 +267,20 @@ export async function routeRequest(
     respondJson(response, 200, {
       success: true,
       message: 'Subtitle event recorded.',
+      state: context.transcriptStore.getState(),
+    });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/subtitle-track') {
+    const payload = parseSubtitleTrackPayload(await readJsonBody<unknown>(request), 'subtitle track payload');
+    assertActiveSession(context.transcriptStore, payload.sessionId);
+    context.transcriptStore.setSubtitleTrack(payload);
+    broadcastState(context.config, context.transcriptStore, context.sockets);
+    await syncTranscriptTrack(context, payload);
+    respondJson(response, 200, {
+      success: true,
+      message: 'Subtitle track updated.',
       state: context.transcriptStore.getState(),
     });
     return;
@@ -331,6 +351,11 @@ export async function routeRequest(
 
   if (method === 'GET' && url.pathname === '/history-selection.js') {
     await serveStatic(response, 'history-selection.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/transcript-render.js') {
+    await serveStatic(response, 'transcript-render.js', 'text/javascript; charset=utf-8');
     return;
   }
 
@@ -418,16 +443,16 @@ function assertActiveHistoryMineRequest(transcriptStore: TranscriptStore, payloa
       throw new HttpError(400, 'Select at least one subtitle line to mine.');
     }
 
-    const history = transcriptStore.getState().history;
-    const historyIndexesByKey = new Map(history.map((entry, index) => [payloadKey(entry), index]));
+    const transcript = transcriptStore.getState().transcript;
+    const transcriptIndexesByKey = new Map(transcript.map((entry, index) => [payloadKey(entry), index]));
     const selectedIndexes: number[] = [];
 
     for (const entry of payload.entries) {
       assertActiveSession(transcriptStore, entry.sessionId);
 
-      const index = historyIndexesByKey.get(payloadKey(entry));
+      const index = transcriptIndexesByKey.get(payloadKey(entry));
       if (index == null) {
-        throw new HttpError(409, 'The requested subtitle selection is no longer available in history.');
+        throw new HttpError(409, 'The requested subtitle selection is no longer available in the active transcript.');
       }
 
       selectedIndexes.push(index);
@@ -448,6 +473,19 @@ function assertActiveHistoryMineRequest(transcriptStore: TranscriptStore, payloa
   }
 
   assertActiveSession(transcriptStore, payload.sessionId);
+}
+
+async function syncTranscriptTrack(context: ServerContext, track: SubtitleTrackPayload): Promise<void> {
+  const result = await loadSubtitleTranscript(context.config, track);
+  if (result.status === 'ready') {
+    context.transcriptStore.setTranscript(track, result.transcript);
+  } else if (result.status === 'unavailable') {
+    context.transcriptStore.setTranscriptUnavailable(track, result.message ?? 'The active subtitle track is unavailable.');
+  } else {
+    context.transcriptStore.setTranscriptError(track, result.message ?? 'The active subtitle track could not be loaded.');
+  }
+
+  broadcastState(context.config, context.transcriptStore, context.sockets);
 }
 
 class HttpError extends Error {
@@ -647,6 +685,43 @@ function parseHistoryMineRequestPayload(payload: unknown): HistoryMineRequest {
   return parseSubtitleEventPayload(payload, 'history mine payload');
 }
 
+function parseSessionPayload(payload: unknown): SessionPayload {
+  const root = getRecord(payload, 'session payload');
+  const action = getString(root.action, 'session payload.action', { allowEmpty: false });
+  if (action !== 'start' && action !== 'stop') {
+    throw new HttpError(400, 'session payload.action must be "start" or "stop".');
+  }
+
+  return {
+    action,
+    sessionId: getString(root.sessionId, 'session payload.sessionId', { allowEmpty: false }),
+    filePath: getOptionalString(root.filePath, 'session payload.filePath'),
+    durationMs: getNullableInteger(root.durationMs, 'session payload.durationMs'),
+    playbackTimeMs: getNullableInteger(root.playbackTimeMs, 'session payload.playbackTimeMs'),
+    subtitleTrack: root.subtitleTrack == null ? null : parseSubtitleTrackPayload(root.subtitleTrack, 'session payload.subtitleTrack'),
+  };
+}
+
+function parseSubtitleTrackPayload(value: unknown, fieldName: string): SubtitleTrackPayload {
+  const root = getRecord(value, fieldName);
+  const kind = getString(root.kind, `${fieldName}.kind`, { allowEmpty: false });
+  if (kind !== 'external' && kind !== 'embedded' && kind !== 'none') {
+    throw new HttpError(400, `${fieldName}.kind must be "external", "embedded", or "none".`);
+  }
+
+  return {
+    sessionId: getString(root.sessionId, `${fieldName}.sessionId`, { allowEmpty: false }),
+    filePath: getString(root.filePath, `${fieldName}.filePath`, { allowEmpty: false }),
+    kind,
+    externalFilePath: getOptionalString(root.externalFilePath, `${fieldName}.externalFilePath`),
+    trackId: getNullableInteger(root.trackId, `${fieldName}.trackId`),
+    ffIndex: getNullableInteger(root.ffIndex, `${fieldName}.ffIndex`),
+    codec: getOptionalString(root.codec, `${fieldName}.codec`),
+    title: getOptionalString(root.title, `${fieldName}.title`),
+    lang: getOptionalString(root.lang, `${fieldName}.lang`),
+  };
+}
+
 function parseSubtitleEventPayload(value: unknown, fieldName: string): SubtitleEventPayload {
   const root = getRecord(value, fieldName);
 
@@ -671,6 +746,14 @@ function getString(value: unknown, fieldName: string, options: { allowEmpty?: bo
   }
 
   return normalized;
+}
+
+function getOptionalString(value: unknown, fieldName: string): string | null {
+  if (value == null) {
+    return null;
+  }
+
+  return getString(value, fieldName);
 }
 
 function getInteger(value: unknown, fieldName: string): number {

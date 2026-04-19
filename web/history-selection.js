@@ -1,4 +1,8 @@
 export function buildHistoryEntryKey(entry) {
+  if (entry && typeof entry === 'object' && 'id' in entry && typeof entry.id === 'string' && entry.id) {
+    return entry.id;
+  }
+
   return [entry.sessionId, entry.filePath, entry.startMs ?? 'nil', entry.endMs ?? 'nil', entry.text].join('::');
 }
 

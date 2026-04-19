@@ -3,84 +3,139 @@ import assert from 'node:assert/strict';
 
 import { TranscriptStore } from '../src/transcript-store.ts';
 
-test('TranscriptStore keeps current subtitle and bounded history', () => {
-  const store = new TranscriptStore(2);
-  store.startSession({ action: 'start', sessionId: 's1', filePath: 'episode.mkv' });
+function buildTrack(sessionId = 's1', filePath = 'episode.mkv') {
+  return {
+    sessionId,
+    filePath,
+    kind: 'external' as const,
+    externalFilePath: `${filePath}.srt`,
+    trackId: 1,
+    ffIndex: null,
+    codec: 'subrip',
+    title: 'English',
+    lang: 'en',
+  };
+}
 
-  store.pushSubtitle({
+function buildCue(text: string, startMs: number, sessionId = 's1', filePath = 'episode.mkv') {
+  return {
+    id: `${sessionId}:${startMs}`,
+    orderIndex: startMs / 100,
+    sessionId,
+    filePath,
+    text,
+    startMs,
+    endMs: startMs + 80,
+    playbackTimeMs: startMs,
+  };
+}
+
+test('TranscriptStore replaces the active transcript and keeps chronological order', () => {
+  const store = new TranscriptStore(10);
+  store.startSession({
+    action: 'start',
     sessionId: 's1',
     filePath: 'episode.mkv',
-    text: 'one',
-    startMs: 100,
-    endMs: 200,
-    playbackTimeMs: 150,
+    subtitleTrack: buildTrack(),
   });
+
+  store.setTranscript(buildTrack(), [buildCue('one', 100), buildCue('two', 200), buildCue('three', 300)]);
+
+  const state = store.getState();
+  assert.deepEqual(
+    state.transcript.map((entry) => entry.text),
+    ['one', 'two', 'three'],
+  );
+  assert.equal(state.transcriptStatus, 'ready');
+  assert.equal(state.history.length, 3);
+});
+
+test('TranscriptStore matches the current cue from live subtitle timings', () => {
+  const store = new TranscriptStore(10);
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+  store.setTranscript(buildTrack(), [buildCue('one', 100), buildCue('two', 200), buildCue('three', 300)]);
+
   store.pushSubtitle({
     sessionId: 's1',
     filePath: 'episode.mkv',
     text: 'two',
-    startMs: 300,
-    endMs: 400,
-    playbackTimeMs: 350,
-  });
-  store.pushSubtitle({
-    sessionId: 's1',
-    filePath: 'episode.mkv',
-    text: 'three',
-    startMs: 500,
-    endMs: 600,
-    playbackTimeMs: 550,
+    startMs: 200,
+    endMs: 280,
+    playbackTimeMs: 240,
   });
 
   const state = store.getState();
-  assert.equal(state.currentSubtitle?.text, 'three');
-  assert.deepEqual(
-    state.history.map((entry) => entry.text),
-    ['two', 'three'],
-  );
+  assert.equal(state.currentSubtitle?.text, 'two');
+  assert.equal(state.currentCueId, 's1:200');
 });
 
-test('TranscriptStore keeps the last non-empty subtitle on empty text without dropping history', () => {
+test('TranscriptStore clears the current cue when playback leaves subtitles', () => {
   const store = new TranscriptStore(10);
-  store.startSession({ action: 'start', sessionId: 's1', filePath: 'episode.mkv' });
-  store.pushSubtitle({
+  store.startSession({
+    action: 'start',
     sessionId: 's1',
     filePath: 'episode.mkv',
-    text: 'hello',
-    startMs: 100,
-    endMs: 200,
-    playbackTimeMs: 150,
+    subtitleTrack: buildTrack(),
   });
+  store.setTranscript(buildTrack(), [buildCue('one', 100), buildCue('two', 200)]);
+
   store.pushSubtitle({
     sessionId: 's1',
     filePath: 'episode.mkv',
     text: '',
     startMs: null,
     endMs: null,
-    playbackTimeMs: 210,
+    playbackTimeMs: 500,
   });
-
-  const state = store.getState();
-  assert.equal(state.currentSubtitle?.text, 'hello');
-  assert.equal(state.history.length, 1);
-});
-
-test('TranscriptStore session reset clears current subtitle and history', () => {
-  const store = new TranscriptStore(10);
-  store.startSession({ action: 'start', sessionId: 's1', filePath: 'episode-1.mkv' });
-  store.pushSubtitle({
-    sessionId: 's1',
-    filePath: 'episode-1.mkv',
-    text: 'hello',
-    startMs: 100,
-    endMs: 200,
-    playbackTimeMs: 150,
-  });
-
-  store.startSession({ action: 'start', sessionId: 's2', filePath: 'episode-2.mkv' });
 
   const state = store.getState();
   assert.equal(state.currentSubtitle, null);
-  assert.deepEqual(state.history, []);
+  assert.equal(state.currentCueId, null);
+});
+
+test('TranscriptStore stores unavailable fallback state when transcript loading fails', () => {
+  const store = new TranscriptStore(10);
+  const track = buildTrack();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: track,
+  });
+
+  store.setTranscriptUnavailable(track, 'No active subtitle track is selected.');
+
+  const state = store.getState();
+  assert.equal(state.transcriptStatus, 'unavailable');
+  assert.equal(state.transcriptMessage, 'No active subtitle track is selected.');
+  assert.deepEqual(state.transcript, []);
+});
+
+test('TranscriptStore session reset clears transcript state', () => {
+  const store = new TranscriptStore(10);
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode-1.mkv',
+    subtitleTrack: buildTrack('s1', 'episode-1.mkv'),
+  });
+  store.setTranscript(buildTrack('s1', 'episode-1.mkv'), [buildCue('hello', 100, 's1', 'episode-1.mkv')]);
+
+  store.startSession({
+    action: 'start',
+    sessionId: 's2',
+    filePath: 'episode-2.mkv',
+    subtitleTrack: buildTrack('s2', 'episode-2.mkv'),
+  });
+
+  const state = store.getState();
+  assert.equal(state.currentSubtitle, null);
+  assert.deepEqual(state.transcript, []);
   assert.equal(state.session?.sessionId, 's2');
+  assert.equal(state.transcriptStatus, 'loading');
 });
