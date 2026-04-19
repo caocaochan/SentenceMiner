@@ -29,6 +29,7 @@ const state = {
   settingsRequestId: 0,
   renderedTranscriptSignature: '',
   renderedCueElements: new Map(),
+  autoScrollFrameId: null,
 };
 const STATE_POLL_INTERVAL_MS = 2000;
 let reconnectTimerId = null;
@@ -233,6 +234,7 @@ function renderTranscript() {
   }
 
   updateTranscriptItemUi(transcriptEntries, transcriptState.currentCueId);
+  syncCurrentCueScroll(transcriptState.currentCueId);
 }
 
 function renderSettingsUi() {
@@ -614,6 +616,48 @@ function applyAppearanceSettings() {
 function syncStickyLayout() {
   const heroHeight = elements.hero instanceof HTMLElement ? Math.ceil(elements.hero.offsetHeight) : 0;
   document.documentElement.style.setProperty('--hero-sticky-height', `${heroHeight}px`);
+}
+
+function syncCurrentCueScroll(currentCueId) {
+  if (!currentCueId) {
+    return;
+  }
+
+  const controls = state.renderedCueElements.get(currentCueId);
+  if (!controls?.item) {
+    return;
+  }
+
+  if (state.autoScrollFrameId !== null) {
+    window.cancelAnimationFrame(state.autoScrollFrameId);
+  }
+
+  state.autoScrollFrameId = window.requestAnimationFrame(() => {
+    state.autoScrollFrameId = null;
+    centerTranscriptItemInViewport(controls.item);
+  });
+}
+
+function centerTranscriptItemInViewport(item) {
+  const rect = item.getBoundingClientRect();
+  const itemCenterY = rect.top + (rect.height / 2);
+  const viewportCenterY = window.innerHeight / 2;
+  const scrollDelta = itemCenterY - viewportCenterY;
+
+  if (Math.abs(scrollDelta) < 2) {
+    return;
+  }
+
+  const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const targetScrollTop = clamp(window.scrollY + scrollDelta, 0, maxScrollTop);
+  window.scrollTo({
+    top: targetScrollTop,
+    behavior: 'smooth',
+  });
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function parseRequiredInteger(input, label) {
