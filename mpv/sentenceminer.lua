@@ -127,6 +127,23 @@ local function expand_mpv_path(path)
     return path
 end
 
+local function get_script_dir()
+    local script_dir = expand_mpv_path(mp.get_script_directory())
+    if script_dir and script_dir ~= "" then
+        return script_dir
+    end
+
+    if type(debug) == "table" and type(debug.getinfo) == "function" then
+        local info = debug.getinfo(1, "S")
+        local source = info and info.source or nil
+        if type(source) == "string" and source:sub(1, 1) == "@" then
+            return parent_dir(expand_mpv_path(source:sub(2)))
+        end
+    end
+
+    return nil
+end
+
 local function stem(path)
     local name = basename(path)
     return name:gsub("%.[^.]+$", "")
@@ -339,7 +356,7 @@ end
 local function resolve_helper_exe_path()
     if opts.helper_exe_path ~= nil and opts.helper_exe_path ~= "" then
         local configured = opts.helper_exe_path
-        local script_dir = expand_mpv_path(mp.get_script_directory())
+        local script_dir = get_script_dir()
         local candidates = {}
 
         local function add_candidate(path)
@@ -382,7 +399,7 @@ local function resolve_helper_exe_path()
         )
     end
 
-    local script_dir = expand_mpv_path(mp.get_script_directory())
+    local script_dir = get_script_dir()
     local candidates = {}
     if script_dir and script_dir ~= "" then
         table.insert(candidates, utils.join_path(utils.join_path(script_dir, "sentenceminer-helper"), "SentenceMinerHelper.exe"))
@@ -413,7 +430,7 @@ local function spawn_helper_process()
         return nil, resolve_err
     end
 
-    local working_dir = parent_dir(helper_exe_path) or expand_mpv_path(mp.get_script_directory()) or "."
+    local working_dir = parent_dir(helper_exe_path) or get_script_dir() or "."
     local result = utils.subprocess({
         args = {
             "powershell",
