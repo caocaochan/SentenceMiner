@@ -36,6 +36,7 @@ import type {
   StatePayload,
   SubtitleEventPayload,
 } from './types.ts';
+import { payloadKey } from './utils.ts';
 import { WebSocketHub } from './ws.ts';
 
 const APP_ROOT = resolveAppRoot();
@@ -409,8 +410,31 @@ function assertActiveHistoryMineRequest(transcriptStore: TranscriptStore, payloa
       throw new HttpError(400, 'Select at least one subtitle line to mine.');
     }
 
+    const history = transcriptStore.getState().history;
+    const historyIndexesByKey = new Map(history.map((entry, index) => [payloadKey(entry), index]));
+    const selectedIndexes: number[] = [];
+
     for (const entry of payload.entries) {
       assertActiveSession(transcriptStore, entry.sessionId);
+
+      const index = historyIndexesByKey.get(payloadKey(entry));
+      if (index == null) {
+        throw new HttpError(409, 'The requested subtitle selection is no longer available in history.');
+      }
+
+      selectedIndexes.push(index);
+    }
+
+    const uniqueSortedIndexes = [...new Set(selectedIndexes)].sort((a, b) => a - b);
+    const isConsecutive = uniqueSortedIndexes.every((index, position) => {
+      if (position === 0) {
+        return true;
+      }
+
+      return index === uniqueSortedIndexes[position - 1] + 1;
+    });
+    if (!isConsecutive || uniqueSortedIndexes.length !== payload.entries.length) {
+      throw new HttpError(400, 'Selected subtitle lines must be consecutive.');
     }
     return;
   }

@@ -1,7 +1,9 @@
 import {
   buildBatchHistoryMineRequest,
   buildHistoryEntryKey,
+  isHistorySelectionToggleAllowed,
   reconcileSelectedHistoryKeys,
+  toggleSelectedHistoryKeys,
 } from './history-selection.js';
 
 const state = {
@@ -231,9 +233,10 @@ function renderTranscript() {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = state.selectedHistoryKeys.has(entryKey);
+    checkbox.disabled = !isHistorySelectionToggleAllowed(historyEntries, state.selectedHistoryKeys, entry, checkbox.checked);
     checkbox.setAttribute('aria-label', `Select subtitle line: ${entry.text}`);
     checkbox.addEventListener('change', () => {
-      toggleHistorySelection(entry, checkbox.checked);
+      applyHistorySelectionToggle(historyEntries, entry, checkbox.checked);
     });
 
     const checkboxText = document.createElement('span');
@@ -388,14 +391,8 @@ function isAnyBatchHistoryActionPending(action) {
   return [...state.pendingActions].some((pendingKey) => pendingKey.startsWith(prefix));
 }
 
-function toggleHistorySelection(entry, checked) {
-  const entryKey = buildHistoryEntryKey(entry);
-  if (checked) {
-    state.selectedHistoryKeys.add(entryKey);
-  } else {
-    state.selectedHistoryKeys.delete(entryKey);
-  }
-
+function applyHistorySelectionToggle(entries, entry, checked) {
+  state.selectedHistoryKeys = toggleSelectedHistoryKeys(entries, state.selectedHistoryKeys, entry, checked);
   render();
 }
 

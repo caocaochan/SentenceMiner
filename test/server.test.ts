@@ -159,6 +159,24 @@ test('POST /api/history/mine accepts batch selections and updates Anki once', as
   harness.config.runtime.captureImage = false;
   harness.ankiNotes[0].fields.Sentence.value = 'earlier later';
   harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'earlier',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'later',
+      startMs: 2000,
+      endMs: 2400,
+      playbackTimeMs: 2200,
+    },
+  ]);
 
   const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
     method: 'POST',
@@ -204,6 +222,24 @@ test('POST /api/history/mine updates the sentence to the combined batch text whe
   harness.config.runtime.captureImage = false;
   harness.ankiNotes[0].fields.Sentence.value = 'earlier';
   harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'earlier',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'later',
+      startMs: 2000,
+      endMs: 2400,
+      playbackTimeMs: 2200,
+    },
+  ]);
 
   const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
     method: 'POST',
@@ -249,6 +285,24 @@ test('POST /api/history/mine returns 404 when no selected subtitle sentence matc
   harness.config.runtime.captureImage = false;
   harness.ankiNotes[0].fields.Sentence.value = 'something else';
   harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'earlier',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'later',
+      startMs: 2000,
+      endMs: 2400,
+      playbackTimeMs: 2200,
+    },
+  ]);
 
   const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
     method: 'POST',
@@ -293,6 +347,24 @@ test('POST /api/history/mine only checks the newest note and rejects older match
   harness.ankiNotes[0].fields.Sentence.value = 'earlier later';
   harness.ankiNotes.push(createAnkiNote(30, 'something else'));
   harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'earlier',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'later',
+      startMs: 2000,
+      endMs: 2400,
+      playbackTimeMs: 2200,
+    },
+  ]);
 
   const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
     method: 'POST',
@@ -406,6 +478,71 @@ test('POST /api/history/mine rejects empty batch payloads', async (t) => {
   assert.equal(response.status, 400);
   assert.equal(payload.success, false);
   assert.match(payload.message, /Select at least one subtitle line/);
+});
+
+test('POST /api/history/mine rejects non-consecutive batch payloads', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'first',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'second',
+      startMs: 2000,
+      endMs: 2400,
+      playbackTimeMs: 2200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'third',
+      startMs: 3000,
+      endMs: 3400,
+      playbackTimeMs: 3200,
+    },
+  ]);
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      entries: [
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'first',
+          startMs: 1000,
+          endMs: 1400,
+          playbackTimeMs: 1200,
+        },
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'third',
+          startMs: 3000,
+          endMs: 3400,
+          playbackTimeMs: 3200,
+        },
+      ],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.success, false);
+  assert.match(payload.message, /must be consecutive/);
 });
 
 test('POST /api/mine returns 400 when the configured deck does not exist in Anki', async (t) => {
@@ -676,4 +813,17 @@ async function readRequestBody(request: http.IncomingMessage): Promise<string> {
   }
 
   return Buffer.concat(chunks).toString('utf8');
+}
+
+function seedTranscriptHistory(transcriptStore: TranscriptStore, entries: Array<{
+  sessionId: string;
+  filePath: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  playbackTimeMs: number;
+}>): void {
+  for (const entry of entries) {
+    transcriptStore.pushSubtitle(entry);
+  }
 }
