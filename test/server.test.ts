@@ -157,6 +157,7 @@ test('POST /api/history/mine accepts batch selections and updates Anki once', as
   const harness = await createServerHarness(t);
   harness.config.runtime.captureAudio = false;
   harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'earlier later';
   harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
 
   const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
@@ -189,6 +190,7 @@ test('POST /api/history/mine accepts batch selections and updates Anki once', as
 
   assert.equal(response.status, 200);
   assert.equal(payload.success, true);
+  assert.equal(payload.message, 'Anki note updated successfully.');
 
   const updateRequest = harness.ankiRequests.find((request) => request.action === 'updateNoteFields');
   assert.ok(updateRequest);
@@ -196,10 +198,174 @@ test('POST /api/history/mine accepts batch selections and updates Anki once', as
   assert.equal(updateRequest?.params.note.fields.Time, '00:01.000 - 00:02.400');
 });
 
+test('POST /api/history/mine updates the sentence to the combined batch text when one selected subtitle line matches', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'earlier';
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      entries: [
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'later',
+          startMs: 2000,
+          endMs: 2400,
+          playbackTimeMs: 2200,
+        },
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'earlier',
+          startMs: 1000,
+          endMs: 1400,
+          playbackTimeMs: 1200,
+        },
+      ],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.equal(payload.message, 'Anki note updated successfully.');
+
+  const updateRequest = harness.ankiRequests.find((request) => request.action === 'updateNoteFields');
+  assert.ok(updateRequest);
+  assert.equal(updateRequest?.params.note.fields.Sentence, 'earlier later');
+  assert.equal(updateRequest?.params.note.fields.Time, '00:01.000 - 00:02.400');
+});
+
+test('POST /api/history/mine returns 404 when no selected subtitle sentence matches', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'something else';
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      entries: [
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'later',
+          startMs: 2000,
+          endMs: 2400,
+          playbackTimeMs: 2200,
+        },
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'earlier',
+          startMs: 1000,
+          endMs: 1400,
+          playbackTimeMs: 1200,
+        },
+      ],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 404);
+  assert.equal(payload.success, false);
+  assert.equal(payload.message, 'No matching card exists.');
+
+  const addRequest = harness.ankiRequests.find((request) => request.action === 'addNote');
+  assert.equal(addRequest, undefined);
+});
+
+test('POST /api/history/mine only checks the newest note and rejects older matching duplicates', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'earlier later';
+  harness.ankiNotes.push(createAnkiNote(30, 'something else'));
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      entries: [
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'later',
+          startMs: 2000,
+          endMs: 2400,
+          playbackTimeMs: 2200,
+        },
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'earlier',
+          startMs: 1000,
+          endMs: 1400,
+          playbackTimeMs: 1200,
+        },
+      ],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 404);
+  assert.equal(payload.success, false);
+  assert.equal(payload.message, 'No matching card exists.');
+
+  const updateRequest = harness.ankiRequests.find((request) => request.action === 'updateNoteFields');
+  assert.equal(updateRequest, undefined);
+});
+
+test('POST /api/mine returns 404 when no card matches the subtitle sentence', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'something else';
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'single line',
+      startMs: 1000,
+      endMs: 1200,
+      playbackTimeMs: 1100,
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 404);
+  assert.equal(payload.success, false);
+  assert.equal(payload.message, 'No matching card exists.');
+
+  const addRequest = harness.ankiRequests.find((request) => request.action === 'addNote');
+  assert.equal(addRequest, undefined);
+});
+
 test('POST /api/history/mine still accepts single-entry payloads', async (t) => {
   const harness = await createServerHarness(t);
   harness.config.runtime.captureAudio = false;
   harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'single line';
   harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
 
   const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
@@ -308,6 +474,7 @@ async function createServerHarness(t: TestContext) {
   await fs.writeFile(configPath, 'anki_deck=Anime\nanki_note_type=Sentence\ncapture_audio=yes\n', 'utf8');
 
   const ankiRequests: Array<Record<string, any>> = [];
+  const ankiNotes = [createAnkiNote(25, '')];
   const ankiServer = http.createServer(async (request, response) => {
     const body = await readRequestBody(request);
     const payload = body ? JSON.parse(body) : {};
@@ -325,24 +492,25 @@ async function createServerHarness(t: TestContext) {
           ? ['Expression', 'Meaning', 'Audio']
           : ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'];
     } else if (action === 'findNotes') {
-      result = [25];
+      result = ankiNotes.map((note) => note.noteId);
     } else if (action === 'notesInfo') {
-      result = [
-        {
-          noteId: 25,
-          fields: {
-            Sentence: { value: '' },
-            Audio: { value: '' },
-            Picture: { value: '' },
-            Source: { value: '' },
-            Time: { value: '' },
-            Filename: { value: '' },
-          },
-        },
-      ];
+      const requestedIds = Array.isArray(payload.params?.notes)
+        ? payload.params.notes.filter((value: unknown) => Number.isInteger(value))
+        : ankiNotes.map((note) => note.noteId);
+      result = requestedIds
+        .map((noteId: number) => ankiNotes.find((note) => note.noteId === noteId))
+        .filter(Boolean);
     } else if (action === 'storeMediaFile') {
       result = payload.params?.filename ?? null;
     } else if (action === 'updateNoteFields') {
+      const targetNote = ankiNotes.find((note) => note.noteId === payload.params?.note?.id);
+      if (targetNote && payload.params?.note?.fields && typeof payload.params.note.fields === 'object') {
+        for (const [fieldName, fieldValue] of Object.entries(payload.params.note.fields)) {
+          targetNote.fields[fieldName] = {
+            value: String(fieldValue ?? ''),
+          };
+        }
+      }
       result = null;
     } else {
       result = null;
@@ -392,11 +560,26 @@ async function createServerHarness(t: TestContext) {
 
   return {
     ankiRequests,
+    ankiNotes,
     baseUrl: `http://127.0.0.1:${appAddress.port}`,
     config,
     configPath,
     shutdownReasons,
     transcriptStore,
+  };
+}
+
+function createAnkiNote(noteId: number, sentence: string) {
+  return {
+    noteId,
+    fields: {
+      Sentence: { value: sentence },
+      Audio: { value: '' },
+      Picture: { value: '' },
+      Source: { value: '' },
+      Time: { value: '' },
+      Filename: { value: '' },
+    },
   };
 }
 

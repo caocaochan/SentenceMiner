@@ -4,6 +4,21 @@ import type { SubtitleEventPayload } from './types.ts';
 
 const INVALID_FILENAME_RE = /[<>:"/\\|?*\u0000-\u001f]/g;
 const WHITESPACE_RE = /\s+/g;
+const HTML_BREAK_RE = /<\s*br\s*\/?\s*>/gi;
+const HTML_BLOCK_RE = /<\/?(?:div|p|li|tr|td|th|ul|ol|table|blockquote)[^>]*>/gi;
+const HTML_TAG_RE = /<[^>]+>/g;
+const NUMERIC_ENTITY_RE = /&#(\d+);/g;
+const HEX_ENTITY_RE = /&#x([0-9a-f]+);/gi;
+const NAMED_ENTITY_RE = /&([a-z]+);/gi;
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+};
 
 export function escapeHtml(input: string): string {
   return input
@@ -70,6 +85,11 @@ export function renderSubtitleHtml(text: string): string {
   return escapeHtml(text).replaceAll('\n', '<br>');
 }
 
+export function normalizeSubtitleForMatching(text: string): string {
+  const plainText = htmlToPlainText(text);
+  return plainText.replace(WHITESPACE_RE, ' ').trim();
+}
+
 export function applyFilenameTemplate(
   template: string,
   payload: SubtitleEventPayload,
@@ -108,4 +128,20 @@ export function payloadKey(payload: SubtitleEventPayload): string {
     payload.endMs ?? 'nil',
     payload.text,
   ].join('::');
+}
+
+function htmlToPlainText(input: string): string {
+  return decodeHtmlEntities(
+    input
+      .replace(HTML_BREAK_RE, '\n')
+      .replace(HTML_BLOCK_RE, '\n')
+      .replace(HTML_TAG_RE, ''),
+  ).replace(/\r\n?/g, '\n');
+}
+
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(HEX_ENTITY_RE, (_, value: string) => String.fromCodePoint(parseInt(value, 16)))
+    .replace(NUMERIC_ENTITY_RE, (_, value: string) => String.fromCodePoint(parseInt(value, 10)))
+    .replace(NAMED_ENTITY_RE, (match, name: string) => HTML_ENTITY_MAP[name.toLowerCase()] ?? match);
 }

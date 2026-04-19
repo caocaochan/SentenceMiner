@@ -121,6 +121,7 @@ export function normalizeHistoryMineRequest(request: HistoryMineRequest): Normal
     payload: {
       ...firstEntry,
       text,
+      sentenceMatchCandidates: buildSentenceMatchCandidates(text, sortedEntries),
       startMs: startMsValues.length > 0 ? Math.min(...startMsValues) : null,
       endMs: endMsValues.length > 0 ? Math.max(...endMsValues) : null,
       playbackTimeMs: firstEntry.playbackTimeMs ?? null,
@@ -306,4 +307,20 @@ function compareHistoryMineEntries(
   }
 
   return a.index - b.index;
+}
+
+function buildSentenceMatchCandidates(text: string, entries: SubtitleEventPayload[]): string[] {
+  const seen = new Set<string>();
+  const candidates = [text, ...entries.map((entry) => entry.text)];
+
+  return candidates
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => {
+      if (!candidate || seen.has(candidate)) {
+        return false;
+      }
+
+      seen.add(candidate);
+      return true;
+    });
 }

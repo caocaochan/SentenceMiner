@@ -6,7 +6,7 @@ SentenceMiner is an `mpv`-first sentence mining workflow:
 - an `mpv` Lua script watches the current subtitle in real time
 - when you trigger the mining action, it captures the subtitle text, matching audio, and a screenshot
 - captured audio is loudness-normalized so mined cards play back at a more consistent volume
-- the helper updates the newest matching Anki note through AnkiConnect
+- the helper updates matching Anki notes only when the stored sentence matches what you mined
 
 The UI uses a Catppuccin Macchiato-inspired theme and keeps a running subtitle history for the current playback session.
 
@@ -22,7 +22,8 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 - shows the current subtitle and transcript history on `localhost`
 - keeps the text selectable and Yomitan-friendly
 - auto-starts the helper on Windows when `mpv` loads a file
-- updates the newest matching Anki note by highest note ID
+- updates an existing Anki note only when its sentence matches the mined subtitle text
+- returns an error when no existing sentence matches
 - replaces configured subtitle, audio, and image fields
 - supports configurable deck, note type, field names, image sizing, image format, and audio padding
 
@@ -111,5 +112,8 @@ node scripts/package-release.mjs
 - The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, and `ffmpeg.exe.README` inside `mpv/scripts/sentenceminer-helper/`.
 - v1 keeps transcript history in memory only.
 - v1 only tracks the primary active subtitle.
-- The target note is the newest matching note returned by the configured deck, note type, and extra query.
+- SentenceMiner first looks for matching notes returned by the configured deck, note type, and extra query.
+- SentenceMiner only inspects the newest note returned by the configured deck, note type, and extra query.
+- That newest note is only updated when its configured subtitle field matches the mined sentence after HTML and whitespace normalization.
+- If no note matches, SentenceMiner returns `No matching card exists.` instead of overwriting an unrelated note.
 - The GitHub Actions workflow at `.github/workflows/release-latest.yml` rebuilds `SentenceMiner-latest.zip` on every push to `main`.

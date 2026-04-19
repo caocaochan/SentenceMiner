@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 
+import { NoMatchingCardError, listDeckNames, listModelFieldNames, listModelNames, mineToAnki } from './anki.ts';
 import { mineHistoryEntry } from './history-mine.ts';
-import { listDeckNames, listModelFieldNames, listModelNames, mineToAnki } from './anki.ts';
 import { buildAppUrl } from './browser.ts';
 import {
   applyEditableSettings,
@@ -260,7 +260,7 @@ export async function routeRequest(
 
   if (method === 'POST' && url.pathname === '/api/mine') {
     const payload = await readJsonBody<MinePayload>(request);
-    const result = await mineToAnki(context.config.anki, payload);
+    const result = await mapMineErrorToHttp(() => mineToAnki(context.config.anki, payload));
     respondJson(response, 200, result);
     return;
   }
@@ -298,7 +298,7 @@ export async function routeRequest(
   if (method === 'POST' && url.pathname === '/api/history/mine') {
     const payload = parseHistoryMineRequestPayload(await readJsonBody<unknown>(request));
     assertActiveHistoryMineRequest(context.transcriptStore, payload);
-    const result = await mineHistoryEntry(context.config, payload);
+    const result = await mapMineErrorToHttp(() => mineHistoryEntry(context.config, payload));
     respondJson(response, 200, result);
     return;
   }
@@ -551,6 +551,18 @@ function getRecord(value: unknown, fieldName: string): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+async function mapMineErrorToHttp<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof NoMatchingCardError) {
+      throw new HttpError(404, error.message);
+    }
+
+    throw error;
+  }
 }
 
 function parseHistoryMineRequestPayload(payload: unknown): HistoryMineRequest {

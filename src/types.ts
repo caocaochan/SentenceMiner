@@ -20,6 +20,7 @@ export interface SubtitleEventPayload {
 export interface MinePayload extends SubtitleEventPayload {
   screenshotPath?: string | null;
   audioPath?: string | null;
+  sentenceMatchCandidates?: string[];
 }
 
 export interface HistoryMineBatchPayload {

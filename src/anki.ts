@@ -7,6 +7,7 @@ import {
   basenameWithoutExtension,
   buildSearchQuery,
   formatTimestampRange,
+  normalizeSubtitleForMatching,
   renderSubtitleHtml,
 } from './utils.ts';
 
@@ -20,12 +21,28 @@ interface NoteInfo {
   fields: Record<string, { value: string }>;
 }
 
+interface SentenceCandidate {
+  normalized: string;
+}
+
+export const NO_MATCHING_CARD_MESSAGE = 'No matching card exists.';
+
+export class NoMatchingCardError extends Error {
+  constructor() {
+    super(NO_MATCHING_CARD_MESSAGE);
+    this.name = 'NoMatchingCardError';
+  }
+}
+
 export async function mineToAnki(config: AnkiConfig, payload: MinePayload): Promise<MineResult> {
   validateMinePayload(config, payload);
 
-  const noteId = await findNewestMatchingNote(config);
-  const noteInfo = await getNoteInfo(config, noteId);
-  validateConfiguredFields(config, noteInfo);
+  const matchingNote = await findMatchingNote(config, payload);
+  if (!matchingNote) {
+    throw new NoMatchingCardError();
+  }
+
+  validateConfiguredFields(config, matchingNote);
 
   const media: MineResult['media'] = {};
   if (payload.audioPath) {
@@ -38,7 +55,7 @@ export async function mineToAnki(config: AnkiConfig, payload: MinePayload): Prom
   const fields = buildFieldPayload(config, payload, media);
   await ankiRequest(config, 'updateNoteFields', {
     note: {
-      id: noteId,
+      id: matchingNote.noteId,
       fields,
     },
   });
@@ -46,19 +63,38 @@ export async function mineToAnki(config: AnkiConfig, payload: MinePayload): Prom
   return {
     success: true,
     message: 'Anki note updated successfully.',
-    noteId,
+    noteId: matchingNote.noteId,
     media,
   };
 }
 
-export async function findNewestMatchingNote(config: AnkiConfig): Promise<number> {
+async function findMatchingNote(config: AnkiConfig, payload: MinePayload): Promise<NoteInfo | null> {
+  const sentenceCandidates = buildSentenceCandidates(payload);
+  if (sentenceCandidates.length === 0) {
+    return null;
+  }
+
+  const newestNote = await findNewestCandidateNote(config);
+  if (!newestNote) {
+    return null;
+  }
+
+  const hasMatchingSentence = sentenceCandidates.some((candidate) =>
+    noteMatchesSentence(config, newestNote, candidate.normalized),
+  );
+  return hasMatchingSentence ? newestNote : null;
+}
+
+async function findNewestCandidateNote(config: AnkiConfig): Promise<NoteInfo | null> {
   const query = buildSearchQuery(config.deck, config.noteType, config.extraQuery);
   const noteIds = await ankiRequest<number[]>(config, 'findNotes', { query });
   if (!Array.isArray(noteIds) || noteIds.length === 0) {
-    throw new Error(`No Anki note matched query: ${query}`);
+    return null;
   }
 
-  return Math.max(...noteIds);
+  const newestNoteId = Math.max(...noteIds);
+  const notes = await getNotesInfo(config, [newestNoteId]);
+  return notes[0] ?? null;
 }
 
 export async function listDeckNames(config: AnkiConfig): Promise<string[]> {
@@ -73,13 +109,13 @@ export async function listModelFieldNames(config: AnkiConfig, modelName: string)
   return ankiRequest<string[]>(config, 'modelFieldNames', { modelName });
 }
 
-async function getNoteInfo(config: AnkiConfig, noteId: number): Promise<NoteInfo> {
-  const notes = await ankiRequest<NoteInfo[]>(config, 'notesInfo', { notes: [noteId] });
-  if (!Array.isArray(notes) || notes.length === 0) {
-    throw new Error(`Unable to load Anki note info for note ${noteId}.`);
+async function getNotesInfo(config: AnkiConfig, noteIds: number[]): Promise<NoteInfo[]> {
+  const notes = await ankiRequest<NoteInfo[]>(config, 'notesInfo', { notes: noteIds });
+  if (!Array.isArray(notes)) {
+    throw new Error('Unable to load Anki note info.');
   }
 
-  return notes[0];
+  return notes;
 }
 
 async function uploadMedia(
@@ -156,6 +192,35 @@ function validateConfiguredFields(config: AnkiConfig, note: NoteInfo): void {
       throw new Error(`Configured field "${fieldName}" does not exist on note ${note.noteId}.`);
     }
   }
+}
+
+function buildSentenceCandidates(payload: MinePayload): SentenceCandidate[] {
+  const seen = new Set<string>();
+  const candidates = [payload.text, ...(payload.sentenceMatchCandidates ?? [])];
+
+  return candidates
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .map((candidate) => ({
+      normalized: normalizeSubtitleForMatching(candidate),
+    }))
+    .filter((candidate) => {
+      if (!candidate.normalized || seen.has(candidate.normalized)) {
+        return false;
+      }
+
+      seen.add(candidate.normalized);
+      return true;
+    });
+}
+
+function noteMatchesSentence(config: AnkiConfig, note: NoteInfo, normalizedSentence: string): boolean {
+  const subtitleValue = note.fields[config.fields.subtitle]?.value;
+  if (typeof subtitleValue !== 'string') {
+    return false;
+  }
+
+  return normalizeSubtitleForMatching(subtitleValue) === normalizedSentence;
 }
 
 async function ankiRequest<T>(config: AnkiConfig, action: string, params?: Record<string, unknown>): Promise<T> {
