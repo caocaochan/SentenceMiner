@@ -48,6 +48,11 @@ export const DEFAULT_CONFIG: AppConfig = {
     subtitleCardFontFamily: '',
     subtitleCardFontSizePx: 0,
   },
+  playback: {
+    repeatLine: { bind: true, key: 'Ctrl+Shift+1' },
+    pauseAfterLine: { bind: true, key: 'Ctrl+Shift+2' },
+    subsOnly: { bind: true, key: 'Ctrl+Shift+3' },
+  },
 };
 
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
@@ -105,6 +110,11 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
       subtitleCardFontFamily: config.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: config.appearance.subtitleCardFontSizePx,
     },
+    playback: {
+      repeatLine: { ...config.playback.repeatLine },
+      pauseAfterLine: { ...config.playback.pauseAfterLine },
+      subsOnly: { ...config.playback.subsOnly },
+    },
   };
 }
 
@@ -133,6 +143,11 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
       ...config.appearance,
       subtitleCardFontFamily: settings.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: settings.appearance.subtitleCardFontSizePx,
+    },
+    playback: {
+      repeatLine: { ...settings.playback.repeatLine },
+      pauseAfterLine: { ...settings.playback.pauseAfterLine },
+      subsOnly: { ...settings.playback.subsOnly },
     },
   });
 }
@@ -477,9 +492,42 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         captureImage: parseBoolean(key, value),
       };
       return;
+    case 'bind_repeat_line_key':
+      config.playback = mergePlaybackEntry(config.playback, 'repeatLine', { bind: parseBoolean(key, value) });
+      return;
+    case 'repeat_line_key':
+      config.playback = mergePlaybackEntry(config.playback, 'repeatLine', { key: value });
+      return;
+    case 'bind_pause_after_line_key':
+      config.playback = mergePlaybackEntry(config.playback, 'pauseAfterLine', { bind: parseBoolean(key, value) });
+      return;
+    case 'pause_after_line_key':
+      config.playback = mergePlaybackEntry(config.playback, 'pauseAfterLine', { key: value });
+      return;
+    case 'bind_subs_only_key':
+      config.playback = mergePlaybackEntry(config.playback, 'subsOnly', { bind: parseBoolean(key, value) });
+      return;
+    case 'subs_only_key':
+      config.playback = mergePlaybackEntry(config.playback, 'subsOnly', { key: value });
+      return;
     default:
       return;
   }
+}
+
+function mergePlaybackEntry(
+  playback: Partial<AppConfig['playback']> | undefined,
+  field: 'repeatLine' | 'pauseAfterLine' | 'subsOnly',
+  override: Partial<{ bind: boolean; key: string }>,
+): Partial<AppConfig['playback']> {
+  const current = (playback?.[field] ?? {}) as Partial<{ bind: boolean; key: string }>;
+  return {
+    ...playback,
+    [field]: {
+      ...current,
+      ...override,
+    },
+  };
 }
 
 async function readConfigText(filePath: string): Promise<string> {
@@ -555,6 +603,20 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
       ...base.appearance,
       ...overrides.appearance,
     },
+    playback: {
+      repeatLine: {
+        ...base.playback.repeatLine,
+        ...overrides.playback?.repeatLine,
+      },
+      pauseAfterLine: {
+        ...base.playback.pauseAfterLine,
+        ...overrides.playback?.pauseAfterLine,
+      },
+      subsOnly: {
+        ...base.playback.subsOnly,
+        ...overrides.playback?.subsOnly,
+      },
+    },
   };
 }
 
@@ -588,6 +650,12 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
   { key: 'subtitle_card_font_family', value: (settings) => settings.appearance.subtitleCardFontFamily },
   { key: 'subtitle_card_font_size_px', value: (settings) => String(settings.appearance.subtitleCardFontSizePx) },
+  { key: 'bind_repeat_line_key', value: (settings) => serializeBoolean(settings.playback.repeatLine.bind) },
+  { key: 'repeat_line_key', value: (settings) => settings.playback.repeatLine.key },
+  { key: 'bind_pause_after_line_key', value: (settings) => serializeBoolean(settings.playback.pauseAfterLine.bind) },
+  { key: 'pause_after_line_key', value: (settings) => settings.playback.pauseAfterLine.key },
+  { key: 'bind_subs_only_key', value: (settings) => serializeBoolean(settings.playback.subsOnly.bind) },
+  { key: 'subs_only_key', value: (settings) => settings.playback.subsOnly.key },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {
