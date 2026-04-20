@@ -8,6 +8,7 @@
   --surface0: #363a4f;
   --surface0-rgb: 54, 58, 79;
   --surface1: #494d64;
+  --surface1-rgb: 73, 77, 100;
   --surface2: #5b6078;
   --surface2-rgb: 91, 96, 120;
   --text: #cad3f5;
@@ -21,11 +22,12 @@
   --peach-rgb: 245, 169, 127;
   --mauve: #c6a0f6;
   --mauve-rgb: 198, 160, 246;
+  --error: #ed8796;
+  --error-rgb: 237, 135, 150;
   --border-contrast-rgb: 255, 255, 255;
   --backdrop-rgb: 11, 13, 23;
-  --selected-rgb: 45, 48, 68;
-  --primary-button-hover: #9ab7f6;
-  --settings-status-error: #f5bde6;
+  --selected-rgb: 73, 77, 100;
+  --primary-button-hover: #b7bdf8;
   --app-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
   --subtitle-card-font-family: var(--app-font-family);
   --shell-surface: rgba(30, 32, 48, 1);
@@ -46,6 +48,7 @@
   --surface0: #ccd0da;
   --surface0-rgb: 204, 208, 218;
   --surface1: #bcc0cc;
+  --surface1-rgb: 188, 192, 204;
   --surface2: #acb0be;
   --surface2-rgb: 172, 176, 190;
   --text: #4c4f69;
@@ -59,11 +62,12 @@
   --peach-rgb: 254, 100, 11;
   --mauve: #8839ef;
   --mauve-rgb: 136, 57, 239;
+  --error: #d20f39;
+  --error-rgb: 210, 15, 57;
   --border-contrast-rgb: 0, 0, 0;
-  --backdrop-rgb: 0, 0, 0;
-  --selected-rgb: 214, 218, 230;
+  --backdrop-rgb: 76, 79, 105;
+  --selected-rgb: 188, 192, 204;
   --primary-button-hover: #2c7af7;
-  --settings-status-error: #d20f39;
   --shell-surface: rgba(230, 233, 239, 1);
   --overlay: rgba(204, 208, 218, 0.92);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.08);
@@ -443,9 +447,9 @@ h1 {
 }
 
 .toast-error {
-  border-color: rgba(var(--peach-rgb), 0.4);
+  border-color: rgba(var(--error-rgb), 0.4);
   background:
-    linear-gradient(135deg, rgba(var(--peach-rgb), 0.16), rgba(var(--crust-rgb), 0.96)),
+    linear-gradient(135deg, rgba(var(--error-rgb), 0.16), rgba(var(--crust-rgb), 0.96)),
     rgba(var(--crust-rgb), 0.96);
 }
 
@@ -573,7 +577,7 @@ h1 {
 }
 
 .settings-status-error {
-  color: var(--settings-status-error);
+  color: var(--error);
 }
 
 .modal-footer {
