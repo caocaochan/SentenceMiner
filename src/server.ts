@@ -359,6 +359,11 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/ui-state.js') {
+    await serveStatic(response, 'ui-state.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/styles.css') {
     await serveStatic(response, 'styles.css', 'text/css; charset=utf-8');
     return;

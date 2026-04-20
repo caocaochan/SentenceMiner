@@ -9,6 +9,11 @@ import {
   computeTranscriptItemUiState,
   shouldRebuildTranscriptList,
 } from './transcript-render.js';
+import {
+  buildTranscriptEmptyState,
+  buildTranscriptStatusLabel,
+  resolveThemePreference,
+} from './ui-state.js';
 
 const state = {
   connection: 'connecting',
@@ -26,13 +31,22 @@ const state = {
   settingsOptionsError: '',
   settingsSaving: false,
   settingsSaveError: '',
+  settingsModalReturnFocusEl: null,
   settingsRequestId: 0,
-  renderedTranscriptSignature: '',
+  renderedTranscriptSignature: null,
   renderedCueElements: new Map(),
   autoScrollFrameId: null,
   lastScrolledCueId: null,
 };
 const STATE_POLL_INTERVAL_MS = 2000;
+const SETTINGS_FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'summary',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
 let reconnectTimerId = null;
 let statePollIntervalId = null;
 let nextToastId = 0;
@@ -50,6 +64,7 @@ const elements = {
   themeToggle: document.getElementById('theme-toggle'),
   settingsButton: document.getElementById('settings-button'),
   settingsModal: document.getElementById('settings-modal'),
+  settingsPanel: document.getElementById('settings-panel'),
   settingsBackdrop: document.getElementById('settings-backdrop'),
   settingsClose: document.getElementById('settings-close'),
   settingsCancel: document.getElementById('settings-cancel'),
@@ -79,6 +94,7 @@ const elements = {
   settingsCaptureImageMaxWidth: document.getElementById('settings-capture-image-max-width'),
   settingsCaptureImageMaxHeight: document.getElementById('settings-capture-image-max-height'),
   settingsCaptureImageIncludeSubtitles: document.getElementById('settings-capture-image-include-subtitles'),
+  settingsCaptureAdvanced: document.getElementById('settings-capture-advanced'),
   settingsAppearanceSubtitleCardFontFamily: document.getElementById('settings-appearance-subtitle-card-font-family'),
 };
 
@@ -104,20 +120,17 @@ elements.settingsForm.addEventListener('submit', (event) => {
 elements.settingsAnkiNoteType.addEventListener('change', () => {
   void refreshSettingsOptions(elements.settingsAnkiNoteType.value, elements.settingsAnkiDeck.value);
 });
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && state.settingsModalOpen && !state.settingsSaving) {
-    closeSettingsModal();
-  }
-});
+document.addEventListener('keydown', handleDocumentKeydown);
 
 initTheme();
 bootstrap();
 
 function initTheme() {
-  const stored = localStorage.getItem('theme');
-  if (stored === 'light' || stored === 'dark') {
-    document.documentElement.setAttribute('data-theme', stored);
-  }
+  const preferredTheme = resolveThemePreference(
+    localStorage.getItem('theme'),
+    window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false,
+  );
+  document.documentElement.setAttribute('data-theme', preferredTheme);
 }
 
 async function bootstrap() {
@@ -236,13 +249,24 @@ function renderTranscript() {
   elements.connectionPill.textContent =
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
   elements.connectionPill.className = `pill ${state.connection === 'live' ? 'pill-success' : 'pill-muted'}`;
-  elements.fileName.textContent = transcriptState.session?.filePath ?? 'No file loaded';
+  const filePath = transcriptState.session?.filePath?.trim() ?? '';
+  elements.fileName.textContent = filePath || 'No file loaded';
+  elements.fileName.title = filePath;
+  elements.fileName.tabIndex = filePath ? 0 : -1;
   elements.historyCount.textContent = `${transcriptEntries.length} ${transcriptEntries.length === 1 ? 'line' : 'lines'}`;
   elements.transcriptStatus.textContent = buildTranscriptStatusLabel(transcriptState);
   elements.transcriptStatus.hidden = !elements.transcriptStatus.textContent;
   elements.historySelectionCount.textContent = `${selectedEntries.length} selected`;
   elements.historyMineSelected.disabled =
     selectedEntries.length === 0 || isAnyBatchHistoryActionPending('mine-selected');
+
+  if (transcriptEntries.length === 0) {
+    state.renderedTranscriptSignature = buildTranscriptStructureSignature(transcriptEntries);
+    state.renderedCueElements = new Map();
+    state.lastScrolledCueId = null;
+    renderEmptyTranscriptState(transcriptState);
+    return;
+  }
 
   if (shouldRebuildTranscriptList(state.renderedTranscriptSignature, transcriptEntries)) {
     rebuildTranscriptList(transcriptEntries);
@@ -312,7 +336,7 @@ async function runHistoryAction(action, entry) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    window.alert(message);
+    showToast(message, 'error');
   } finally {
     state.pendingActions.delete(pendingKey);
     render();
@@ -347,7 +371,7 @@ async function runMineSelectedAction() {
     state.selectedHistoryKeys.clear();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    window.alert(message);
+    showToast(message, 'error');
   } finally {
     state.pendingActions.delete(pendingKey);
     render();
@@ -390,7 +414,7 @@ function renderToasts() {
   state.toasts.forEach((toast) => {
     const item = document.createElement('div');
     item.className = `toast toast-${toast.kind}`;
-    item.setAttribute('role', 'status');
+    item.setAttribute('role', toast.kind === 'error' ? 'alert' : 'status');
     item.textContent = toast.message;
     elements.toastRegion.append(item);
   });
@@ -431,10 +455,14 @@ function dismissToast(toastId) {
 }
 
 function openSettingsModal() {
+  state.settingsModalReturnFocusEl =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   state.settingsModalOpen = true;
   state.settingsSaveError = '';
+  elements.settingsCaptureAdvanced.open = false;
   hydrateSettingsForm();
   render();
+  focusSettingsModal();
   void refreshSettingsOptions(
     elements.settingsAnkiNoteType.value || state.app?.config?.settings?.anki?.noteType,
     elements.settingsAnkiDeck.value || state.app?.config?.settings?.anki?.deck,
@@ -449,6 +477,85 @@ function closeSettingsModal() {
   state.settingsModalOpen = false;
   state.settingsSaveError = '';
   render();
+
+  const returnTarget =
+    state.settingsModalReturnFocusEl instanceof HTMLElement ? state.settingsModalReturnFocusEl : elements.settingsButton;
+  state.settingsModalReturnFocusEl = null;
+  window.requestAnimationFrame(() => {
+    returnTarget?.focus();
+  });
+}
+
+function handleDocumentKeydown(event) {
+  if (!state.settingsModalOpen) {
+    return;
+  }
+
+  if (event.key === 'Escape' && !state.settingsSaving) {
+    event.preventDefault();
+    closeSettingsModal();
+    return;
+  }
+
+  if (event.key === 'Tab') {
+    trapSettingsModalFocus(event);
+  }
+}
+
+function focusSettingsModal() {
+  window.requestAnimationFrame(() => {
+    if (!state.settingsModalOpen) {
+      return;
+    }
+
+    const [firstFocusable] = getSettingsFocusableElements();
+    (firstFocusable ?? elements.settingsPanel)?.focus();
+  });
+}
+
+function trapSettingsModalFocus(event) {
+  const focusable = getSettingsFocusableElements();
+  if (focusable.length === 0) {
+    event.preventDefault();
+    elements.settingsPanel.focus();
+    return;
+  }
+
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const firstFocusable = focusable[0];
+  const lastFocusable = focusable[focusable.length - 1];
+
+  if (!activeElement || !elements.settingsPanel.contains(activeElement)) {
+    event.preventDefault();
+    firstFocusable.focus();
+    return;
+  }
+
+  if (event.shiftKey && activeElement === firstFocusable) {
+    event.preventDefault();
+    lastFocusable.focus();
+    return;
+  }
+
+  if (!event.shiftKey && activeElement === lastFocusable) {
+    event.preventDefault();
+    firstFocusable.focus();
+  }
+}
+
+function getSettingsFocusableElements() {
+  return [...elements.settingsPanel.querySelectorAll(SETTINGS_FOCUSABLE_SELECTOR)].filter((element) => {
+    if (!(element instanceof HTMLElement) || element.hidden || element.closest('[hidden]')) {
+      return false;
+    }
+
+    const closedDetails = element.closest('details:not([open])');
+    if (closedDetails && element.tagName !== 'SUMMARY') {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function hydrateSettingsForm() {
@@ -576,12 +683,21 @@ async function saveSettings() {
 
     state.app = responsePayload;
     state.settingsModalOpen = false;
+    elements.settingsCaptureAdvanced.open = false;
     hydrateSettingsForm();
   } catch (error) {
     state.settingsSaveError = error instanceof Error ? error.message : String(error);
   } finally {
     state.settingsSaving = false;
     render();
+    if (!state.settingsModalOpen) {
+      const returnTarget =
+        state.settingsModalReturnFocusEl instanceof HTMLElement ? state.settingsModalReturnFocusEl : elements.settingsButton;
+      state.settingsModalReturnFocusEl = null;
+      window.requestAnimationFrame(() => {
+        returnTarget?.focus();
+      });
+    }
   }
 }
 
@@ -775,23 +891,24 @@ function formatTimestamp(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 }
 
-function buildTranscriptStatusLabel(transcriptState) {
-  const status = transcriptState.transcriptStatus ?? 'unavailable';
-  const message = transcriptState.transcriptMessage?.trim() ?? '';
+function renderEmptyTranscriptState(transcriptState) {
+  const emptyState = buildTranscriptEmptyState(transcriptState);
+  state.renderedCueElements = new Map();
+  elements.historyList.innerHTML = '';
 
-  if (status === 'ready') {
-    return message;
-  }
+  const item = document.createElement('article');
+  item.className = 'history-empty-state';
 
-  if (status === 'loading') {
-    return message || 'Loading active subtitle track…';
-  }
+  const title = document.createElement('h2');
+  title.className = 'history-empty-title';
+  title.textContent = emptyState.title;
 
-  if (status === 'error') {
-    return message || 'The active subtitle track could not be loaded.';
-  }
+  const copy = document.createElement('p');
+  copy.className = 'history-empty-copy';
+  copy.textContent = emptyState.message;
 
-  return message || 'No active subtitle track is selected.';
+  item.append(title, copy);
+  elements.historyList.append(item);
 }
 
 function rebuildTranscriptList(entries) {
