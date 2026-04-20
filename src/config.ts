@@ -46,6 +46,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   appearance: {
     subtitleCardFontFamily: '',
+    subtitleCardFontSizePx: 0,
   },
 };
 
@@ -102,6 +103,7 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
     },
     appearance: {
       subtitleCardFontFamily: config.appearance.subtitleCardFontFamily,
+      subtitleCardFontSizePx: config.appearance.subtitleCardFontSizePx,
     },
   };
 }
@@ -130,6 +132,7 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
     appearance: {
       ...config.appearance,
       subtitleCardFontFamily: settings.appearance.subtitleCardFontFamily,
+      subtitleCardFontSizePx: settings.appearance.subtitleCardFontSizePx,
     },
   });
 }
@@ -438,6 +441,12 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         subtitleCardFontFamily: value,
       };
       return;
+    case 'subtitle_card_font_size_px':
+      config.appearance = {
+        ...config.appearance,
+        subtitleCardFontSizePx: parseNumber(key, value),
+      };
+      return;
     case 'ffmpeg_path':
       config.runtime = {
         ...config.runtime,
@@ -578,6 +587,7 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'capture_image_max_height', value: (settings) => String(settings.capture.imageMaxHeight) },
   { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
   { key: 'subtitle_card_font_family', value: (settings) => settings.appearance.subtitleCardFontFamily },
+  { key: 'subtitle_card_font_size_px', value: (settings) => String(settings.appearance.subtitleCardFontSizePx) },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {

@@ -71,6 +71,7 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_image_format`, `capture_image_quality`, `capture_image_max_width`, `capture_image_max_height`
 - `capture_image_include_subtitles`
 - `subtitle_card_font_family`
+- `subtitle_card_font_size_px`
 - `helper_url`
 - `helper_timeout_ms`
 - `helper_auto_start`

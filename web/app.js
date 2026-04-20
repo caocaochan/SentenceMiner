@@ -105,6 +105,7 @@ const elements = {
   settingsCaptureImageIncludeSubtitles: document.getElementById('settings-capture-image-include-subtitles'),
   settingsCaptureAdvanced: document.getElementById('settings-capture-advanced'),
   settingsAppearanceSubtitleCardFontFamily: document.getElementById('settings-appearance-subtitle-card-font-family'),
+  settingsAppearanceSubtitleCardFontSizePx: document.getElementById('settings-appearance-subtitle-card-font-size-px'),
 };
 
 elements.themeToggle.addEventListener('click', () => {
@@ -592,6 +593,9 @@ function hydrateSettingsForm() {
   elements.settingsCaptureImageMaxHeight.value = String(settings.capture.imageMaxHeight ?? 0);
   elements.settingsCaptureImageIncludeSubtitles.checked = Boolean(settings.capture.imageIncludeSubtitles);
   elements.settingsAppearanceSubtitleCardFontFamily.value = settings.appearance.subtitleCardFontFamily ?? '';
+  elements.settingsAppearanceSubtitleCardFontSizePx.value = settings.appearance.subtitleCardFontSizePx
+    ? String(settings.appearance.subtitleCardFontSizePx)
+    : '';
 }
 
 async function refreshSettingsOptions(noteType, deck) {
@@ -744,6 +748,7 @@ function collectSettingsPayload() {
     },
     appearance: {
       subtitleCardFontFamily: elements.settingsAppearanceSubtitleCardFontFamily.value.trim(),
+      subtitleCardFontSizePx: Math.max(0, Math.floor(Number(elements.settingsAppearanceSubtitleCardFontSizePx.value) || 0)),
     },
   };
 }
@@ -752,10 +757,16 @@ function applyAppearanceSettings() {
   const subtitleCardFontFamily = state.app?.config?.settings?.appearance?.subtitleCardFontFamily?.trim() ?? '';
   if (subtitleCardFontFamily) {
     document.documentElement.style.setProperty('--subtitle-card-font-family', subtitleCardFontFamily);
-    return;
+  } else {
+    document.documentElement.style.removeProperty('--subtitle-card-font-family');
   }
 
-  document.documentElement.style.removeProperty('--subtitle-card-font-family');
+  const subtitleCardFontSizePx = Number(state.app?.config?.settings?.appearance?.subtitleCardFontSizePx) || 0;
+  if (subtitleCardFontSizePx > 0) {
+    document.documentElement.style.setProperty('--subtitle-card-font-size', `${subtitleCardFontSizePx}px`);
+  } else {
+    document.documentElement.style.removeProperty('--subtitle-card-font-size');
+  }
 }
 
 function syncStickyLayout() {

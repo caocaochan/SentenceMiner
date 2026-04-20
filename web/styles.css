@@ -30,6 +30,7 @@
   --primary-button-hover: #b7bdf8;
   --app-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
   --subtitle-card-font-family: var(--app-font-family);
+  --subtitle-card-font-size: 1rem;
   --shell-surface: rgba(30, 32, 48, 1);
   --overlay: rgba(54, 58, 79, 0.92);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
@@ -370,7 +371,7 @@ h1 {
 .history-text {
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 1rem;
+  font-size: var(--subtitle-card-font-size);
   line-height: 1.4;
   color: var(--subtext1);
   font-family: var(--subtitle-card-font-family);

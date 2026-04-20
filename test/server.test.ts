@@ -24,6 +24,7 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.capture.imageMaxWidth, 1600);
   assert.equal(payload.config.settings.runtime.captureAudio, true);
   assert.equal(payload.config.settings.appearance.subtitleCardFontFamily, '');
+  assert.equal(payload.config.settings.appearance.subtitleCardFontSizePx, 0);
 });
 
 test('GET /api/settings/options returns live Anki deck and note type options', async (t) => {
@@ -69,6 +70,7 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   payload.anki.fields.filename = '';
   payload.runtime.captureAudio = false;
   payload.appearance.subtitleCardFontFamily = 'Noto Sans JP';
+  payload.appearance.subtitleCardFontSizePx = 20;
 
   const response = await fetch(`${harness.baseUrl}/api/settings`, {
     method: 'POST',
@@ -85,12 +87,14 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.equal(harness.config.anki.noteType, 'Vocab');
   assert.equal(harness.config.runtime.captureAudio, false);
   assert.equal(harness.config.appearance.subtitleCardFontFamily, 'Noto Sans JP');
+  assert.equal(harness.config.appearance.subtitleCardFontSizePx, 20);
 
   const configFile = await fs.readFile(harness.configPath, 'utf8');
   assert.match(configFile, /anki_deck=Mining/);
   assert.match(configFile, /anki_note_type=Vocab/);
   assert.match(configFile, /capture_audio=no/);
   assert.match(configFile, /subtitle_card_font_family=Noto Sans JP/);
+  assert.match(configFile, /subtitle_card_font_size_px=20/);
 });
 
 test('POST /api/settings rejects invalid note field mappings with a 400', async (t) => {

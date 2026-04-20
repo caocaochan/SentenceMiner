@@ -581,6 +581,7 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
     },
     appearance: {
       subtitleCardFontFamily: getString(appearance.subtitleCardFontFamily, 'appearance.subtitleCardFontFamily'),
+      subtitleCardFontSizePx: getInteger(appearance.subtitleCardFontSizePx, 'appearance.subtitleCardFontSizePx'),
     },
   };
 }
@@ -600,6 +601,10 @@ async function validateEditableSettings(config: AppConfig, settings: EditableSet
 
   if (settings.capture.imageMaxWidth <= 0 || settings.capture.imageMaxHeight <= 0) {
     throw new HttpError(400, 'capture image dimensions must be greater than 0.');
+  }
+
+  if (settings.appearance.subtitleCardFontSizePx < 0) {
+    throw new HttpError(400, 'appearance.subtitleCardFontSizePx must be 0 or greater.');
   }
 
   const noteFields = await listModelFieldNames(config.anki, settings.anki.noteType);
