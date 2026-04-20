@@ -227,7 +227,12 @@ function matchTranscriptCueId(
   });
 
   if (candidates.length === 0) {
-    return null;
+    if (pointInTime == null) {
+      return null;
+    }
+
+    const mostRecentCue = findMostRecentCueByStartTime(transcript, pointInTime);
+    return mostRecentCue?.id ?? null;
   }
 
   if (candidates.length === 1 || !subtitleText) {
@@ -237,6 +242,17 @@ function matchTranscriptCueId(
   const normalizedSubtitle = normalizeComparableText(subtitleText);
   const textMatch = candidates.find((cue) => normalizeComparableText(cue.text) === normalizedSubtitle);
   return textMatch?.id ?? candidates[0].id;
+}
+
+function findMostRecentCueByStartTime(transcript: TranscriptCue[], pointInTime: number): TranscriptCue | null {
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const cue = transcript[index];
+    if (cue.startMs <= pointInTime) {
+      return cue;
+    }
+  }
+
+  return null;
 }
 
 function normalizeComparableText(text: string): string {

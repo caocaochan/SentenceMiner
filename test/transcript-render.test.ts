@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildTranscriptStructureSignature,
+  computeTranscriptFollowScrollTarget,
   computeTranscriptItemUiState,
   shouldRebuildTranscriptList,
 } from '../web/transcript-render.js';
@@ -48,4 +49,70 @@ test('pending actions only disable the relevant transcript buttons', () => {
   assert.equal(firstUi.active, true);
   assert.equal(secondUi.goToDisabled, false);
   assert.equal(secondUi.selected, true);
+});
+
+test('computeTranscriptFollowScrollTarget keeps the viewport still when the cue is already in the comfort band', () => {
+  const target = computeTranscriptFollowScrollTarget({
+    itemTop: 180,
+    itemBottom: 260,
+    viewportHeight: 900,
+    currentScrollTop: 400,
+    documentHeight: 2400,
+    stickyHeaderHeight: 120,
+    stickyTopGap: 0,
+  });
+
+  assert.equal(target, null);
+});
+
+test('computeTranscriptFollowScrollTarget scrolls up only enough to clear the sticky header area', () => {
+  const target = computeTranscriptFollowScrollTarget({
+    itemTop: 90,
+    itemBottom: 170,
+    viewportHeight: 900,
+    currentScrollTop: 400,
+    documentHeight: 2400,
+    stickyHeaderHeight: 120,
+    stickyTopGap: 0,
+  });
+
+  assert.equal(target, 354);
+});
+
+test('computeTranscriptFollowScrollTarget scrolls down only enough to keep the cue above the lower comfort edge', () => {
+  const target = computeTranscriptFollowScrollTarget({
+    itemTop: 650,
+    itemBottom: 760,
+    viewportHeight: 900,
+    currentScrollTop: 400,
+    documentHeight: 2400,
+    stickyHeaderHeight: 120,
+    stickyTopGap: 0,
+  });
+
+  assert.equal(target, 458);
+});
+
+test('computeTranscriptFollowScrollTarget clamps scrolling to the document bounds', () => {
+  const topTarget = computeTranscriptFollowScrollTarget({
+    itemTop: 40,
+    itemBottom: 120,
+    viewportHeight: 900,
+    currentScrollTop: 20,
+    documentHeight: 2400,
+    stickyHeaderHeight: 120,
+    stickyTopGap: 0,
+  });
+  const bottomTarget = computeTranscriptFollowScrollTarget({
+    itemTop: 840,
+    itemBottom: 980,
+    viewportHeight: 900,
+    currentScrollTop: 1480,
+    documentHeight: 2400,
+    stickyHeaderHeight: 120,
+    stickyTopGap: 0,
+  });
+
+  assert.equal(topTarget, 0);
+  assert.equal(bottomTarget, 1500);
 });

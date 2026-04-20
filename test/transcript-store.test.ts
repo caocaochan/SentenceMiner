@@ -74,7 +74,7 @@ test('TranscriptStore matches the current cue from live subtitle timings', () =>
   assert.equal(state.currentCueId, 's1:200');
 });
 
-test('TranscriptStore clears the current cue when playback leaves subtitles', () => {
+test('TranscriptStore keeps the previous cue active after playback leaves subtitles', () => {
   const store = new TranscriptStore();
   store.startSession({
     action: 'start',
@@ -95,6 +95,44 @@ test('TranscriptStore clears the current cue when playback leaves subtitles', ()
 
   const state = store.getState();
   assert.equal(state.currentSubtitle, null);
+  assert.equal(state.currentCueId, 's1:200');
+});
+
+test('TranscriptStore keeps the previous cue active while playback is between cues', () => {
+  const store = new TranscriptStore();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+  store.setTranscript(buildTrack(), [buildCue('one', 100), buildCue('two', 300)]);
+
+  store.pushSubtitle({
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    text: '',
+    startMs: null,
+    endMs: null,
+    playbackTimeMs: 250,
+  });
+
+  const state = store.getState();
+  assert.equal(state.currentSubtitle, null);
+  assert.equal(state.currentCueId, 's1:100');
+});
+
+test('TranscriptStore keeps the current cue empty before the first subtitle is reached', () => {
+  const store = new TranscriptStore();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+  store.setTranscript(buildTrack(), [buildCue('one', 100), buildCue('two', 300)]);
+
+  const state = store.updatePlaybackTime(50);
   assert.equal(state.currentCueId, null);
 });
 

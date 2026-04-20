@@ -6,6 +6,7 @@ import {
 } from './history-selection.js';
 import {
   buildTranscriptStructureSignature,
+  computeTranscriptFollowScrollTarget,
   computeTranscriptItemUiState,
   shouldRebuildTranscriptList,
 } from './transcript-render.js';
@@ -776,24 +777,32 @@ function syncCurrentCueScroll(currentCueId) {
 
 function centerTranscriptItemInViewport(item) {
   const rect = item.getBoundingClientRect();
-  const itemCenterY = rect.top + (rect.height / 2);
-  const viewportCenterY = window.innerHeight / 2;
-  const scrollDelta = itemCenterY - viewportCenterY;
+  const styles = window.getComputedStyle(document.documentElement);
+  const stickyHeaderHeight = parseCssLength(styles.getPropertyValue('--hero-sticky-height'));
+  const stickyTopGap = parseCssLength(styles.getPropertyValue('--sticky-top-gap'));
+  const targetScrollTop = computeTranscriptFollowScrollTarget({
+    itemTop: rect.top,
+    itemBottom: rect.bottom,
+    viewportHeight: window.innerHeight,
+    currentScrollTop: window.scrollY,
+    documentHeight: document.documentElement.scrollHeight,
+    stickyHeaderHeight,
+    stickyTopGap,
+  });
 
-  if (Math.abs(scrollDelta) < 2) {
+  if (targetScrollTop == null) {
     return;
   }
 
-  const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-  const targetScrollTop = clamp(window.scrollY + scrollDelta, 0, maxScrollTop);
   window.scrollTo({
     top: targetScrollTop,
     behavior: 'smooth',
   });
 }
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+function parseCssLength(value) {
+  const numeric = Number.parseFloat(value);
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
 function parseRequiredInteger(input, label) {
