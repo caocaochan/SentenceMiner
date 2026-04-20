@@ -17,12 +17,6 @@ local opts = {
     default_key = "Ctrl+m",
     bind_toggle_key = "yes",
     toggle_key = "Ctrl+Shift+m",
-    bind_repeat_line_key = "yes",
-    repeat_line_key = "Ctrl+Shift+1",
-    bind_pause_after_line_key = "yes",
-    pause_after_line_key = "Ctrl+Shift+2",
-    bind_subs_only_key = "yes",
-    subs_only_key = "Ctrl+Shift+3",
     server_host = "127.0.0.1",
     server_port = 8766,
     anki_url = "http://127.0.0.1:8765",
@@ -65,13 +59,6 @@ local state = {
     helper_ready = false,
     helper_starting = false,
     helper_waiters = {},
-    playback_mode = "off",
-    playback_mode_observers_active = false,
-    repeat_start_ms = nil,
-    repeat_end_ms = nil,
-    pause_after_armed = false,
-    last_observed_sub_text = "",
-    repeat_timer = nil,
 }
 
 local JSON_NULL = {}
@@ -919,14 +906,6 @@ local function stop_session()
     state.session_id = nil
     state.last_subtitle_key = nil
     state.last_subtitle_track_key = nil
-    state.playback_mode = "off"
-    state.repeat_start_ms = nil
-    state.repeat_end_ms = nil
-    state.pause_after_armed = false
-    if state.repeat_timer ~= nil then
-        state.repeat_timer:kill()
-        state.repeat_timer = nil
-    end
 end
 
 local function shutdown_helper()
@@ -1001,176 +980,6 @@ local function sync_subtitle_track_state()
     state.last_subtitle_track_key = key
 end
 
-local apply_playback_mode
-
-local function post_playback_mode_state()
-    if not state.session_id then
-        return
-    end
-
-    local _, err = helper_request("POST", "/api/playback-mode-state", {
-        sessionId = state.session_id,
-        mode = state.playback_mode,
-    })
-    if err then
-        msg.warn("could not post playback mode state: " .. tostring(err))
-    end
-end
-
-local function snapshot_current_repeat_bounds()
-    local start_ms = read_time_property_ms("sub-start/full")
-    local end_ms = read_time_property_ms("sub-end/full")
-    if start_ms ~= nil and end_ms ~= nil and end_ms > start_ms then
-        state.repeat_start_ms = start_ms
-        state.repeat_end_ms = end_ms
-        return true
-    end
-    state.repeat_start_ms = nil
-    state.repeat_end_ms = nil
-    return false
-end
-
-local function repeat_line_tick()
-    if state.playback_mode ~= "repeat" then
-        return
-    end
-
-    if state.repeat_start_ms == nil or state.repeat_end_ms == nil then
-        snapshot_current_repeat_bounds()
-        return
-    end
-
-    local now_ms = read_time_property_ms("playback-time/full")
-    if now_ms == nil then
-        return
-    end
-
-    if now_ms < state.repeat_start_ms - 500 or now_ms > state.repeat_end_ms + 1500 then
-        if not snapshot_current_repeat_bounds() then
-            return
-        end
-        return
-    end
-
-    if now_ms >= state.repeat_end_ms then
-        mp.commandv("seek", format_seconds(state.repeat_start_ms / 1000), "absolute+exact")
-    end
-end
-
-local function on_sub_text_change(_, value)
-    local new_text = tostring(value or "")
-    local previous_text = state.last_observed_sub_text or ""
-    state.last_observed_sub_text = new_text
-
-    if state.playback_mode == "repeat" then
-        if new_text ~= "" and previous_text ~= new_text then
-            snapshot_current_repeat_bounds()
-        end
-        return
-    end
-
-    if state.playback_mode == "pause-after" then
-        if previous_text ~= "" and new_text == "" and state.pause_after_armed then
-            state.pause_after_armed = false
-            mp.set_property_native("pause", true)
-        end
-        return
-    end
-
-    if state.playback_mode == "subs-only" then
-        if previous_text ~= "" and new_text == "" then
-            mp.commandv("sub-seek", "1")
-        end
-        return
-    end
-end
-
-local function on_pause_change(_, value)
-    if state.playback_mode ~= "pause-after" then
-        return
-    end
-
-    local paused = value == true or value == "yes"
-    if not paused then
-        state.pause_after_armed = true
-    end
-end
-
-local function attach_playback_mode_observers()
-    if state.playback_mode_observers_active then
-        return
-    end
-    state.playback_mode_observers_active = true
-    state.last_observed_sub_text = tostring(mp.get_property("sub-text", "") or "")
-    mp.observe_property("sub-text", "string", on_sub_text_change)
-    mp.observe_property("pause", "bool", on_pause_change)
-end
-
-local function start_repeat_timer()
-    if state.repeat_timer ~= nil then
-        return
-    end
-    state.repeat_timer = mp.add_periodic_timer(0.1, repeat_line_tick)
-end
-
-local function stop_repeat_timer()
-    if state.repeat_timer ~= nil then
-        state.repeat_timer:kill()
-        state.repeat_timer = nil
-    end
-end
-
-apply_playback_mode = function(mode, opts_in)
-    opts_in = opts_in or {}
-    local valid = mode == "off" or mode == "repeat" or mode == "pause-after" or mode == "subs-only"
-    if not valid then
-        mode = "off"
-    end
-
-    local previous_mode = state.playback_mode
-    state.playback_mode = mode
-
-    attach_playback_mode_observers()
-
-    if mode == "repeat" then
-        snapshot_current_repeat_bounds()
-        start_repeat_timer()
-    else
-        stop_repeat_timer()
-        state.repeat_start_ms = nil
-        state.repeat_end_ms = nil
-    end
-
-    if mode == "pause-after" then
-        state.pause_after_armed = not (mp.get_property_native("pause") == true)
-    else
-        state.pause_after_armed = false
-    end
-
-    if mode ~= "off" and previous_mode ~= mode then
-        local label_by_mode = {
-            ["repeat"] = "Repeat line",
-            ["pause-after"] = "Pause after line",
-            ["subs-only"] = "Subs only",
-        }
-        mp.osd_message("SentenceMiner: " .. (label_by_mode[mode] or mode) .. " mode", 2)
-    elseif mode == "off" and previous_mode ~= "off" then
-        mp.osd_message("SentenceMiner: playback mode off", 2)
-    end
-
-    if not opts_in.skip_post and state.helper_ready then
-        post_playback_mode_state()
-    end
-end
-
-local function toggle_playback_mode(mode)
-    if state.playback_mode == mode then
-        apply_playback_mode("off")
-    else
-        apply_playback_mode(mode)
-    end
-end
-
 local function sync_player_command()
     if not is_sentence_miner_enabled() then
         return
@@ -1192,18 +1001,8 @@ local function sync_player_command()
         return
     end
 
-    if response == JSON_NULL or type(response) ~= "table" then
-        return
-    end
-
-    if response.type == "seek" and response.startMs ~= nil then
+    if response ~= JSON_NULL and response.type == "seek" and response.startMs ~= nil then
         mp.commandv("seek", format_seconds((tonumber(response.startMs) or 0) / 1000), "absolute+exact")
-        return
-    end
-
-    if response.type == "set-playback-mode" and response.mode ~= nil then
-        apply_playback_mode(tostring(response.mode), { skip_post = true })
-        return
     end
 end
 
@@ -1407,18 +1206,6 @@ end)
 
 mp.register_script_message("mine", mine_current)
 mp.register_script_message("toggle-enabled", toggle_sentence_miner_enabled)
-mp.register_script_message("playback-mode", function(mode)
-    apply_playback_mode(tostring(mode or "off"))
-end)
-mp.register_script_message("toggle-repeat-line", function()
-    toggle_playback_mode("repeat")
-end)
-mp.register_script_message("toggle-pause-after-line", function()
-    toggle_playback_mode("pause-after")
-end)
-mp.register_script_message("toggle-subs-only", function()
-    toggle_playback_mode("subs-only")
-end)
 
 if is_truthy(opts.bind_default_key) then
     mp.add_forced_key_binding(opts.default_key, "sentenceminer-mine", mine_current)
@@ -1426,22 +1213,4 @@ end
 
 if is_truthy(opts.bind_toggle_key) then
     mp.add_forced_key_binding(opts.toggle_key, "sentenceminer-toggle-enabled", toggle_sentence_miner_enabled)
-end
-
-if is_truthy(opts.bind_repeat_line_key) and opts.repeat_line_key ~= "" then
-    mp.add_forced_key_binding(opts.repeat_line_key, "sentenceminer-toggle-repeat-line", function()
-        toggle_playback_mode("repeat")
-    end)
-end
-
-if is_truthy(opts.bind_pause_after_line_key) and opts.pause_after_line_key ~= "" then
-    mp.add_forced_key_binding(opts.pause_after_line_key, "sentenceminer-toggle-pause-after-line", function()
-        toggle_playback_mode("pause-after")
-    end)
-end
-
-if is_truthy(opts.bind_subs_only_key) and opts.subs_only_key ~= "" then
-    mp.add_forced_key_binding(opts.subs_only_key, "sentenceminer-toggle-subs-only", function()
-        toggle_playback_mode("subs-only")
-    end)
 end

@@ -32,7 +32,6 @@ import type {
   HistoryMineBatchPayload,
   HistoryMineRequest,
   MinePayload,
-  PlaybackMode,
   ServerConfig,
   SessionPayload,
   SettingsOptions,
@@ -40,7 +39,6 @@ import type {
   SubtitleEventPayload,
   SubtitleTrackPayload,
 } from './types.ts';
-import { PLAYBACK_MODES } from './types.ts';
 import { payloadKey } from './utils.ts';
 import { WebSocketHub } from './ws.ts';
 
@@ -322,30 +320,6 @@ export async function routeRequest(
     return;
   }
 
-  if (method === 'POST' && url.pathname === '/api/playback-mode') {
-    const payload = parsePlaybackModePayload(await readJsonBody<unknown>(request));
-    assertActiveSession(context.transcriptStore, payload.sessionId);
-    context.playerCommandStore.setPlaybackMode(payload.sessionId, payload.mode);
-    context.transcriptStore.setPlaybackMode(payload.sessionId, payload.mode);
-    broadcastState(context.config, context.transcriptStore, context.sockets);
-    respondJson(response, 200, {
-      success: true,
-      message: `Playback mode set to ${payload.mode}.`,
-    });
-    return;
-  }
-
-  if (method === 'POST' && url.pathname === '/api/playback-mode-state') {
-    const payload = parsePlaybackModePayload(await readJsonBody<unknown>(request));
-    context.transcriptStore.setPlaybackMode(payload.sessionId, payload.mode);
-    broadcastState(context.config, context.transcriptStore, context.sockets);
-    respondJson(response, 200, {
-      success: true,
-      message: 'Playback mode state recorded.',
-    });
-    return;
-  }
-
   if (method === 'GET' && url.pathname === '/api/player-command') {
     const sessionId = url.searchParams.get('sessionId');
     if (!sessionId) {
@@ -587,10 +561,6 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
   const capture = getRecord(root.capture, 'capture');
   const runtime = getRecord(root.runtime, 'runtime');
   const appearance = getRecord(root.appearance, 'appearance');
-  const playback = getRecord(root.playback, 'playback');
-  const playbackRepeatLine = getRecord(playback.repeatLine, 'playback.repeatLine');
-  const playbackPauseAfterLine = getRecord(playback.pauseAfterLine, 'playback.pauseAfterLine');
-  const playbackSubsOnly = getRecord(playback.subsOnly, 'playback.subsOnly');
 
   return {
     anki: {
@@ -626,20 +596,6 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
     appearance: {
       subtitleCardFontFamily: getString(appearance.subtitleCardFontFamily, 'appearance.subtitleCardFontFamily'),
       subtitleCardFontSizePx: getInteger(appearance.subtitleCardFontSizePx, 'appearance.subtitleCardFontSizePx'),
-    },
-    playback: {
-      repeatLine: {
-        bind: getBoolean(playbackRepeatLine.bind, 'playback.repeatLine.bind'),
-        key: getString(playbackRepeatLine.key, 'playback.repeatLine.key'),
-      },
-      pauseAfterLine: {
-        bind: getBoolean(playbackPauseAfterLine.bind, 'playback.pauseAfterLine.bind'),
-        key: getString(playbackPauseAfterLine.key, 'playback.pauseAfterLine.key'),
-      },
-      subsOnly: {
-        bind: getBoolean(playbackSubsOnly.bind, 'playback.subsOnly.bind'),
-        key: getString(playbackSubsOnly.key, 'playback.subsOnly.key'),
-      },
     },
   };
 }
@@ -749,17 +705,6 @@ function parseHistoryMineRequestPayload(payload: unknown): HistoryMineRequest {
   }
 
   return parseSubtitleEventPayload(payload, 'history mine payload');
-}
-
-function parsePlaybackModePayload(payload: unknown): { sessionId: string; mode: PlaybackMode } {
-  const root = getRecord(payload, 'playback mode payload');
-  const sessionId = getString(root.sessionId, 'playback mode payload.sessionId', { allowEmpty: false });
-  const mode = getString(root.mode, 'playback mode payload.mode', { allowEmpty: false });
-  if (!(PLAYBACK_MODES as readonly string[]).includes(mode)) {
-    throw new HttpError(400, `playback mode payload.mode must be one of ${PLAYBACK_MODES.join(', ')}.`);
-  }
-
-  return { sessionId, mode: mode as PlaybackMode };
 }
 
 function parseSessionPayload(payload: unknown): SessionPayload {

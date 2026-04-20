@@ -15,27 +15,6 @@
           <h1>Happy Mining!</h1>
         </div>
         <div class="hero-actions">
-          <div class="playback-modes" role="group" aria-label="Playback modes">
-            <button id="playback-mode-repeat" class="playback-mode-button" type="button" aria-pressed="false" title="Repeat current line (loop)">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M17 1l4 4-4 4V6H7a3 3 0 0 0-3 3v2H2V9a5 5 0 0 1 5-5h10V1zM7 23l-4-4 4-4v3h10a3 3 0 0 0 3-3v-2h2v2a5 5 0 0 1-5 5H7v3z" fill="currentColor"></path>
-              </svg>
-              <span class="playback-mode-label">Repeat line</span>
-            </button>
-            <button id="playback-mode-pause-after" class="playback-mode-button" type="button" aria-pressed="false" title="Pause after every line">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="6" y="5" width="4" height="14" fill="currentColor"></rect>
-                <rect x="14" y="5" width="4" height="14" fill="currentColor"></rect>
-              </svg>
-              <span class="playback-mode-label">Pause per line</span>
-            </button>
-            <button id="playback-mode-subs-only" class="playback-mode-button" type="button" aria-pressed="false" title="Skip gaps between subtitles">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 5l8 7-8 7V5zm9 0l8 7-8 7V5z" fill="currentColor"></path>
-              </svg>
-              <span class="playback-mode-label">Subs only</span>
-            </button>
-          </div>
           <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle light/dark mode">
             <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="5" fill="currentColor"></circle>
@@ -257,39 +236,6 @@
                   step="1"
                   placeholder="Default"
                 >
-              </label>
-            </div>
-          </section>
-
-          <section class="settings-section">
-            <div class="section-heading">
-              <h3>Playback</h3>
-              <p class="muted">Keyboard shortcuts for playback modes. Changes take effect on the next mpv launch.</p>
-            </div>
-            <div class="settings-grid">
-              <label class="field field-checkbox">
-                <input type="checkbox" name="playback.repeatLine.bind" id="settings-playback-repeat-line-bind">
-                <span>Bind repeat line</span>
-              </label>
-              <label class="field">
-                <span>Repeat line key</span>
-                <input type="text" name="playback.repeatLine.key" id="settings-playback-repeat-line-key" autocomplete="off" placeholder="Ctrl+Shift+1">
-              </label>
-              <label class="field field-checkbox">
-                <input type="checkbox" name="playback.pauseAfterLine.bind" id="settings-playback-pause-after-line-bind">
-                <span>Bind pause after line</span>
-              </label>
-              <label class="field">
-                <span>Pause after line key</span>
-                <input type="text" name="playback.pauseAfterLine.key" id="settings-playback-pause-after-line-key" autocomplete="off" placeholder="Ctrl+Shift+2">
-              </label>
-              <label class="field field-checkbox">
-                <input type="checkbox" name="playback.subsOnly.bind" id="settings-playback-subs-only-bind">
-                <span>Bind subs only</span>
-              </label>
-              <label class="field">
-                <span>Subs only key</span>
-                <input type="text" name="playback.subsOnly.key" id="settings-playback-subs-only-key" autocomplete="off" placeholder="Ctrl+Shift+3">
               </label>
             </div>
           </section>

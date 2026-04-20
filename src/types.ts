@@ -1,13 +1,6 @@
 export type SessionAction = 'start' | 'stop';
 export type TranscriptStatus = 'loading' | 'ready' | 'unavailable' | 'error';
 export type SubtitleTrackKind = 'external' | 'embedded' | 'none';
-export type PlaybackMode = 'off' | 'repeat' | 'pause-after' | 'subs-only';
-export const PLAYBACK_MODES: readonly PlaybackMode[] = ['off', 'repeat', 'pause-after', 'subs-only'];
-
-export interface PlaybackModeStatePayload {
-  sessionId: string;
-  mode: PlaybackMode;
-}
 
 export interface SubtitleTrackPayload {
   sessionId: string;
@@ -96,17 +89,6 @@ export interface AppearanceConfig {
   subtitleCardFontSizePx: number;
 }
 
-export interface PlaybackShortcutConfig {
-  bind: boolean;
-  key: string;
-}
-
-export interface PlaybackConfig {
-  repeatLine: PlaybackShortcutConfig;
-  pauseAfterLine: PlaybackShortcutConfig;
-  subsOnly: PlaybackShortcutConfig;
-}
-
 export interface ServerConfig {
   host: string;
   port: number;
@@ -118,7 +100,6 @@ export interface AppConfig {
   capture: CaptureConfig;
   runtime: RuntimeConfig;
   appearance: AppearanceConfig;
-  playback: PlaybackConfig;
 }
 
 export interface EditableAnkiSettings {
@@ -139,7 +120,6 @@ export interface EditableSettings {
   capture: CaptureConfig;
   runtime: EditableRuntimeSettings;
   appearance: AppearanceConfig;
-  playback: PlaybackConfig;
 }
 
 export interface SettingsOptions {
@@ -186,7 +166,6 @@ export interface TranscriptState {
   currentCueId: string | null;
   transcriptStatus: TranscriptStatus;
   transcriptMessage: string | null;
-  playbackMode: PlaybackMode;
 }
 
 export interface MineResult {

@@ -1,19 +1,12 @@
-import type { PlaybackMode, SubtitleEventPayload } from './types.ts';
+import type { SubtitleEventPayload } from './types.ts';
 
 export interface SeekPlayerCommand {
   type: 'seek';
   startMs: number;
 }
 
-export interface SetPlaybackModePlayerCommand {
-  type: 'set-playback-mode';
-  mode: PlaybackMode;
-}
-
-export type PlayerCommand = SeekPlayerCommand | SetPlaybackModePlayerCommand;
-
 export class PlayerCommandStore {
-  #commands = new Map<string, PlayerCommand>();
+  #commands = new Map<string, SeekPlayerCommand>();
 
   queueSeek(payload: SubtitleEventPayload): SeekPlayerCommand {
     if (payload.startMs == null) {
@@ -29,17 +22,7 @@ export class PlayerCommandStore {
     return { ...command };
   }
 
-  setPlaybackMode(sessionId: string, mode: PlaybackMode): SetPlaybackModePlayerCommand {
-    const command: SetPlaybackModePlayerCommand = {
-      type: 'set-playback-mode',
-      mode,
-    };
-
-    this.#commands.set(sessionId, command);
-    return { ...command };
-  }
-
-  claim(sessionId: string): PlayerCommand | null {
+  claim(sessionId: string): SeekPlayerCommand | null {
     const command = this.#commands.get(sessionId);
     if (!command) {
       return null;

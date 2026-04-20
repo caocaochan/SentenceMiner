@@ -114,22 +114,7 @@ const elements = {
   settingsAppearanceSubtitleCardFontFamilyCustomField: document.getElementById('settings-appearance-subtitle-card-font-family-custom-field'),
   settingsAppearanceSubtitleCardFontFamilyCustom: document.getElementById('settings-appearance-subtitle-card-font-family-custom'),
   settingsAppearanceSubtitleCardFontSizePx: document.getElementById('settings-appearance-subtitle-card-font-size-px'),
-  settingsPlaybackRepeatLineBind: document.getElementById('settings-playback-repeat-line-bind'),
-  settingsPlaybackRepeatLineKey: document.getElementById('settings-playback-repeat-line-key'),
-  settingsPlaybackPauseAfterLineBind: document.getElementById('settings-playback-pause-after-line-bind'),
-  settingsPlaybackPauseAfterLineKey: document.getElementById('settings-playback-pause-after-line-key'),
-  settingsPlaybackSubsOnlyBind: document.getElementById('settings-playback-subs-only-bind'),
-  settingsPlaybackSubsOnlyKey: document.getElementById('settings-playback-subs-only-key'),
-  playbackModeRepeat: document.getElementById('playback-mode-repeat'),
-  playbackModePauseAfter: document.getElementById('playback-mode-pause-after'),
-  playbackModeSubsOnly: document.getElementById('playback-mode-subs-only'),
 };
-
-const PLAYBACK_MODE_BUTTONS = [
-  { mode: 'repeat', element: elements.playbackModeRepeat },
-  { mode: 'pause-after', element: elements.playbackModePauseAfter },
-  { mode: 'subs-only', element: elements.playbackModeSubsOnly },
-];
 
 elements.themeToggle.addEventListener('click', () => {
   const current = document.documentElement.getAttribute('data-theme');
@@ -142,11 +127,6 @@ elements.settingsButton.addEventListener('click', () => {
 });
 elements.historyMineSelected.addEventListener('click', () => {
   void runMineSelectedAction();
-});
-PLAYBACK_MODE_BUTTONS.forEach(({ mode, element }) => {
-  element.addEventListener('click', () => {
-    void requestPlaybackMode(mode);
-  });
 });
 elements.settingsClose.addEventListener('click', closeSettingsModal);
 elements.settingsCancel.addEventListener('click', closeSettingsModal);
@@ -269,53 +249,9 @@ function startStatePolling() {
 function render() {
   applyAppearanceSettings();
   renderTranscript();
-  renderPlaybackModes();
   renderSettingsUi();
   renderToasts();
   syncStickyLayout();
-}
-
-function renderPlaybackModes() {
-  const activeMode = state.app?.state?.playbackMode ?? 'off';
-  const hasSession = Boolean(state.app?.state?.session);
-  PLAYBACK_MODE_BUTTONS.forEach(({ mode, element }) => {
-    if (!element) {
-      return;
-    }
-    const isActive = activeMode === mode;
-    element.setAttribute('aria-pressed', String(isActive));
-    element.classList.toggle('playback-mode-button-active', isActive);
-    element.disabled = !hasSession || state.connection !== 'live';
-  });
-}
-
-async function requestPlaybackMode(mode) {
-  const sessionId = state.app?.state?.session?.sessionId;
-  if (!sessionId) {
-    showToast('Start playback in mpv to use playback modes.', 'error');
-    return;
-  }
-
-  const activeMode = state.app?.state?.playbackMode ?? 'off';
-  const nextMode = activeMode === mode ? 'off' : mode;
-
-  try {
-    const response = await fetch('/api/playback-mode', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ sessionId, mode: nextMode }),
-    });
-
-    const payload = await response.json();
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    showToast(message, 'error');
-  }
 }
 
 function renderTranscript() {
@@ -671,12 +607,6 @@ function hydrateSettingsForm() {
   elements.settingsAppearanceSubtitleCardFontSizePx.value = settings.appearance.subtitleCardFontSizePx
     ? String(settings.appearance.subtitleCardFontSizePx)
     : '';
-  elements.settingsPlaybackRepeatLineBind.checked = Boolean(settings.playback?.repeatLine?.bind);
-  elements.settingsPlaybackRepeatLineKey.value = settings.playback?.repeatLine?.key ?? '';
-  elements.settingsPlaybackPauseAfterLineBind.checked = Boolean(settings.playback?.pauseAfterLine?.bind);
-  elements.settingsPlaybackPauseAfterLineKey.value = settings.playback?.pauseAfterLine?.key ?? '';
-  elements.settingsPlaybackSubsOnlyBind.checked = Boolean(settings.playback?.subsOnly?.bind);
-  elements.settingsPlaybackSubsOnlyKey.value = settings.playback?.subsOnly?.key ?? '';
 }
 
 async function refreshSettingsOptions(noteType, deck) {
@@ -835,20 +765,6 @@ function collectSettingsPayload() {
         elements.settingsAppearanceSubtitleCardFontFamilyCustom.value,
       ),
       subtitleCardFontSizePx: Math.max(0, Math.floor(Number(elements.settingsAppearanceSubtitleCardFontSizePx.value) || 0)),
-    },
-    playback: {
-      repeatLine: {
-        bind: elements.settingsPlaybackRepeatLineBind.checked,
-        key: elements.settingsPlaybackRepeatLineKey.value.trim(),
-      },
-      pauseAfterLine: {
-        bind: elements.settingsPlaybackPauseAfterLineBind.checked,
-        key: elements.settingsPlaybackPauseAfterLineKey.value.trim(),
-      },
-      subsOnly: {
-        bind: elements.settingsPlaybackSubsOnlyBind.checked,
-        key: elements.settingsPlaybackSubsOnlyKey.value.trim(),
-      },
     },
   };
 }

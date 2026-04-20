@@ -1,5 +1,4 @@
 import type {
-  PlaybackMode,
   SessionPayload,
   SubtitleEventPayload,
   SubtitleTrackPayload,
@@ -17,7 +16,6 @@ export class TranscriptStore {
     currentCueId: null,
     transcriptStatus: 'unavailable',
     transcriptMessage: 'No active subtitle track is selected.',
-    playbackMode: 'off',
   };
 
   startSession(payload: SessionPayload): TranscriptState {
@@ -35,7 +33,6 @@ export class TranscriptStore {
       currentCueId: null,
       transcriptStatus: 'loading',
       transcriptMessage: 'Loading active subtitle track…',
-      playbackMode: 'off',
     };
 
     if (!payload.subtitleTrack || payload.subtitleTrack.kind === 'none') {
@@ -58,18 +55,8 @@ export class TranscriptStore {
       currentCueId: null,
       transcriptStatus: 'unavailable',
       transcriptMessage: 'No active subtitle track is selected.',
-      playbackMode: 'off',
     };
 
-    return this.getState();
-  }
-
-  setPlaybackMode(sessionId: string, mode: PlaybackMode): TranscriptState {
-    if (!this.#state.session || this.#state.session.sessionId !== sessionId) {
-      return this.getState();
-    }
-
-    this.#state.playbackMode = mode;
     return this.getState();
   }
 
@@ -177,7 +164,6 @@ export class TranscriptStore {
       currentCueId: this.#state.currentCueId,
       transcriptStatus: this.#state.transcriptStatus,
       transcriptMessage: this.#state.transcriptMessage,
-      playbackMode: this.#state.playbackMode,
     };
   }
 
