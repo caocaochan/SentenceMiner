@@ -36,9 +36,17 @@ const state = {
   settingsRequestId: 0,
   renderedTranscriptSignature: null,
   renderedCueElements: new Map(),
-  autoScrollFrameId: null,
+  autoScrollLoopId: null,
+  autoScrollTargetY: null,
+  autoScrollLastTimestamp: null,
+  autoScrollPausedByUser: false,
+  autoScrollListenersAttached: false,
   lastScrolledCueId: null,
 };
+
+const AUTO_SCROLL_TIME_CONSTANT_S = 0.25;
+const AUTO_SCROLL_CONVERGENCE_PX = 0.5;
+const AUTO_SCROLL_MAX_FRAME_DT_S = 0.1;
 const STATE_POLL_INTERVAL_MS = 2000;
 const SETTINGS_FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
@@ -765,22 +773,31 @@ function syncCurrentCueScroll(currentCueId) {
     return;
   }
 
-  if (state.autoScrollFrameId !== null) {
-    window.cancelAnimationFrame(state.autoScrollFrameId);
+  ensureAutoScrollListeners();
+  state.autoScrollPausedByUser = false;
+
+  const targetScrollTop = computeFollowTargetForItem(controls.item);
+  if (targetScrollTop == null) {
+    return;
   }
 
-  state.autoScrollFrameId = window.requestAnimationFrame(() => {
-    state.autoScrollFrameId = null;
-    centerTranscriptItemInViewport(controls.item);
-  });
+  if (prefersReducedMotion()) {
+    stopAutoScrollLoop();
+    state.autoScrollTargetY = null;
+    window.scrollTo(0, targetScrollTop);
+    return;
+  }
+
+  state.autoScrollTargetY = targetScrollTop;
+  startAutoScrollLoop();
 }
 
-function centerTranscriptItemInViewport(item) {
+function computeFollowTargetForItem(item) {
   const rect = item.getBoundingClientRect();
   const styles = window.getComputedStyle(document.documentElement);
   const stickyHeaderHeight = parseCssLength(styles.getPropertyValue('--hero-sticky-height'));
   const stickyTopGap = parseCssLength(styles.getPropertyValue('--sticky-top-gap'));
-  const targetScrollTop = computeTranscriptFollowScrollTarget({
+  return computeTranscriptFollowScrollTarget({
     itemTop: rect.top,
     itemBottom: rect.bottom,
     viewportHeight: window.innerHeight,
@@ -789,15 +806,82 @@ function centerTranscriptItemInViewport(item) {
     stickyHeaderHeight,
     stickyTopGap,
   });
+}
 
-  if (targetScrollTop == null) {
+function startAutoScrollLoop() {
+  if (state.autoScrollLoopId !== null) {
+    return;
+  }
+  state.autoScrollLastTimestamp = null;
+  state.autoScrollLoopId = window.requestAnimationFrame(stepAutoScrollLoop);
+}
+
+function stopAutoScrollLoop() {
+  if (state.autoScrollLoopId !== null) {
+    window.cancelAnimationFrame(state.autoScrollLoopId);
+    state.autoScrollLoopId = null;
+  }
+  state.autoScrollLastTimestamp = null;
+}
+
+function stepAutoScrollLoop(timestamp) {
+  state.autoScrollLoopId = null;
+
+  if (state.autoScrollPausedByUser || state.autoScrollTargetY == null) {
+    state.autoScrollLastTimestamp = null;
     return;
   }
 
-  window.scrollTo({
-    top: targetScrollTop,
-    behavior: 'smooth',
+  const previousTimestamp = state.autoScrollLastTimestamp;
+  state.autoScrollLastTimestamp = timestamp;
+
+  if (previousTimestamp == null) {
+    state.autoScrollLoopId = window.requestAnimationFrame(stepAutoScrollLoop);
+    return;
+  }
+
+  const dtSeconds = Math.min((timestamp - previousTimestamp) / 1000, AUTO_SCROLL_MAX_FRAME_DT_S);
+  const currentY = window.scrollY;
+  const target = state.autoScrollTargetY;
+  const delta = target - currentY;
+
+  if (Math.abs(delta) < AUTO_SCROLL_CONVERGENCE_PX) {
+    window.scrollTo(0, target);
+    state.autoScrollTargetY = null;
+    state.autoScrollLastTimestamp = null;
+    return;
+  }
+
+  const alpha = 1 - Math.exp(-dtSeconds / AUTO_SCROLL_TIME_CONSTANT_S);
+  window.scrollTo(0, currentY + delta * alpha);
+  state.autoScrollLoopId = window.requestAnimationFrame(stepAutoScrollLoop);
+}
+
+function ensureAutoScrollListeners() {
+  if (state.autoScrollListenersAttached) {
+    return;
+  }
+  state.autoScrollListenersAttached = true;
+
+  const handleUserScrollIntent = () => {
+    state.autoScrollPausedByUser = true;
+    state.autoScrollTargetY = null;
+    stopAutoScrollLoop();
+  };
+
+  window.addEventListener('wheel', handleUserScrollIntent, { passive: true });
+  window.addEventListener('touchstart', handleUserScrollIntent, { passive: true });
+  window.addEventListener('keydown', (event) => {
+    const scrollKeys = ['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' ', 'Spacebar'];
+    if (scrollKeys.includes(event.key)) {
+      handleUserScrollIntent();
+    }
   });
+}
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function parseCssLength(value) {
