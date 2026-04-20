@@ -86,6 +86,7 @@ export interface RuntimeConfig {
 
 export interface AppearanceConfig {
   subtitleCardFontFamily: string;
+  subtitleCardFontSizePx: number;
 }
 
 export interface ServerConfig {

@@ -150,6 +150,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
       'capture_audio_pre_padding_ms=400',
       'capture_image_include_subtitles=no',
       'subtitle_card_font_family=Atkinson Hyperlegible, sans-serif',
+      'subtitle_card_font_size_px=22',
     ].join('\n'),
     'utf8',
   );
@@ -169,6 +170,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.capture.audioPrePaddingMs, 400);
   assert.equal(config.capture.imageIncludeSubtitles, false);
   assert.equal(config.appearance.subtitleCardFontFamily, 'Atkinson Hyperlegible, sans-serif');
+  assert.equal(config.appearance.subtitleCardFontSizePx, 22);
   assert.equal(config.server.host, '127.0.0.1');
 });
 
@@ -214,6 +216,7 @@ test('mergeEditableSettingsIntoConfig appends missing managed keys using stable 
   assert.match(merged, /capture_image=yes/);
   assert.match(merged, /capture_image_include_subtitles=yes/);
   assert.match(merged, /subtitle_card_font_family=/);
+  assert.match(merged, /subtitle_card_font_size_px=0/);
   assert.match(merged, /capture_image_max_width=1600/);
 });
 
@@ -236,6 +239,7 @@ test('saveEditableSettings writes updated settings to sentenceminer.conf', async
   settings.runtime.captureAudio = false;
   settings.capture.imageIncludeSubtitles = false;
   settings.appearance.subtitleCardFontFamily = 'Noto Sans';
+  settings.appearance.subtitleCardFontSizePx = 18;
 
   await saveEditableSettings(configPath, settings);
 
@@ -244,4 +248,5 @@ test('saveEditableSettings writes updated settings to sentenceminer.conf', async
   assert.match(written, /capture_audio=no/);
   assert.match(written, /capture_image_include_subtitles=no/);
   assert.match(written, /subtitle_card_font_family=Noto Sans/);
+  assert.match(written, /subtitle_card_font_size_px=18/);
 });
