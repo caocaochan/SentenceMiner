@@ -21,6 +21,7 @@ import {
   resolveConfigPath,
   saveEditableSettings,
 } from './config.ts';
+import { listInstalledFonts } from './fonts.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { PlayerCommandStore } from './player-command-store.ts';
 import { loadSubtitleTranscript } from './subtitle-transcript.ts';
@@ -50,6 +51,7 @@ export interface ServerContext {
   transcriptStore: TranscriptStore;
   playerCommandStore: PlayerCommandStore;
   sockets: WebSocketHub;
+  listInstalledFonts?: () => Promise<string[]>;
   requestShutdown?: (reason: string) => void;
 }
 
@@ -218,6 +220,7 @@ export async function routeRequest(
         context.config,
         url.searchParams.get('deck')?.trim() || context.config.anki.deck,
         url.searchParams.get('noteType')?.trim() || context.config.anki.noteType,
+        context.listInstalledFonts,
       ),
     });
     return;
@@ -364,6 +367,11 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/font-picker.js') {
+    await serveStatic(response, 'font-picker.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/styles.css') {
     await serveStatic(response, 'styles.css', 'text/css; charset=utf-8');
     return;
@@ -416,8 +424,13 @@ async function getSettingsOptions(
   config: AppConfig,
   requestedDeck: string,
   requestedNoteType: string,
+  listFonts: () => Promise<string[]> = listInstalledFonts,
 ): Promise<SettingsOptions> {
-  const [decks, noteTypes] = await Promise.all([listDeckNames(config.anki), listModelNames(config.anki)]);
+  const [decks, noteTypes, fonts] = await Promise.all([
+    listDeckNames(config.anki),
+    listModelNames(config.anki),
+    listFonts(),
+  ]);
   const selectedDeck = decks.includes(requestedDeck) ? requestedDeck : (decks[0] ?? '');
   const selectedNoteType = noteTypes.includes(requestedNoteType) ? requestedNoteType : (noteTypes[0] ?? '');
   const noteFields = selectedNoteType ? await listModelFieldNames(config.anki, selectedNoteType) : [];
@@ -426,6 +439,7 @@ async function getSettingsOptions(
     decks,
     noteTypes,
     noteFields,
+    fonts,
     selectedDeck,
     selectedNoteType,
   };

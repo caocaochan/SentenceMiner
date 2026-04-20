@@ -211,12 +211,19 @@
             <div class="settings-grid">
               <label class="field">
                 <span>Subtitle card font family</span>
+                <select
+                  name="appearance.subtitleCardFontFamilySelect"
+                  id="settings-appearance-subtitle-card-font-family-select"
+                ></select>
+              </label>
+              <label class="field field-full" id="settings-appearance-subtitle-card-font-family-custom-field" hidden>
+                <span>Custom CSS font-family value</span>
                 <input
                   type="text"
                   name="appearance.subtitleCardFontFamily"
-                  id="settings-appearance-subtitle-card-font-family"
+                  id="settings-appearance-subtitle-card-font-family-custom"
                   autocomplete="off"
-                  placeholder="Default app font"
+                  placeholder="Example: Noto Sans JP, sans-serif"
                 >
               </label>
               <label class="field">

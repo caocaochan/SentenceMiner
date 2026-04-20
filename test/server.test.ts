@@ -37,6 +37,7 @@ test('GET /api/settings/options returns live Anki deck and note type options', a
   assert.deepEqual(payload.options.decks, ['Anime', 'Mining']);
   assert.deepEqual(payload.options.noteTypes, ['Sentence', 'Vocab']);
   assert.deepEqual(payload.options.noteFields, ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
+  assert.deepEqual(payload.options.fonts, ['Arial', 'Noto Sans JP']);
   assert.equal(payload.options.selectedDeck, 'Anime');
   assert.equal(payload.options.selectedNoteType, 'Sentence');
 });
@@ -53,6 +54,7 @@ test('GET /api/settings/options falls back to live Anki defaults when configured
   assert.deepEqual(payload.options.decks, ['Anime', 'Mining']);
   assert.deepEqual(payload.options.noteTypes, ['Sentence', 'Vocab']);
   assert.deepEqual(payload.options.noteFields, ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
+  assert.deepEqual(payload.options.fonts, ['Arial', 'Noto Sans JP']);
   assert.equal(payload.options.selectedDeck, 'Anime');
   assert.equal(payload.options.selectedNoteType, 'Sentence');
 });
@@ -776,6 +778,7 @@ async function createServerHarness(t: TestContext) {
 
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${ankiAddress.port}`;
+  const installedFonts = ['Arial', 'Noto Sans JP'];
   const shutdownReasons: string[] = [];
   const transcriptStore = new TranscriptStore();
 
@@ -786,6 +789,7 @@ async function createServerHarness(t: TestContext) {
       transcriptStore,
       playerCommandStore: new PlayerCommandStore(),
       sockets: new WebSocketHub(),
+      listInstalledFonts: async () => installedFonts,
       requestShutdown: (reason) => {
         shutdownReasons.push(reason);
       },

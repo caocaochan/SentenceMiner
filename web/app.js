@@ -15,6 +15,11 @@ import {
   buildTranscriptStatusLabel,
   resolveThemePreference,
 } from './ui-state.js';
+import {
+  CUSTOM_FONT_OPTION_VALUE,
+  resolveFontPickerState,
+  resolveFontSettingValue,
+} from './font-picker.js';
 
 const state = {
   connection: 'connecting',
@@ -27,6 +32,7 @@ const state = {
     decks: [],
     noteTypes: [],
     noteFields: [],
+    fonts: [],
   },
   settingsOptionsLoading: false,
   settingsOptionsError: '',
@@ -104,7 +110,9 @@ const elements = {
   settingsCaptureImageMaxHeight: document.getElementById('settings-capture-image-max-height'),
   settingsCaptureImageIncludeSubtitles: document.getElementById('settings-capture-image-include-subtitles'),
   settingsCaptureAdvanced: document.getElementById('settings-capture-advanced'),
-  settingsAppearanceSubtitleCardFontFamily: document.getElementById('settings-appearance-subtitle-card-font-family'),
+  settingsAppearanceSubtitleCardFontFamilySelect: document.getElementById('settings-appearance-subtitle-card-font-family-select'),
+  settingsAppearanceSubtitleCardFontFamilyCustomField: document.getElementById('settings-appearance-subtitle-card-font-family-custom-field'),
+  settingsAppearanceSubtitleCardFontFamilyCustom: document.getElementById('settings-appearance-subtitle-card-font-family-custom'),
   settingsAppearanceSubtitleCardFontSizePx: document.getElementById('settings-appearance-subtitle-card-font-size-px'),
 };
 
@@ -129,6 +137,9 @@ elements.settingsForm.addEventListener('submit', (event) => {
 });
 elements.settingsAnkiNoteType.addEventListener('change', () => {
   void refreshSettingsOptions(elements.settingsAnkiNoteType.value, elements.settingsAnkiDeck.value);
+});
+elements.settingsAppearanceSubtitleCardFontFamilySelect.addEventListener('change', () => {
+  syncSubtitleCardFontCustomInputVisibility();
 });
 document.addEventListener('keydown', handleDocumentKeydown);
 
@@ -297,7 +308,7 @@ function renderSettingsUi() {
   document.body.classList.toggle('modal-open', state.settingsModalOpen);
 
   const optionsStatus = state.settingsOptionsLoading
-    ? 'Loading decks, note types, and note fields from Anki…'
+    ? 'Loading decks, note types, note fields, and installed fonts…'
     : state.settingsOptionsError || 'Settings are saved to sentenceminer.conf and applied immediately.';
 
   elements.settingsOptionsStatus.textContent = optionsStatus;
@@ -592,7 +603,7 @@ function hydrateSettingsForm() {
   elements.settingsCaptureImageMaxWidth.value = String(settings.capture.imageMaxWidth ?? 0);
   elements.settingsCaptureImageMaxHeight.value = String(settings.capture.imageMaxHeight ?? 0);
   elements.settingsCaptureImageIncludeSubtitles.checked = Boolean(settings.capture.imageIncludeSubtitles);
-  elements.settingsAppearanceSubtitleCardFontFamily.value = settings.appearance.subtitleCardFontFamily ?? '';
+  syncSubtitleCardFontPicker(settings.appearance.subtitleCardFontFamily ?? '');
   elements.settingsAppearanceSubtitleCardFontSizePx.value = settings.appearance.subtitleCardFontSizePx
     ? String(settings.appearance.subtitleCardFontSizePx)
     : '';
@@ -627,6 +638,7 @@ async function refreshSettingsOptions(noteType, deck) {
       decks: [],
       noteTypes: [],
       noteFields: [],
+      fonts: [],
       selectedDeck: '',
       selectedNoteType: '',
     };
@@ -659,6 +671,7 @@ async function refreshSettingsOptions(noteType, deck) {
       time: elements.settingsFieldTime.value,
       filename: elements.settingsFieldFilename.value,
     });
+    syncSubtitleCardFontPicker(getCurrentSubtitleCardFontFamilyValue());
   } catch (error) {
     if (requestId !== state.settingsRequestId) {
       return;
@@ -747,7 +760,10 @@ function collectSettingsPayload() {
       captureImage: elements.settingsRuntimeCaptureImage.checked,
     },
     appearance: {
-      subtitleCardFontFamily: elements.settingsAppearanceSubtitleCardFontFamily.value.trim(),
+      subtitleCardFontFamily: resolveFontSettingValue(
+        elements.settingsAppearanceSubtitleCardFontFamilySelect.value,
+        elements.settingsAppearanceSubtitleCardFontFamilyCustom.value,
+      ),
       subtitleCardFontSizePx: Math.max(0, Math.floor(Number(elements.settingsAppearanceSubtitleCardFontSizePx.value) || 0)),
     },
   };
@@ -943,25 +959,79 @@ function populateFieldSelects(noteFields, currentFields) {
   });
 }
 
+function syncSubtitleCardFontPicker(currentValue) {
+  const pickerState = resolveFontPickerState(state.settingsOptions.fonts, currentValue);
+  populateSelect(
+    elements.settingsAppearanceSubtitleCardFontFamilySelect,
+    state.settingsOptions.fonts,
+    pickerState.selectValue,
+    {
+      allowBlank: true,
+      blankLabel: 'Default app font',
+      preserveUnknown: false,
+      extraOptions: [
+        {
+          value: CUSTOM_FONT_OPTION_VALUE,
+          label: 'Custom value',
+        },
+      ],
+    },
+  );
+  elements.settingsAppearanceSubtitleCardFontFamilyCustom.value = pickerState.customValue;
+  syncSubtitleCardFontCustomInputVisibility(pickerState.showCustomInput);
+}
+
+function syncSubtitleCardFontCustomInputVisibility(forceVisible = null) {
+  const showCustomInput =
+    typeof forceVisible === 'boolean'
+      ? forceVisible
+      : elements.settingsAppearanceSubtitleCardFontFamilySelect.value === CUSTOM_FONT_OPTION_VALUE;
+  elements.settingsAppearanceSubtitleCardFontFamilyCustomField.hidden = !showCustomInput;
+}
+
+function getCurrentSubtitleCardFontFamilyValue() {
+  if (!elements.settingsAppearanceSubtitleCardFontFamilySelect.options.length) {
+    return state.app?.config?.settings?.appearance?.subtitleCardFontFamily ?? '';
+  }
+
+  return resolveFontSettingValue(
+    elements.settingsAppearanceSubtitleCardFontFamilySelect.value,
+    elements.settingsAppearanceSubtitleCardFontFamilyCustom.value,
+  );
+}
+
 function populateSelect(select, options, currentValue, config = {}) {
   const values = [...new Set(options.filter(Boolean))];
   if (config.preserveUnknown !== false && currentValue && !values.includes(currentValue)) {
     values.unshift(currentValue);
   }
+  const extraOptions = Array.isArray(config.extraOptions)
+    ? config.extraOptions.filter((option) => option && typeof option.value === 'string')
+    : [];
+  const selectableValues = new Set(values);
 
   select.innerHTML = '';
 
   if (config.allowBlank) {
     select.append(buildOption('', config.blankLabel ?? 'Not set'));
+    selectableValues.add('');
   }
 
   values.forEach((value) => {
     select.append(buildOption(value, value));
   });
+  extraOptions.forEach((option) => {
+    if (selectableValues.has(option.value)) {
+      return;
+    }
 
-  const selectedValue = values.includes(currentValue)
+    select.append(buildOption(option.value, option.label ?? option.value));
+    selectableValues.add(option.value);
+  });
+
+  const selectedValue = selectableValues.has(currentValue)
     ? currentValue
-    : (config.allowBlank ? '' : (values[0] ?? ''));
+    : (config.allowBlank ? '' : (values[0] ?? extraOptions[0]?.value ?? ''));
   select.value = selectedValue;
   return selectedValue;
 }

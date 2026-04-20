@@ -126,6 +126,7 @@ export interface SettingsOptions {
   decks: string[];
   noteTypes: string[];
   noteFields: string[];
+  fonts: string[];
   selectedDeck: string;
   selectedNoteType: string;
 }
