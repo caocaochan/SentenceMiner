@@ -245,6 +245,73 @@ test('TranscriptStore stores unavailable fallback state when transcript loading 
   assert.deepEqual(state.transcript, []);
 });
 
+test('TranscriptStore stopSession preserves a loaded transcript as ended playback', () => {
+  const store = new TranscriptStore();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+  store.setTranscript(buildTrack(), [buildCue('hello', 100)]);
+  store.pushSubtitle({
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    text: 'hello',
+    startMs: 100,
+    endMs: 180,
+    playbackTimeMs: 120,
+  });
+
+  const state = store.stopSession('s1');
+
+  assert.equal(state.session, null);
+  assert.equal(state.currentSubtitle, null);
+  assert.equal(state.currentCueId, null);
+  assert.equal(state.transcriptStatus, 'ready');
+  assert.equal(state.transcriptMessage, 'Playback ended.');
+  assert.deepEqual(
+    state.transcript.map((entry) => entry.text),
+    ['hello'],
+  );
+  assert.equal(state.history.length, 1);
+});
+
+test('TranscriptStore stopSession ignores mismatched session ids', () => {
+  const store = new TranscriptStore();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+  store.setTranscript(buildTrack(), [buildCue('hello', 100)]);
+
+  const state = store.stopSession('other-session');
+
+  assert.equal(state.session?.sessionId, 's1');
+  assert.equal(state.transcriptStatus, 'ready');
+  assert.equal(state.transcript.length, 1);
+});
+
+test('TranscriptStore stopSession keeps empty sessions unavailable', () => {
+  const store = new TranscriptStore();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+
+  const state = store.stopSession('s1');
+
+  assert.equal(state.session, null);
+  assert.deepEqual(state.transcript, []);
+  assert.deepEqual(state.history, []);
+  assert.equal(state.transcriptStatus, 'unavailable');
+  assert.equal(state.transcriptMessage, 'No active subtitle track is selected.');
+});
+
 test('TranscriptStore session reset clears transcript state', () => {
   const store = new TranscriptStore();
   store.startSession({

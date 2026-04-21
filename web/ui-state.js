@@ -63,3 +63,13 @@ export function buildTranscriptEmptyState(transcriptState) {
     message,
   };
 }
+
+export function resolveTranscriptFilePath(transcriptState) {
+  const sessionFilePath = transcriptState?.session?.filePath?.trim() ?? '';
+  if (sessionFilePath) {
+    return sessionFilePath;
+  }
+
+  const entries = transcriptState?.transcript ?? transcriptState?.history ?? [];
+  return entries.find((entry) => entry?.filePath?.trim())?.filePath?.trim() ?? '';
+}

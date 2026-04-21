@@ -54,6 +54,16 @@ test('pending actions only disable the relevant transcript buttons', () => {
   assert.equal(secondUi.selected, true);
 });
 
+test('transcript item UI state disables player/helper actions without an active session', () => {
+  const first = buildCue('cue-1', 'one', 100);
+  const ui = computeTranscriptItemUiState([first], new Set(), new Set(), null, first, new Set(), false);
+
+  assert.equal(ui.goToDisabled, true);
+  assert.equal(ui.mineDisabled, true);
+  assert.equal(ui.checkboxDisabled, true);
+  assert.equal(ui.bookmarked, false);
+});
+
 test('transcript bookmark key ignores session-specific cue identity', () => {
   const first = buildCue('session-1-cue-1', 'same text', 100);
   const second = {

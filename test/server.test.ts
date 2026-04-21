@@ -247,6 +247,43 @@ test('POST /api/session responds before transcript loading finishes', async (t) 
   assert.equal(harness.transcriptStore.getState().transcript[0]?.text, 'loaded later');
 });
 
+test('POST /api/session stop preserves the last transcript in state', async (t) => {
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: async () => ({
+      status: 'ready',
+      transcript: [buildCue('kept after stop', 1000)],
+      message: null,
+    }),
+  });
+
+  await postSession(harness.baseUrl, 'session-1');
+  await flushPromises();
+
+  const stopResponse = await fetch(`${harness.baseUrl}/api/session`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'stop',
+      sessionId: 'session-1',
+    }),
+  });
+  const stopPayload = await stopResponse.json();
+
+  assert.equal(stopResponse.status, 200);
+  assert.equal(stopPayload.success, true);
+  assert.equal(stopPayload.state.session, null);
+  assert.equal(stopPayload.state.transcriptStatus, 'ready');
+  assert.equal(stopPayload.state.transcriptMessage, 'Playback ended.');
+  assert.equal(stopPayload.state.transcript[0]?.text, 'kept after stop');
+
+  const stateResponse = await fetch(`${harness.baseUrl}/api/state`);
+  const statePayload = await stateResponse.json();
+  assert.equal(statePayload.state.session, null);
+  assert.equal(statePayload.state.transcript[0]?.text, 'kept after stop');
+});
+
 test('delayed transcript results cannot overwrite a newer session', async (t) => {
   const first = createDeferred<SubtitleTranscriptResult>();
   const second = createDeferred<SubtitleTranscriptResult>();

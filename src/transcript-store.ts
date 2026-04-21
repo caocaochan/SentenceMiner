@@ -49,6 +49,18 @@ export class TranscriptStore {
       return this.getState();
     }
 
+    if (this.#state.transcript.length > 0 || this.#state.history.length > 0) {
+      this.#state = {
+        ...this.#state,
+        session: null,
+        currentSubtitle: null,
+        currentCueId: null,
+        transcriptStatus: 'ready',
+        transcriptMessage: 'Playback ended.',
+      };
+      return this.getState();
+    }
+
     this.#state = {
       session: null,
       currentSubtitle: null,

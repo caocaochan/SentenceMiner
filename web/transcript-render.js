@@ -65,6 +65,7 @@ export function computeTranscriptItemUiState(
   currentCueId,
   entry,
   bookmarkedKeys = new Set(),
+  actionsEnabled = true,
 ) {
   const entryKey = buildHistoryEntryKey(entry);
   const bookmarkKey = buildTranscriptBookmarkKey(entry);
@@ -75,9 +76,10 @@ export function computeTranscriptItemUiState(
     active: currentCueId === entry.id,
     selected: selectedKeys.has(entryKey),
     bookmarked: bookmarkedKeys.has(bookmarkKey),
-    goToDisabled: pendingActions.has(`go-to:${entryKey}`),
-    mineDisabled: pendingActions.has(`mine:${entryKey}`),
-    checkboxDisabled: !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, !selectedKeys.has(entryKey)),
+    goToDisabled: !actionsEnabled || pendingActions.has(`go-to:${entryKey}`),
+    mineDisabled: !actionsEnabled || pendingActions.has(`mine:${entryKey}`),
+    checkboxDisabled:
+      !actionsEnabled || !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, !selectedKeys.has(entryKey)),
   };
 }
 

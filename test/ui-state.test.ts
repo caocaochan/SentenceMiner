@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildTranscriptEmptyState,
+  resolveTranscriptFilePath,
   resolveThemePreference,
   shouldRefreshSettingsOptions,
   shouldUseFallbackStatePolling,
@@ -53,5 +54,19 @@ test('buildTranscriptEmptyState reflects unavailable transcript status message',
       title: 'No transcript available',
       message: 'Choose a subtitle track in mpv.',
     },
+  );
+});
+
+test('resolveTranscriptFilePath falls back to retained transcript entries', () => {
+  assert.equal(
+    resolveTranscriptFilePath({
+      session: null,
+      transcript: [
+        {
+          filePath: 'episode.mkv',
+        },
+      ],
+    }),
+    'episode.mkv',
   );
 });

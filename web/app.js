@@ -16,6 +16,7 @@ import {
 import {
   buildTranscriptEmptyState,
   buildTranscriptStatusLabel,
+  resolveTranscriptFilePath,
   resolveThemePreference,
   shouldRefreshSettingsOptions,
   shouldUseFallbackStatePolling,
@@ -332,6 +333,7 @@ function renderTranscript() {
     transcriptMessage: '',
   };
   const transcriptEntries = transcriptState.transcript ?? transcriptState.history ?? [];
+  const transcriptActionsEnabled = Boolean(transcriptState.session && state.connection === 'live');
   state.selectedHistoryKeys = reconcileSelectedHistoryKeys(state.selectedHistoryKeys, transcriptEntries);
   const selectedEntries = transcriptEntries.filter((entry) => state.selectedHistoryKeys.has(buildHistoryEntryKey(entry)));
   const bookmarkedEntries = transcriptEntries.filter((entry) =>
@@ -346,7 +348,7 @@ function renderTranscript() {
   elements.connectionPill.textContent =
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
   elements.connectionPill.className = `status-pill ${state.connection === 'live' ? 'status-pill-success' : 'status-pill-muted'}`;
-  const filePath = transcriptState.session?.filePath?.trim() ?? '';
+  const filePath = resolveTranscriptFilePath(transcriptState);
   elements.fileName.textContent = filePath || 'No file loaded';
   elements.fileName.title = filePath;
   elements.fileName.tabIndex = filePath ? 0 : -1;
@@ -355,7 +357,7 @@ function renderTranscript() {
   elements.transcriptStatus.hidden = !elements.transcriptStatus.textContent;
   elements.historySelectionCount.textContent = `${selectedEntries.length} selected`;
   elements.historyMineSelected.disabled =
-    selectedEntries.length === 0 || isAnyBatchHistoryActionPending('mine-selected');
+    !transcriptActionsEnabled || selectedEntries.length === 0 || isAnyBatchHistoryActionPending('mine-selected');
   elements.historyBookmarkFilter.disabled = transcriptEntries.length === 0;
   elements.historyBookmarkFilter.setAttribute('aria-pressed', String(state.showBookmarkedOnly));
   elements.historyBookmarkFilter.title = state.showBookmarkedOnly ? 'Show all transcript lines' : 'Show bookmarked lines only';
@@ -384,7 +386,12 @@ function renderTranscript() {
     state.lastScrolledCueId = null;
   }
 
-  updateTranscriptItemUi(visibleTranscriptEntries, transcriptState.currentCueId, transcriptEntries);
+  updateTranscriptItemUi(
+    visibleTranscriptEntries,
+    transcriptState.currentCueId,
+    transcriptEntries,
+    transcriptActionsEnabled,
+  );
   if (transcriptState.currentCueId !== state.lastScrolledCueId) {
     state.lastScrolledCueId = transcriptState.currentCueId;
     syncCurrentCueScroll(transcriptState.currentCueId);
@@ -1374,7 +1381,7 @@ function rebuildTranscriptList(entries) {
   });
 }
 
-function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = renderedEntries) {
+function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = renderedEntries, actionsEnabled = true) {
   renderedEntries.forEach((entry) => {
     const controls = state.renderedCueElements.get(entry.id);
     if (!controls) {
@@ -1388,6 +1395,7 @@ function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = rend
       currentCueId,
       entry,
       state.bookmarkedTranscriptKeys,
+      actionsEnabled,
     );
     controls.item.classList.toggle('history-item-active', uiState.active);
     controls.item.classList.toggle('history-item-selected', uiState.selected);
