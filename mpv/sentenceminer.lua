@@ -609,6 +609,8 @@ local function resolve_overlay_exe_path()
         local parent = parent_dir(script_dir)
         if parent then
             add_candidate(utils.join_path(utils.join_path(parent, "sentenceminer-overlay"), "SentenceMinerOverlay.exe"))
+            add_candidate(utils.join_path(utils.join_path(utils.join_path(utils.join_path(utils.join_path(parent, "dist"), "SentenceMiner"), "scripts"), "sentenceminer-overlay"), "SentenceMinerOverlay.exe"))
+            add_candidate(utils.join_path(utils.join_path(utils.join_path(utils.join_path(utils.join_path(utils.join_path(parent, "dist"), "build"), "overlay"), "packaged"), "SentenceMinerOverlay-win32-x64"), "SentenceMinerOverlay.exe"))
         end
     end
 
@@ -619,6 +621,25 @@ local function resolve_overlay_exe_path()
     end
 
     return nil, "could not find SentenceMinerOverlay.exe; copy sentenceminer-overlay next to sentenceminer.lua or set overlay_exe_path"
+end
+
+local function resolve_overlay_yomitan_extension_path()
+    local configured = trim_output(opts.overlay_yomitan_extension_path)
+    if not configured then
+        return nil
+    end
+
+    local expanded = expand_mpv_path(configured)
+    if is_absolute_path(expanded) then
+        return expanded
+    end
+
+    local script_dir = get_script_dir()
+    if script_dir and script_dir ~= "" then
+        return utils.join_path(script_dir, expanded)
+    end
+
+    return expanded
 end
 
 local function resolve_ffmpeg_path()
@@ -781,9 +802,10 @@ local function spawn_overlay_process()
         "'--mpv-pid'",
         string.format("'%s'", powershell_escape(tostring(utils.getpid()))),
     }
-    if opts.overlay_yomitan_extension_path ~= nil and opts.overlay_yomitan_extension_path ~= "" then
+    local yomitan_extension_path = resolve_overlay_yomitan_extension_path()
+    if yomitan_extension_path then
         table.insert(argument_parts, "'--yomitan-extension-path'")
-        table.insert(argument_parts, string.format("'%s'", powershell_escape(expand_mpv_path(opts.overlay_yomitan_extension_path))))
+        table.insert(argument_parts, string.format("'%s'", powershell_escape(yomitan_extension_path)))
     end
 
     local command = string.format(

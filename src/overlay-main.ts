@@ -19,10 +19,15 @@ interface WindowBounds {
 }
 
 const args = parseArgs(process.argv.slice(2));
+const userDataPath = resolveUserDataPath(args.mpvPid);
 let overlayWindow: BrowserWindow | null = null;
 let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
 
+fs.mkdirSync(userDataPath, { recursive: true });
+app.setPath('userData', userDataPath);
+app.commandLine.appendSwitch('disk-cache-dir', path.join(userDataPath, 'DiskCache'));
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 app.setName('SentenceMiner Overlay');
 
 app.whenReady().then(async () => {
@@ -124,6 +129,18 @@ async function loadYomitanExtension(extensionPath: string): Promise<void> {
   } catch (error) {
     console.warn(`SentenceMiner overlay: could not load Yomitan extension: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function resolveUserDataPath(mpvPid: number | null): string {
+  const base =
+    process.env.LOCALAPPDATA ||
+    process.env.APPDATA ||
+    path.join(process.env.USERPROFILE || process.cwd(), 'AppData', 'Local');
+  const profileName = mpvPid && Number.isInteger(mpvPid) && mpvPid > 0
+    ? `mpv-${mpvPid}`
+    : 'manual';
+
+  return path.join(base, 'SentenceMinerOverlay', profileName);
 }
 
 function startBoundsWatcher(mpvPid: number | null): void {
