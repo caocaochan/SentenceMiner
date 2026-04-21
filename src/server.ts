@@ -594,6 +594,7 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
   const capture = getRecord(root.capture, 'capture');
   const runtime = getRecord(root.runtime, 'runtime');
   const appearance = getRecord(root.appearance, 'appearance');
+  const overlay = getRecord(root.overlay, 'overlay');
 
   return {
     anki: {
@@ -630,6 +631,11 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
       subtitleCardFontFamily: getString(appearance.subtitleCardFontFamily, 'appearance.subtitleCardFontFamily'),
       subtitleCardFontSizePx: getInteger(appearance.subtitleCardFontSizePx, 'appearance.subtitleCardFontSizePx'),
     },
+    overlay: {
+      fontFamily: getString(overlay.fontFamily, 'overlay.fontFamily'),
+      fontSizePx: getInteger(overlay.fontSizePx, 'overlay.fontSizePx'),
+      bottomOffsetPct: getInteger(overlay.bottomOffsetPct, 'overlay.bottomOffsetPct'),
+    },
   };
 }
 
@@ -652,6 +658,14 @@ async function validateEditableSettings(config: AppConfig, settings: EditableSet
 
   if (settings.appearance.subtitleCardFontSizePx < 0) {
     throw new HttpError(400, 'appearance.subtitleCardFontSizePx must be 0 or greater.');
+  }
+
+  if (settings.overlay.fontSizePx < 0) {
+    throw new HttpError(400, 'overlay.fontSizePx must be 0 or greater.');
+  }
+
+  if (settings.overlay.bottomOffsetPct < 0) {
+    throw new HttpError(400, 'overlay.bottomOffsetPct must be 0 or greater.');
   }
 
   const noteFields = await listModelFieldNames(config.anki, settings.anki.noteType);
@@ -685,6 +699,7 @@ function replaceConfig(target: AppConfig, next: AppConfig): void {
   target.capture = next.capture;
   target.runtime = next.runtime;
   target.appearance = next.appearance;
+  target.overlay = next.overlay;
 }
 
 async function refreshConfigFromDisk(context: ServerContext): Promise<void> {

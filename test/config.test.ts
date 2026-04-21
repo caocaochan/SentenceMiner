@@ -155,6 +155,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
       'overlay_exe_path=sentenceminer-overlay/SentenceMinerOverlay.exe',
       'overlay_yomitan_extension_path=C:\\Tools\\Yomitan',
       'overlay_hide_mpv_subtitles=no',
+      'overlay_font_family=Yu Gothic UI',
       'overlay_font_size_px=48',
       'overlay_bottom_offset_pct=18',
       'overlay_max_width_pct=80',
@@ -182,6 +183,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.overlay.exePath, 'sentenceminer-overlay/SentenceMinerOverlay.exe');
   assert.equal(config.overlay.yomitanExtensionPath, 'C:\\Tools\\Yomitan');
   assert.equal(config.overlay.hideMpvSubtitles, false);
+  assert.equal(config.overlay.fontFamily, 'Yu Gothic UI');
   assert.equal(config.overlay.fontSizePx, 48);
   assert.equal(config.overlay.bottomOffsetPct, 18);
   assert.equal(config.overlay.maxWidthPct, 80);
@@ -197,6 +199,8 @@ test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates mana
       'anki_note_type=Sentence',
       '; keep me',
       'capture_audio=yes',
+      'overlay_font_size_px=42',
+      'overlay_bottom_offset_pct=14',
     ].join('\n'),
     {
       ...getEditableSettings(DEFAULT_CONFIG),
@@ -209,6 +213,11 @@ test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates mana
         captureAudio: false,
         captureImage: true,
       },
+      overlay: {
+        ...getEditableSettings(DEFAULT_CONFIG).overlay,
+        fontSizePx: 52,
+        bottomOffsetPct: 22,
+      },
     },
   );
 
@@ -217,6 +226,8 @@ test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates mana
   assert.match(merged, /anki_note_type=Target/);
   assert.match(merged, /; keep me/);
   assert.match(merged, /capture_audio=no/);
+  assert.match(merged, /overlay_font_size_px=52/);
+  assert.match(merged, /overlay_bottom_offset_pct=22/);
 });
 
 test('mergeEditableSettingsIntoConfig appends missing managed keys using stable config formats', () => {
@@ -231,6 +242,9 @@ test('mergeEditableSettingsIntoConfig appends missing managed keys using stable 
   assert.match(merged, /capture_image_include_subtitles=yes/);
   assert.match(merged, /subtitle_card_font_family=/);
   assert.match(merged, /subtitle_card_font_size_px=0/);
+  assert.match(merged, /overlay_font_family=/);
+  assert.match(merged, /overlay_font_size_px=42/);
+  assert.match(merged, /overlay_bottom_offset_pct=14/);
   assert.match(merged, /capture_image_max_width=1600/);
 });
 
@@ -254,6 +268,9 @@ test('saveEditableSettings writes updated settings to sentenceminer.conf', async
   settings.capture.imageIncludeSubtitles = false;
   settings.appearance.subtitleCardFontFamily = 'Noto Sans';
   settings.appearance.subtitleCardFontSizePx = 18;
+  settings.overlay.fontFamily = 'Yu Gothic UI';
+  settings.overlay.fontSizePx = 50;
+  settings.overlay.bottomOffsetPct = 20;
 
   await saveEditableSettings(configPath, settings);
 
@@ -263,4 +280,7 @@ test('saveEditableSettings writes updated settings to sentenceminer.conf', async
   assert.match(written, /capture_image_include_subtitles=no/);
   assert.match(written, /subtitle_card_font_family=Noto Sans/);
   assert.match(written, /subtitle_card_font_size_px=18/);
+  assert.match(written, /overlay_font_family=Yu Gothic UI/);
+  assert.match(written, /overlay_font_size_px=50/);
+  assert.match(written, /overlay_bottom_offset_pct=20/);
 });

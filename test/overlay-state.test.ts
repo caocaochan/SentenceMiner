@@ -43,6 +43,7 @@ test('buildOverlayStyleVars clamps overlay sizing settings', () => {
           subtitleCardFontFamily: 'Noto Sans JP',
         },
         overlay: {
+          fontFamily: 'Yu Gothic UI',
           fontSizePx: 200,
           bottomOffsetPct: -5,
           maxWidthPct: 10,
@@ -53,7 +54,23 @@ test('buildOverlayStyleVars clamps overlay sizing settings', () => {
       '--overlay-font-size': '96px',
       '--overlay-bottom-offset': '0%',
       '--overlay-max-width': '25%',
-      '--overlay-font-family': 'Noto Sans JP',
+      '--overlay-font-family': 'Yu Gothic UI',
     },
+  );
+});
+
+test('buildOverlayStyleVars falls back to the transcript font when overlay font is unset', () => {
+  assert.equal(
+    buildOverlayStyleVars({
+      config: {
+        appearance: {
+          subtitleCardFontFamily: 'Noto Sans JP',
+        },
+        overlay: {
+          fontFamily: '',
+        },
+      },
+    })['--overlay-font-family'],
+    'Noto Sans JP',
   );
 });

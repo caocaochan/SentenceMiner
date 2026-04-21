@@ -21,6 +21,7 @@ local opts = {
     overlay_exe_path = "",
     overlay_yomitan_extension_path = "",
     overlay_hide_mpv_subtitles = "yes",
+    overlay_font_family = "",
     overlay_font_size_px = 42,
     overlay_bottom_offset_pct = 14,
     overlay_max_width_pct = 86,

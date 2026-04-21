@@ -25,6 +25,9 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.runtime.captureAudio, true);
   assert.equal(payload.config.settings.appearance.subtitleCardFontFamily, '');
   assert.equal(payload.config.settings.appearance.subtitleCardFontSizePx, 0);
+  assert.equal(payload.config.settings.overlay.fontFamily, '');
+  assert.equal(payload.config.settings.overlay.fontSizePx, 42);
+  assert.equal(payload.config.settings.overlay.bottomOffsetPct, 14);
   assert.equal(payload.config.overlay.enabled, false);
   assert.equal(payload.config.overlay.hideMpvSubtitles, true);
   assert.equal(payload.config.overlay.fontSizePx, 42);
@@ -94,6 +97,9 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   payload.runtime.captureAudio = false;
   payload.appearance.subtitleCardFontFamily = 'Noto Sans JP';
   payload.appearance.subtitleCardFontSizePx = 20;
+  payload.overlay.fontFamily = 'Yu Gothic UI';
+  payload.overlay.fontSizePx = 54;
+  payload.overlay.bottomOffsetPct = 21;
 
   const response = await fetch(`${harness.baseUrl}/api/settings`, {
     method: 'POST',
@@ -111,6 +117,9 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.equal(harness.config.runtime.captureAudio, false);
   assert.equal(harness.config.appearance.subtitleCardFontFamily, 'Noto Sans JP');
   assert.equal(harness.config.appearance.subtitleCardFontSizePx, 20);
+  assert.equal(harness.config.overlay.fontFamily, 'Yu Gothic UI');
+  assert.equal(harness.config.overlay.fontSizePx, 54);
+  assert.equal(harness.config.overlay.bottomOffsetPct, 21);
 
   const configFile = await fs.readFile(harness.configPath, 'utf8');
   assert.match(configFile, /anki_deck=Mining/);
@@ -118,6 +127,9 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.match(configFile, /capture_audio=no/);
   assert.match(configFile, /subtitle_card_font_family=Noto Sans JP/);
   assert.match(configFile, /subtitle_card_font_size_px=20/);
+  assert.match(configFile, /overlay_font_family=Yu Gothic UI/);
+  assert.match(configFile, /overlay_font_size_px=54/);
+  assert.match(configFile, /overlay_bottom_offset_pct=21/);
 });
 
 test('POST /api/settings rejects invalid note field mappings with a 400', async (t) => {

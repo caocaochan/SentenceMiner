@@ -14,7 +14,10 @@ export function buildOverlayStyleVars(statePayload) {
   const fontSizePx = clampNumber(overlay.fontSizePx, 12, 96, 42);
   const bottomOffsetPct = clampNumber(overlay.bottomOffsetPct, 0, 45, 14);
   const maxWidthPct = clampNumber(overlay.maxWidthPct, 25, 100, 86);
-  const fontFamily = statePayload?.config?.appearance?.subtitleCardFontFamily?.trim?.() ?? '';
+  const fontFamily =
+    overlay.fontFamily?.trim?.() ||
+    statePayload?.config?.appearance?.subtitleCardFontFamily?.trim?.() ||
+    '';
 
   return {
     '--overlay-font-size': `${fontSizePx}px`,

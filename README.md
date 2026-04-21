@@ -85,7 +85,8 @@ The helper starts automatically on first playback. You should not need to run `S
 - optional `bind_default_key`
 - optional `bind_toggle_key`, `toggle_key`
 - optional overlay settings: `overlay_enabled`, `overlay_exe_path`, `overlay_yomitan_extension_path`,
-  `overlay_hide_mpv_subtitles`, `overlay_font_size_px`, `overlay_bottom_offset_pct`, `overlay_max_width_pct`
+  `overlay_hide_mpv_subtitles`, `overlay_font_family`, `overlay_font_size_px`,
+  `overlay_bottom_offset_pct`, `overlay_max_width_pct`
 
 If you change the helper listen host or port, keep `helper_url` aligned with `server_host` and `server_port`.
 

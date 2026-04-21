@@ -242,6 +242,54 @@
 
           <section class="settings-section">
             <div class="section-heading">
+              <h3>Overlay</h3>
+              <p class="muted">Customize the selectable subtitle overlay above mpv.</p>
+            </div>
+            <div class="settings-grid">
+              <label class="field">
+                <span>Overlay font family</span>
+                <select
+                  name="overlay.fontFamilySelect"
+                  id="settings-overlay-font-family-select"
+                ></select>
+              </label>
+              <label class="field field-full" id="settings-overlay-font-family-custom-field" hidden>
+                <span>Custom CSS font-family value</span>
+                <input
+                  type="text"
+                  name="overlay.fontFamily"
+                  id="settings-overlay-font-family-custom"
+                  autocomplete="off"
+                  placeholder="Example: Noto Sans JP, sans-serif"
+                >
+              </label>
+              <label class="field">
+                <span>Overlay font size (px)</span>
+                <input
+                  type="number"
+                  name="overlay.fontSizePx"
+                  id="settings-overlay-font-size-px"
+                  min="0"
+                  step="1"
+                  placeholder="Default"
+                >
+              </label>
+              <label class="field">
+                <span>Vertical position (% from bottom)</span>
+                <input
+                  type="number"
+                  name="overlay.bottomOffsetPct"
+                  id="settings-overlay-bottom-offset-pct"
+                  min="0"
+                  max="45"
+                  step="1"
+                >
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-heading">
               <h3>Yomitan</h3>
               <p class="muted">Manage dictionaries and popup behavior in the overlay profile.</p>
             </div>

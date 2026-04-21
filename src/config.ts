@@ -53,6 +53,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     exePath: '',
     yomitanExtensionPath: '',
     hideMpvSubtitles: true,
+    fontFamily: '',
     fontSizePx: 42,
     bottomOffsetPct: 14,
     maxWidthPct: 86,
@@ -114,6 +115,11 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
       subtitleCardFontFamily: config.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: config.appearance.subtitleCardFontSizePx,
     },
+    overlay: {
+      fontFamily: config.overlay.fontFamily,
+      fontSizePx: config.overlay.fontSizePx,
+      bottomOffsetPct: config.overlay.bottomOffsetPct,
+    },
   };
 }
 
@@ -145,6 +151,9 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
     },
     overlay: {
       ...config.overlay,
+      fontFamily: settings.overlay.fontFamily,
+      fontSizePx: settings.overlay.fontSizePx,
+      bottomOffsetPct: settings.overlay.bottomOffsetPct,
     },
   });
 }
@@ -483,6 +492,12 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         hideMpvSubtitles: parseBoolean(key, value),
       };
       return;
+    case 'overlay_font_family':
+      config.overlay = {
+        ...config.overlay,
+        fontFamily: value,
+      };
+      return;
     case 'overlay_font_size_px':
       config.overlay = {
         ...config.overlay,
@@ -646,6 +661,9 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
   { key: 'subtitle_card_font_family', value: (settings) => settings.appearance.subtitleCardFontFamily },
   { key: 'subtitle_card_font_size_px', value: (settings) => String(settings.appearance.subtitleCardFontSizePx) },
+  { key: 'overlay_font_family', value: (settings) => settings.overlay.fontFamily },
+  { key: 'overlay_font_size_px', value: (settings) => String(settings.overlay.fontSizePx) },
+  { key: 'overlay_bottom_offset_pct', value: (settings) => String(settings.overlay.bottomOffsetPct) },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {

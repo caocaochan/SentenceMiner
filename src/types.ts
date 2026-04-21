@@ -94,6 +94,7 @@ export interface OverlayConfig {
   exePath: string;
   yomitanExtensionPath: string;
   hideMpvSubtitles: boolean;
+  fontFamily: string;
   fontSizePx: number;
   bottomOffsetPct: number;
   maxWidthPct: number;
@@ -126,11 +127,18 @@ export interface EditableRuntimeSettings {
   captureImage: boolean;
 }
 
+export interface EditableOverlaySettings {
+  fontFamily: string;
+  fontSizePx: number;
+  bottomOffsetPct: number;
+}
+
 export interface EditableSettings {
   anki: EditableAnkiSettings;
   capture: CaptureConfig;
   runtime: EditableRuntimeSettings;
   appearance: AppearanceConfig;
+  overlay: EditableOverlaySettings;
 }
 
 export interface SettingsOptions {
