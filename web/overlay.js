@@ -84,6 +84,12 @@ function connectWebSocket() {
       return;
     }
 
+    if (message.type === 'subtitle-update') {
+      applySubtitleUpdate(message.payload);
+      render();
+      return;
+    }
+
     if (message.type === 'overlay:open-yomitan-settings') {
       window.sentenceMinerOverlay?.openYomitanSettings?.();
     }
@@ -116,6 +122,23 @@ function render() {
 
   elements.text.textContent = view.text;
   elements.subtitle.hidden = false;
+}
+
+function applySubtitleUpdate(payload) {
+  if (!state.app?.state || !payload || typeof payload !== 'object') {
+    void refreshState({ suppressErrors: true });
+    return;
+  }
+
+  state.app = {
+    ...state.app,
+    state: {
+      ...state.app.state,
+      session: payload.session ?? null,
+      currentSubtitle: payload.currentSubtitle ?? null,
+      currentCueId: payload.currentCueId ?? null,
+    },
+  };
 }
 
 function applyStyleVars() {

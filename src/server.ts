@@ -51,6 +51,7 @@ export interface ServerContext {
   transcriptStore: TranscriptStore;
   playerCommandStore: PlayerCommandStore;
   sockets: WebSocketHub;
+  settingsOptionsCache?: SettingsOptionsCache;
   listInstalledFonts?: () => Promise<string[]>;
   requestShutdown?: (reason: string) => void;
 }
@@ -70,6 +71,7 @@ export async function main(): Promise<void> {
     transcriptStore,
     playerCommandStore,
     sockets,
+    settingsOptionsCache: new SettingsOptionsCache(),
   };
 
   const server = http.createServer(createRequestHandler(context));
@@ -159,7 +161,7 @@ export async function probeRunningHelper(config: ServerConfig): Promise<boolean>
   timeout.unref?.();
 
   try {
-    const response = await fetch(new URL('/api/state', buildAppUrl(config)), {
+    const response = await fetch(new URL('/api/health', buildAppUrl(config)), {
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -167,7 +169,7 @@ export async function probeRunningHelper(config: ServerConfig): Promise<boolean>
     }
 
     const payload = await response.json();
-    return Boolean(payload?.success === true && payload?.config && payload?.state);
+    return Boolean(payload?.success === true && payload?.status === 'ok');
   } catch {
     return false;
   } finally {
@@ -213,6 +215,26 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/api/health') {
+    respondJson(response, 200, {
+      success: true,
+      status: 'ok',
+    });
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/api/capture-settings') {
+    respondJson(response, 200, {
+      success: true,
+      capture: context.config.capture,
+      runtime: {
+        captureAudio: context.config.runtime.captureAudio,
+        captureImage: context.config.runtime.captureImage,
+      },
+    });
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/api/settings/options') {
     respondJson(response, 200, {
       success: true,
@@ -221,6 +243,7 @@ export async function routeRequest(
         url.searchParams.get('deck')?.trim() || context.config.anki.deck,
         url.searchParams.get('noteType')?.trim() || context.config.anki.noteType,
         context.listInstalledFonts,
+        context.settingsOptionsCache ??= new SettingsOptionsCache(),
       ),
     });
     return;
@@ -233,6 +256,7 @@ export async function routeRequest(
     await saveEditableSettings(context.configPath, settings);
 
     replaceConfig(context.config, applyEditableSettings(context.config, settings));
+    context.settingsOptionsCache?.clear();
     broadcastState(context.config, context.transcriptStore, context.sockets);
 
     respondJson(response, 200, buildStatePayload(context.config, context.transcriptStore));
@@ -266,7 +290,7 @@ export async function routeRequest(
   if (method === 'POST' && url.pathname === '/api/subtitle-event') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
     context.transcriptStore.pushSubtitle(payload);
-    broadcastState(context.config, context.transcriptStore, context.sockets);
+    broadcastSubtitleUpdate(context.transcriptStore, context.sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Subtitle event recorded.',
@@ -457,15 +481,21 @@ async function getSettingsOptions(
   requestedDeck: string,
   requestedNoteType: string,
   listFonts: () => Promise<string[]> = listInstalledFonts,
+  cache = new SettingsOptionsCache(),
 ): Promise<SettingsOptions> {
+  const ankiCachePrefix = buildAnkiOptionsCachePrefix(config);
   const [decks, noteTypes, fonts] = await Promise.all([
-    listDeckNames(config.anki),
-    listModelNames(config.anki),
-    listFonts(),
+    cache.get(`${ankiCachePrefix}:decks`, () => listDeckNames(config.anki)),
+    cache.get(`${ankiCachePrefix}:noteTypes`, () => listModelNames(config.anki)),
+    cache.get('fonts', listFonts),
   ]);
   const selectedDeck = decks.includes(requestedDeck) ? requestedDeck : (decks[0] ?? '');
   const selectedNoteType = noteTypes.includes(requestedNoteType) ? requestedNoteType : (noteTypes[0] ?? '');
-  const noteFields = selectedNoteType ? await listModelFieldNames(config.anki, selectedNoteType) : [];
+  const noteFields = selectedNoteType
+    ? await cache.get(`${ankiCachePrefix}:noteFields:${selectedNoteType}`, () =>
+        listModelFieldNames(config.anki, selectedNoteType),
+      )
+    : [];
 
   return {
     decks,
@@ -475,6 +505,38 @@ async function getSettingsOptions(
     selectedDeck,
     selectedNoteType,
   };
+}
+
+export class SettingsOptionsCache {
+  #entries = new Map<string, { expiresAt: number; value: unknown }>();
+  readonly ttlMs: number;
+
+  constructor(ttlMs = 30_000) {
+    this.ttlMs = ttlMs;
+  }
+
+  async get<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const cached = this.#entries.get(key);
+    if (cached && cached.expiresAt > now) {
+      return cached.value as T;
+    }
+
+    const value = await load();
+    this.#entries.set(key, {
+      expiresAt: now + this.ttlMs,
+      value,
+    });
+    return value;
+  }
+
+  clear(): void {
+    this.#entries.clear();
+  }
+}
+
+function buildAnkiOptionsCachePrefix(config: AppConfig): string {
+  return ['anki', config.anki.url, config.anki.apiKey ?? ''].join(':');
 }
 
 function assertActiveSession(transcriptStore: TranscriptStore, sessionId: string): void {
@@ -567,6 +629,18 @@ function broadcastState(config: AppConfig, transcriptStore: TranscriptStore, soc
   sockets.broadcastJson({
     type: 'state',
     payload: buildStatePayload(config, transcriptStore),
+  });
+}
+
+function broadcastSubtitleUpdate(transcriptStore: TranscriptStore, sockets: WebSocketHub): void {
+  const state = transcriptStore.getCurrentCueState();
+  sockets.broadcastJson({
+    type: 'subtitle-update',
+    payload: {
+      session: state.session,
+      currentSubtitle: state.currentSubtitle,
+      currentCueId: state.currentCueId,
+    },
   });
 }
 

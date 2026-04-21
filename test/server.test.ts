@@ -33,6 +33,38 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.overlay.fontSizePx, 42);
 });
 
+test('GET /api/health returns a lightweight readiness payload', async (t) => {
+  const harness = await createServerHarness(t);
+
+  const response = await fetch(`${harness.baseUrl}/api/health`);
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload, {
+    success: true,
+    status: 'ok',
+  });
+});
+
+test('GET /api/capture-settings returns capture settings without full state', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+
+  const response = await fetch(`${harness.baseUrl}/api/capture-settings`);
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.equal(payload.capture.audioPrePaddingMs, 250);
+  assert.equal(payload.capture.imageMaxWidth, 1600);
+  assert.deepEqual(payload.runtime, {
+    captureAudio: false,
+    captureImage: true,
+  });
+  assert.equal(payload.state, undefined);
+  assert.equal(payload.config, undefined);
+});
+
 test('GET overlay assets serves the browser overlay page and scripts', async (t) => {
   const harness = await createServerHarness(t);
 
@@ -64,6 +96,20 @@ test('GET /api/settings/options returns live Anki deck and note type options', a
   assert.deepEqual(payload.options.fonts, ['Arial', 'Noto Sans JP']);
   assert.equal(payload.options.selectedDeck, 'Anime');
   assert.equal(payload.options.selectedNoteType, 'Sentence');
+});
+
+test('GET /api/settings/options caches live option lookups briefly', async (t) => {
+  const harness = await createServerHarness(t);
+
+  await fetch(`${harness.baseUrl}/api/settings/options?noteType=Sentence`);
+  await fetch(`${harness.baseUrl}/api/settings/options?noteType=Sentence`);
+
+  const optionActions = harness.ankiRequests
+    .map((request) => request.action)
+    .filter((action) => ['deckNames', 'modelNames', 'modelFieldNames'].includes(action));
+
+  assert.deepEqual(optionActions, ['deckNames', 'modelNames', 'modelFieldNames']);
+  assert.equal(harness.fontRequests(), 1);
 });
 
 test('GET /api/settings/options falls back to live Anki defaults when configured values are missing', async (t) => {
@@ -825,6 +871,7 @@ async function createServerHarness(t: TestContext) {
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${ankiAddress.port}`;
   const installedFonts = ['Arial', 'Noto Sans JP'];
+  let fontRequests = 0;
   const shutdownReasons: string[] = [];
   const transcriptStore = new TranscriptStore();
 
@@ -835,7 +882,10 @@ async function createServerHarness(t: TestContext) {
       transcriptStore,
       playerCommandStore: new PlayerCommandStore(),
       sockets: new WebSocketHub(),
-      listInstalledFonts: async () => installedFonts,
+      listInstalledFonts: async () => {
+        fontRequests += 1;
+        return installedFonts;
+      },
       requestShutdown: (reason) => {
         shutdownReasons.push(reason);
       },
@@ -862,6 +912,7 @@ async function createServerHarness(t: TestContext) {
     baseUrl: `http://127.0.0.1:${appAddress.port}`,
     config,
     configPath,
+    fontRequests: () => fontRequests,
     shutdownReasons,
     transcriptStore,
   };

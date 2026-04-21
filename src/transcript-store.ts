@@ -17,6 +17,7 @@ export class TranscriptStore {
     transcriptStatus: 'unavailable',
     transcriptMessage: 'No active subtitle track is selected.',
   };
+  #transcriptByStart: TranscriptCue[] = [];
 
   startSession(payload: SessionPayload): TranscriptState {
     this.#state = {
@@ -34,6 +35,7 @@ export class TranscriptStore {
       transcriptStatus: 'loading',
       transcriptMessage: 'Loading active subtitle track…',
     };
+    this.#transcriptByStart = [];
 
     if (!payload.subtitleTrack || payload.subtitleTrack.kind === 'none') {
       this.setTranscriptUnavailable(payload.subtitleTrack ?? buildMissingTrackPayload(payload), 'No active subtitle track is selected.');
@@ -56,6 +58,7 @@ export class TranscriptStore {
       transcriptStatus: 'unavailable',
       transcriptMessage: 'No active subtitle track is selected.',
     };
+    this.#transcriptByStart = [];
 
     return this.getState();
   }
@@ -69,7 +72,7 @@ export class TranscriptStore {
       ...this.#state.session,
       playbackTimeMs,
     };
-    this.#state.currentCueId = matchTranscriptCueId(this.#state.transcript, this.#state.currentSubtitle, playbackTimeMs);
+    this.#state.currentCueId = matchTranscriptCueId(this.#transcriptByStart, this.#state.currentSubtitle, playbackTimeMs);
     return this.getState();
   }
 
@@ -85,6 +88,7 @@ export class TranscriptStore {
     };
     this.#state.transcript = [];
     this.#state.history = [];
+    this.#transcriptByStart = [];
     this.#state.currentCueId = null;
     this.#state.transcriptStatus = 'loading';
     this.#state.transcriptMessage =
@@ -104,10 +108,13 @@ export class TranscriptStore {
     };
     this.#state.transcript = transcript.map((cue) => ({ ...cue }));
     this.#state.history = this.#state.transcript.map((cue) => ({ ...cue }));
+    this.#transcriptByStart = [...this.#state.transcript].sort((left, right) =>
+      left.startMs === right.startMs ? left.endMs - right.endMs : left.startMs - right.startMs,
+    );
     this.#state.transcriptStatus = 'ready';
     this.#state.transcriptMessage = null;
     this.#state.currentCueId = matchTranscriptCueId(
-      this.#state.transcript,
+      this.#transcriptByStart,
       this.#state.currentSubtitle,
       this.#state.session.playbackTimeMs,
     );
@@ -145,7 +152,7 @@ export class TranscriptStore {
           ...payload,
         }
       : null;
-    this.#state.currentCueId = matchTranscriptCueId(this.#state.transcript, payload, payload.playbackTimeMs);
+    this.#state.currentCueId = matchTranscriptCueId(this.#transcriptByStart, payload, payload.playbackTimeMs);
 
     return this.getState();
   }
@@ -167,6 +174,19 @@ export class TranscriptStore {
     };
   }
 
+  getCurrentCueState(): Pick<TranscriptState, 'session' | 'currentSubtitle' | 'currentCueId'> {
+    return {
+      session: this.#state.session
+        ? {
+            ...this.#state.session,
+            subtitleTrack: this.#state.session.subtitleTrack ? { ...this.#state.session.subtitleTrack } : null,
+          }
+        : null,
+      currentSubtitle: this.#state.currentSubtitle ? { ...this.#state.currentSubtitle } : null,
+      currentCueId: this.#state.currentCueId,
+    };
+  }
+
   #setTranscriptNotReady(status: Exclude<TranscriptStatus, 'ready' | 'loading'>, track: SubtitleTrackPayload, message: string) {
     if (!this.#state.session || this.#state.session.sessionId !== track.sessionId) {
       return this.getState();
@@ -179,6 +199,7 @@ export class TranscriptStore {
     };
     this.#state.transcript = [];
     this.#state.history = [];
+    this.#transcriptByStart = [];
     this.#state.currentCueId = null;
     this.#state.transcriptStatus = status;
     this.#state.transcriptMessage = message;
@@ -214,17 +235,12 @@ function matchTranscriptCueId(
   const subtitleText = subtitle?.text.trim() ?? '';
   const pointInTime = subtitle?.playbackTimeMs ?? playbackTimeMs;
 
-  const candidates = transcript.filter((cue) => {
-    if (subtitleStart != null && subtitleEnd != null) {
-      return cue.startMs <= subtitleEnd && cue.endMs >= subtitleStart;
-    }
-
-    if (pointInTime != null) {
-      return cue.startMs <= pointInTime && cue.endMs >= pointInTime;
-    }
-
-    return false;
-  });
+  const candidates =
+    subtitleStart != null && subtitleEnd != null
+      ? findOverlappingCues(transcript, subtitleStart, subtitleEnd)
+      : pointInTime != null
+        ? findCuesAtTime(transcript, pointInTime)
+        : [];
 
   if (candidates.length === 0) {
     if (pointInTime == null) {
@@ -245,16 +261,62 @@ function matchTranscriptCueId(
 }
 
 function findMostRecentCueByStartTime(transcript: TranscriptCue[], pointInTime: number): TranscriptCue | null {
-  for (let index = transcript.length - 1; index >= 0; index -= 1) {
-    const cue = transcript[index];
-    if (cue.startMs <= pointInTime) {
-      return cue;
-    }
-  }
-
-  return null;
+  const index = findLastCueIndexAtOrBefore(transcript, pointInTime);
+  return index === -1 ? null : transcript[index];
 }
 
 function normalizeComparableText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function findCuesAtTime(transcript: TranscriptCue[], pointInTime: number): TranscriptCue[] {
+  const index = findLastCueIndexAtOrBefore(transcript, pointInTime);
+  if (index === -1) {
+    return [];
+  }
+
+  const candidates: TranscriptCue[] = [];
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    const cue = transcript[cursor];
+    if (cue.endMs >= pointInTime) {
+      candidates.unshift(cue);
+    }
+  }
+
+  return candidates;
+}
+
+function findOverlappingCues(transcript: TranscriptCue[], startMs: number, endMs: number): TranscriptCue[] {
+  const index = findLastCueIndexAtOrBefore(transcript, endMs);
+  if (index === -1) {
+    return [];
+  }
+
+  const candidates: TranscriptCue[] = [];
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    const cue = transcript[cursor];
+    if (cue.endMs >= startMs) {
+      candidates.unshift(cue);
+    }
+  }
+
+  return candidates;
+}
+
+function findLastCueIndexAtOrBefore(transcript: TranscriptCue[], pointInTime: number): number {
+  let low = 0;
+  let high = transcript.length - 1;
+  let match = -1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (transcript[mid].startMs <= pointInTime) {
+      match = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return match;
 }

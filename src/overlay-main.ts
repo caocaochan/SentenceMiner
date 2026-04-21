@@ -22,6 +22,7 @@ const args = parseArgs(process.argv.slice(2));
 const userDataPath = resolveUserDataPath(args.mpvPid);
 const persistentSessionPath = resolvePersistentSessionPath();
 const logPath = path.join(userDataPath, 'overlay.log');
+const hasYomitanExtensionPath = Boolean(args.yomitanExtensionPath.trim());
 let overlayWindow: BrowserWindow | null = null;
 let yomitanSettingsWindow: BrowserWindow | null = null;
 let yomitanExtensionId: string | null = null;
@@ -30,11 +31,15 @@ let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
 let lastVisibilityKey = '';
 let receivedBounds = false;
+let logBuffer: string[] = [];
+let logFlushScheduled = false;
 
-fs.mkdirSync(userDataPath, { recursive: true });
+fs.promises.mkdir(userDataPath, { recursive: true }).catch(() => {});
 appendLog('boot: created user data directory');
-fs.mkdirSync(persistentSessionPath, { recursive: true });
-appendLog(`boot: using persistent session path ${persistentSessionPath}`);
+if (hasYomitanExtensionPath) {
+  fs.promises.mkdir(persistentSessionPath, { recursive: true }).catch(() => {});
+  appendLog(`boot: using persistent session path ${persistentSessionPath}`);
+}
 app.setPath('userData', userDataPath);
 appendLog('boot: set userData path');
 app.commandLine.appendSwitch('disk-cache-dir', path.join(userDataPath, 'DiskCache'));
@@ -47,8 +52,6 @@ appendLog('boot: set app name');
 app.whenReady().then(async () => {
   appendLog(`starting overlay helperUrl=${args.helperUrl} mpvPid=${args.mpvPid ?? 'none'} userData=${userDataPath}`);
   const persistentSession = getOverlaySession();
-  setupExtensionDiagnostics(persistentSession);
-  await loadYomitanExtension(persistentSession, args.yomitanExtensionPath);
   overlayWindow = createOverlayWindow(persistentSession, args.helperUrl);
   overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
     appendLog(`page load failed ${errorCode} ${errorDescription} ${validatedUrl}`);
@@ -61,6 +64,13 @@ app.whenReady().then(async () => {
   });
   startBoundsWatcher(args.mpvPid, overlayWindow);
   setTimeout(showFallbackWindowIfNeeded, 2000);
+
+  if (hasYomitanExtensionPath) {
+    setupExtensionDiagnostics(persistentSession);
+    void loadYomitanExtension(persistentSession, args.yomitanExtensionPath);
+  } else {
+    appendLog('boot: no Yomitan extension path configured; skipping extension session startup');
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -302,6 +312,11 @@ function logYomitanSettingsState(): void {
 
 function getOverlaySession(): Session {
   if (!overlaySession) {
+    if (!hasYomitanExtensionPath) {
+      overlaySession = session.defaultSession;
+      return overlaySession;
+    }
+
     migrateLegacySessionStorage();
     overlaySession = session.fromPath(persistentSessionPath, {
       cache: false,
@@ -650,10 +665,20 @@ function trimTrailingSlash(value: string): string {
 }
 
 function appendLog(message: string): void {
-  try {
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
-  } catch {
-    // Logging must never prevent the overlay from starting.
+  logBuffer.push(`[${new Date().toISOString()}] ${message}\n`);
+  if (logFlushScheduled) {
+    return;
   }
+
+  logFlushScheduled = true;
+  setImmediate(() => {
+    logFlushScheduled = false;
+    const content = logBuffer.join('');
+    logBuffer = [];
+    fs.promises.mkdir(path.dirname(logPath), { recursive: true })
+      .then(() => fs.promises.appendFile(logPath, content, 'utf8'))
+      .catch(() => {
+        // Logging must never prevent the overlay from starting.
+      });
+  });
 }

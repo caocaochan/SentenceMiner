@@ -998,8 +998,8 @@ local function open_helper_site()
 end
 
 local function probe_helper()
-    local response, err = helper_request("GET", "/api/state", nil, 1000)
-    if response and response.success == true and response.state ~= nil and response.config ~= nil then
+    local response, err = helper_request("GET", "/api/health", nil, 1000)
+    if response and response.success == true and response.status == "ok" then
         state.helper_ready = true
         return true, nil
     end
@@ -1091,7 +1091,7 @@ local function fetch_capture_settings()
         return state.capture
     end
 
-    local response, err = helper_request("GET", "/api/state", nil)
+    local response, err = helper_request("GET", "/api/capture-settings", nil)
     if not response then
         if not state.capture then
             msg.warn("could not fetch helper capture settings: " .. tostring(err))
@@ -1110,7 +1110,7 @@ local function fetch_capture_settings()
         }
     end
 
-    state.capture = response.config and response.config.capture or state.capture
+    state.capture = response.capture or state.capture
     state.last_capture_fetch = now
     return state.capture
 end
@@ -1494,7 +1494,11 @@ end)
 mp.add_periodic_timer(0.2, function()
     sync_subtitle_track_state()
     sync_subtitle_state()
+end)
+mp.add_periodic_timer(0.5, function()
     sync_player_command()
+end)
+mp.add_periodic_timer(1.0, function()
     if state.session_id and state.helper_ready then
         ensure_overlay_running()
     end

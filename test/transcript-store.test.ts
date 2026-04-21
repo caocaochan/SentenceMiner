@@ -136,6 +136,27 @@ test('TranscriptStore keeps the current cue empty before the first subtitle is r
   assert.equal(state.currentCueId, null);
 });
 
+test('TranscriptStore matches cues by time after indexing the active transcript', () => {
+  const store = new TranscriptStore();
+  store.startSession({
+    action: 'start',
+    sessionId: 's1',
+    filePath: 'episode.mkv',
+    subtitleTrack: buildTrack(),
+  });
+  store.setTranscript(buildTrack(), [
+    buildCue('one', 100),
+    buildCue('two', 300),
+    buildCue('three', 500),
+  ]);
+
+  const duringCue = store.updatePlaybackTime(340);
+  assert.equal(duringCue.currentCueId, 's1:300');
+
+  const betweenCues = store.updatePlaybackTime(450);
+  assert.equal(betweenCues.currentCueId, 's1:300');
+});
+
 test('TranscriptStore stores unavailable fallback state when transcript loading fails', () => {
   const store = new TranscriptStore();
   const track = buildTrack();

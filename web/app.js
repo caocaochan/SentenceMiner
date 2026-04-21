@@ -14,6 +14,8 @@ import {
   buildTranscriptEmptyState,
   buildTranscriptStatusLabel,
   resolveThemePreference,
+  shouldRefreshSettingsOptions,
+  shouldUseFallbackStatePolling,
 } from './ui-state.js';
 import {
   CUSTOM_FONT_OPTION_VALUE,
@@ -170,8 +172,6 @@ async function bootstrap() {
   initializeStickyLayout();
   await refreshState({ suppressErrors: true });
   connectWebSocket();
-  startStatePolling();
-  void refreshSettingsOptions(state.app?.config?.settings?.anki?.noteType, state.app?.config?.settings?.anki?.deck);
 }
 
 function initializeStickyLayout() {
@@ -215,6 +215,7 @@ function connectWebSocket() {
       reconnectTimerId = null;
     }
     state.connection = 'live';
+    stopStatePolling();
     render();
     void refreshState({ suppressErrors: true });
   });
@@ -227,6 +228,12 @@ function connectWebSocket() {
       return;
     }
 
+    if (message.type === 'subtitle-update') {
+      applySubtitleUpdate(message.payload);
+      render();
+      return;
+    }
+
     if (message.type === 'toast') {
       showToast(message.payload?.message, message.payload?.kind);
     }
@@ -234,6 +241,7 @@ function connectWebSocket() {
 
   socket.addEventListener('close', () => {
     state.connection = 'offline';
+    startStatePolling();
     render();
     if (reconnectTimerId === null) {
       reconnectTimerId = window.setTimeout(() => {
@@ -249,13 +257,39 @@ function connectWebSocket() {
 }
 
 function startStatePolling() {
-  if (statePollIntervalId !== null) {
+  if (statePollIntervalId !== null || !shouldUseFallbackStatePolling(state.connection)) {
     return;
   }
 
   statePollIntervalId = window.setInterval(() => {
     void refreshState({ suppressErrors: true });
   }, STATE_POLL_INTERVAL_MS);
+}
+
+function stopStatePolling() {
+  if (statePollIntervalId === null) {
+    return;
+  }
+
+  window.clearInterval(statePollIntervalId);
+  statePollIntervalId = null;
+}
+
+function applySubtitleUpdate(payload) {
+  if (!state.app?.state || !payload || typeof payload !== 'object') {
+    void refreshState({ suppressErrors: true });
+    return;
+  }
+
+  state.app = {
+    ...state.app,
+    state: {
+      ...state.app.state,
+      session: payload.session ?? null,
+      currentSubtitle: payload.currentSubtitle ?? null,
+      currentCueId: payload.currentCueId ?? null,
+    },
+  };
 }
 
 function render() {
@@ -496,10 +530,12 @@ function openSettingsModal() {
   hydrateSettingsForm();
   render();
   focusSettingsModal();
-  void refreshSettingsOptions(
-    elements.settingsAnkiNoteType.value || state.app?.config?.settings?.anki?.noteType,
-    elements.settingsAnkiDeck.value || state.app?.config?.settings?.anki?.deck,
-  );
+  if (shouldRefreshSettingsOptions(state.settingsModalOpen, state.settingsOptionsLoading)) {
+    void refreshSettingsOptions(
+      elements.settingsAnkiNoteType.value || state.app?.config?.settings?.anki?.noteType,
+      elements.settingsAnkiDeck.value || state.app?.config?.settings?.anki?.deck,
+    );
+  }
 }
 
 function closeSettingsModal() {

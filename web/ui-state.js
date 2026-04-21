@@ -6,6 +6,14 @@ export function resolveThemePreference(storedTheme, prefersDark = false) {
   return prefersDark ? 'dark' : 'light';
 }
 
+export function shouldUseFallbackStatePolling(connection) {
+  return connection !== 'live';
+}
+
+export function shouldRefreshSettingsOptions(settingsModalOpen, settingsOptionsLoading) {
+  return Boolean(settingsModalOpen && !settingsOptionsLoading);
+}
+
 export function buildTranscriptStatusLabel(transcriptState) {
   const status = transcriptState?.transcriptStatus ?? 'unavailable';
   const message = transcriptState?.transcriptMessage?.trim() ?? '';
