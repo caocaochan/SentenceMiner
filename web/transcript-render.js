@@ -31,7 +31,7 @@ export function computeTranscriptItemUiState(entries, selectedKeys, pendingActio
     selected: selectedKeys.has(entryKey),
     goToDisabled: pendingActions.has(`go-to:${entryKey}`),
     mineDisabled: pendingActions.has(`mine:${entryKey}`),
-    checkboxDisabled: !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, selectedKeys.has(entryKey)),
+    checkboxDisabled: !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, !selectedKeys.has(entryKey)),
   };
 }
 

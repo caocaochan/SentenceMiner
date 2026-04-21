@@ -42,6 +42,17 @@ test('GET /api/health returns a lightweight readiness payload', async (t) => {
   });
 });
 
+test('GET /icons.svg serves local Lucide sprite assets', async (t) => {
+  const harness = await createServerHarness(t);
+
+  const response = await fetch(`${harness.baseUrl}/icons.svg`);
+  const body = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') ?? '', /image\/svg\+xml/);
+  assert.match(body, /<symbol id="pickaxe"/);
+});
+
 test('GET /api/capture-settings returns capture settings without full state', async (t) => {
   const harness = await createServerHarness(t);
   harness.config.runtime.captureAudio = false;

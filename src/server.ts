@@ -407,6 +407,11 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/icons.svg') {
+    await serveStatic(response, 'icons.svg', 'image/svg+xml; charset=utf-8');
+    return;
+  }
+
   respondJson(response, 404, {
     success: false,
     message: `Route not found: ${method} ${url.pathname}`,

@@ -40,6 +40,7 @@ const state = {
   settingsOptionsError: '',
   settingsSaving: false,
   settingsSaveError: '',
+  settingsActiveTab: 'anki',
   settingsModalReturnFocusEl: null,
   settingsRequestId: 0,
   renderedTranscriptSignature: null,
@@ -69,7 +70,7 @@ let statePollIntervalId = null;
 let nextToastId = 0;
 
 const elements = {
-  hero: document.querySelector('.hero'),
+  hero: document.querySelector('.command-bar'),
   connectionPill: document.getElementById('connection-pill'),
   fileName: document.getElementById('file-name'),
   historyCount: document.getElementById('history-count'),
@@ -87,6 +88,8 @@ const elements = {
   settingsCancel: document.getElementById('settings-cancel'),
   settingsSave: document.getElementById('settings-save'),
   settingsForm: document.getElementById('settings-form'),
+  settingsTabs: [...document.querySelectorAll('[data-settings-tab]')],
+  settingsTabPanels: [...document.querySelectorAll('[data-settings-panel]')],
   settingsOptionsStatus: document.getElementById('settings-options-status'),
   settingsError: document.getElementById('settings-error'),
   settingsAnkiDeck: document.getElementById('settings-anki-deck'),
@@ -142,6 +145,11 @@ elements.settingsAnkiNoteType.addEventListener('change', () => {
 });
 elements.settingsAppearanceSubtitleCardFontFamilySelect.addEventListener('change', () => {
   syncSubtitleCardFontCustomInputVisibility();
+});
+elements.settingsTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    activateSettingsTab(tab.dataset.settingsTab);
+  });
 });
 document.addEventListener('keydown', handleDocumentKeydown);
 
@@ -303,7 +311,7 @@ function renderTranscript() {
 
   elements.connectionPill.textContent =
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
-  elements.connectionPill.className = `pill ${state.connection === 'live' ? 'pill-success' : 'pill-muted'}`;
+  elements.connectionPill.className = `status-pill ${state.connection === 'live' ? 'status-pill-success' : 'status-pill-muted'}`;
   const filePath = transcriptState.session?.filePath?.trim() ?? '';
   elements.fileName.textContent = filePath || 'No file loaded';
   elements.fileName.title = filePath;
@@ -340,9 +348,10 @@ function renderSettingsUi() {
   elements.settingsModal.hidden = !state.settingsModalOpen;
   elements.settingsButton.setAttribute('aria-expanded', String(state.settingsModalOpen));
   document.body.classList.toggle('modal-open', state.settingsModalOpen);
+  renderSettingsTabs();
 
   const optionsStatus = state.settingsOptionsLoading
-    ? 'Loading decks, note types, note fields, and installed fonts…'
+    ? 'Loading decks, note types, note fields, and installed fonts...'
     : state.settingsOptionsError || 'Settings are saved to sentenceminer.conf and applied immediately.';
 
   elements.settingsOptionsStatus.textContent = optionsStatus;
@@ -351,14 +360,35 @@ function renderSettingsUi() {
   elements.settingsError.hidden = !state.settingsSaveError;
 
   elements.settingsSave.disabled = state.settingsSaving;
-  elements.settingsSave.textContent = state.settingsSaving ? 'Saving…' : 'Save settings';
+  elements.settingsSave.textContent = state.settingsSaving ? 'Saving...' : 'Save settings';
 }
 
-function buildHistoryActionButton(label, action, entry) {
+function renderSettingsTabs() {
+  elements.settingsTabs.forEach((tab) => {
+    const isActive = tab.dataset.settingsTab === state.settingsActiveTab;
+    tab.setAttribute('aria-selected', String(isActive));
+    tab.tabIndex = 0;
+  });
+  elements.settingsTabPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.settingsPanel !== state.settingsActiveTab;
+  });
+}
+
+function activateSettingsTab(tabName) {
+  const nextTab = elements.settingsTabs.some((tab) => tab.dataset.settingsTab === tabName)
+    ? tabName
+    : 'anki';
+  state.settingsActiveTab = nextTab;
+  renderSettingsTabs();
+}
+
+function buildHistoryActionButton(label, action, entry, iconName) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'history-button';
-  button.textContent = label;
+  button.className = `history-button ${action === 'mine' ? 'history-button-primary' : ''}`;
+  button.setAttribute('aria-label', `${label}: ${entry.text}`);
+  button.title = label;
+  button.append(buildIcon(iconName));
   button.disabled = isHistoryActionPending(action, entry);
   button.addEventListener('click', () => {
     void runHistoryAction(action, entry);
@@ -1108,6 +1138,7 @@ function renderEmptyTranscriptState(transcriptState) {
 
   const item = document.createElement('article');
   item.className = 'history-empty-state';
+  item.dataset.transcriptStatus = transcriptState?.transcriptStatus ?? 'unavailable';
 
   const title = document.createElement('h2');
   title.className = 'history-empty-title';
@@ -1139,7 +1170,8 @@ function rebuildTranscriptList(entries) {
     meta.textContent = formatRange(entry.startMs, entry.endMs);
 
     const checkboxLabel = document.createElement('label');
-    checkboxLabel.className = 'history-checkbox';
+    checkboxLabel.className = 'history-select';
+    checkboxLabel.title = 'Select subtitle line';
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -1149,24 +1181,28 @@ function rebuildTranscriptList(entries) {
       applyHistorySelectionToggle(transcriptEntries, entry, checkbox.checked);
     });
 
-    const checkboxText = document.createElement('span');
-    checkboxText.textContent = 'Select';
+    const checkboxMark = document.createElement('span');
+    checkboxMark.className = 'history-select-mark';
+    checkboxMark.append(buildIcon('check'));
 
-    checkboxLabel.append(checkbox, checkboxText);
-    head.append(meta, checkboxLabel);
+    checkboxLabel.append(checkbox, checkboxMark);
+    head.append(checkboxLabel);
 
+    const content = document.createElement('div');
+    content.className = 'history-content';
     const text = document.createElement('div');
     text.className = 'history-text';
     text.textContent = entry.text;
+    content.append(text, meta);
 
     const actions = document.createElement('div');
     actions.className = 'history-actions';
 
-    const goToButton = buildHistoryActionButton('Go to', 'go-to', entry);
-    const mineButton = buildHistoryActionButton('Mine', 'mine', entry);
+    const goToButton = buildHistoryActionButton('Go to', 'go-to', entry, 'play');
+    const mineButton = buildHistoryActionButton('Mine', 'mine', entry, 'pickaxe');
 
     actions.append(goToButton, mineButton);
-    item.append(head, text, actions);
+    item.append(head, content, actions);
     elements.historyList.append(item);
     state.renderedCueElements.set(entry.id, {
       item,
@@ -1190,7 +1226,19 @@ function updateTranscriptItemUi(entries, currentCueId) {
     controls.item.setAttribute('aria-current', uiState.active ? 'true' : 'false');
     controls.checkbox.checked = uiState.selected;
     controls.checkbox.disabled = uiState.checkboxDisabled;
+    controls.checkbox.parentElement?.classList.toggle('history-select-disabled', uiState.checkboxDisabled);
     controls.goToButton.disabled = uiState.goToDisabled;
     controls.mineButton.disabled = uiState.mineDisabled;
   });
+}
+
+function buildIcon(name) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.classList.add('lucide-icon');
+  icon.setAttribute('aria-hidden', 'true');
+
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `/icons.svg#${name}`);
+  icon.append(use);
+  return icon;
 }

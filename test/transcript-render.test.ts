@@ -51,6 +51,25 @@ test('pending actions only disable the relevant transcript buttons', () => {
   assert.equal(secondUi.selected, true);
 });
 
+test('selected middle transcript lines cannot be toggled out of a consecutive block', () => {
+  const first = buildCue('cue-1', 'one', 100);
+  const second = buildCue('cue-2', 'two', 200);
+  const third = buildCue('cue-3', 'three', 300);
+  const selectedKeys = new Set([
+    buildHistoryEntryKey(first),
+    buildHistoryEntryKey(second),
+    buildHistoryEntryKey(third),
+  ]);
+
+  const firstUi = computeTranscriptItemUiState([first, second, third], selectedKeys, new Set(), 'cue-1', first);
+  const secondUi = computeTranscriptItemUiState([first, second, third], selectedKeys, new Set(), 'cue-1', second);
+  const thirdUi = computeTranscriptItemUiState([first, second, third], selectedKeys, new Set(), 'cue-1', third);
+
+  assert.equal(firstUi.checkboxDisabled, false);
+  assert.equal(secondUi.checkboxDisabled, true);
+  assert.equal(thirdUi.checkboxDisabled, false);
+});
+
 test('computeTranscriptFollowScrollTarget keeps the viewport still when the cue is already in the comfort band', () => {
   const target = computeTranscriptFollowScrollTarget({
     itemTop: 180,
