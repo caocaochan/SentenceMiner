@@ -26,6 +26,7 @@ const hasYomitanExtensionPath = Boolean(args.yomitanExtensionPath.trim());
 let overlayWindow: BrowserWindow | null = null;
 let yomitanSettingsWindow: BrowserWindow | null = null;
 let yomitanExtensionId: string | null = null;
+let yomitanExtensionLoadPromise: Promise<void> | null = null;
 let overlaySession: Session | null = null;
 let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
@@ -65,7 +66,7 @@ app.whenReady().then(async () => {
 
   if (hasYomitanExtensionPath) {
     setupExtensionDiagnostics(persistentSession);
-    void loadYomitanExtension(persistentSession, args.yomitanExtensionPath);
+    yomitanExtensionLoadPromise = loadYomitanExtension(persistentSession, args.yomitanExtensionPath);
   } else {
     appendLog('boot: no Yomitan extension path configured; skipping extension session startup');
   }
@@ -90,7 +91,7 @@ ipcMain.on('overlay:set-interactive', (_event, interactive: boolean) => {
 });
 
 ipcMain.on('overlay:open-yomitan-settings', () => {
-  openYomitanSettingsWindow();
+  void openYomitanSettingsWindow();
 });
 
 function createOverlayWindow(persistentSession: Session, helperUrl: string): BrowserWindow {
@@ -254,7 +255,11 @@ async function startYomitanServiceWorker(persistentSession: Session): Promise<vo
   }
 }
 
-function openYomitanSettingsWindow(): void {
+async function openYomitanSettingsWindow(): Promise<void> {
+  if (yomitanExtensionLoadPromise) {
+    await yomitanExtensionLoadPromise;
+  }
+
   if (!yomitanExtensionId) {
     appendLog('cannot open Yomitan settings because the extension is not loaded');
     return;
