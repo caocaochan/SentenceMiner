@@ -59,7 +59,7 @@ app.whenReady().then(async () => {
   overlayWindow.loadURL(`${trimTrailingSlash(args.helperUrl)}/overlay.html`).catch((error) => {
     appendLog(`loadURL failed: ${error instanceof Error ? error.message : String(error)}`);
   });
-  startBoundsWatcher(args.mpvPid);
+  startBoundsWatcher(args.mpvPid, overlayWindow);
   setTimeout(showFallbackWindowIfNeeded, 2000);
 });
 
@@ -115,10 +115,6 @@ function createOverlayWindow(persistentSession: Session, helperUrl: string): Bro
     },
   });
 
-  window.setAlwaysOnTop(true, 'screen-saver');
-  window.setVisibleOnAllWorkspaces(true, {
-    visibleOnFullScreen: true,
-  });
   window.setMenuBarVisibility(false);
   window.setIgnoreMouseEvents(true, {
     forward: true,
@@ -406,21 +402,27 @@ function hasSessionStorage(profilePath: string): boolean {
   ].some((entry) => fs.existsSync(path.join(profilePath, entry)));
 }
 
-function startBoundsWatcher(mpvPid: number | null): void {
+function startBoundsWatcher(mpvPid: number | null, window: BrowserWindow): void {
   if (process.platform !== 'win32') {
     appendLog('non-Windows platform; showing fallback overlay window');
-    overlayWindow?.showInactive();
+    window.showInactive();
     return;
   }
 
   if (!mpvPid || !Number.isInteger(mpvPid) || mpvPid <= 0) {
     appendLog('missing mpv pid; showing fallback overlay window');
-    overlayWindow?.showInactive();
+    window.showInactive();
     return;
   }
 
-  const script = buildWindowBoundsScript(mpvPid);
-  appendLog(`starting window bounds watcher for mpv pid ${mpvPid}`);
+  const overlayHwnd = getNativeWindowHandleValue(window);
+  if (!overlayHwnd) {
+    appendLog('could not read overlay window handle; keeping overlay hidden');
+    return;
+  }
+
+  const script = buildWindowBoundsScript(mpvPid, overlayHwnd);
+  appendLog(`starting window bounds watcher for mpv pid ${mpvPid} overlay hwnd ${overlayHwnd}`);
   boundsWatcher = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -496,11 +498,15 @@ function applyBoundsLine(line: string): void {
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
   }
-  overlayWindow.moveTop();
 }
 
 function showFallbackWindowIfNeeded(): void {
   if (!overlayWindow || overlayWindow.isDestroyed() || receivedBounds) {
+    return;
+  }
+
+  if (args.mpvPid && Number.isInteger(args.mpvPid) && args.mpvPid > 0) {
+    appendLog(`no mpv bounds received for pid ${args.mpvPid}; keeping overlay hidden`);
     return;
   }
 
@@ -515,10 +521,24 @@ function showFallbackWindowIfNeeded(): void {
   appendLog(`no mpv bounds received; showing fallback bounds ${JSON.stringify(fallbackBounds)}`);
   overlayWindow.setBounds(fallbackBounds);
   overlayWindow.showInactive();
-  overlayWindow.moveTop();
 }
 
-function buildWindowBoundsScript(pid: number): string {
+function getNativeWindowHandleValue(window: BrowserWindow): string | null {
+  const handle = window.getNativeWindowHandle();
+  if (handle.length >= 8) {
+    const value = handle.readBigUInt64LE(0);
+    return value > 0n ? value.toString() : null;
+  }
+
+  if (handle.length >= 4) {
+    const value = handle.readUInt32LE(0);
+    return value > 0 ? String(value) : null;
+  }
+
+  return null;
+}
+
+function buildWindowBoundsScript(pid: number, overlayHwnd: string): string {
   return `
 $ErrorActionPreference = 'SilentlyContinue'
 Add-Type @"
@@ -534,9 +554,20 @@ public static class Win32WindowBounds {
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
+  [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+  [DllImport("user32.dll", EntryPoint="SetWindowLongW", SetLastError=true)] private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+  public static IntPtr SetWindowOwner(IntPtr hWnd, IntPtr owner) {
+    const int GWLP_HWNDPARENT = -8;
+    if (IntPtr.Size == 8) {
+      return SetWindowLongPtr64(hWnd, GWLP_HWNDPARENT, owner);
+    }
+    return new IntPtr(SetWindowLong32(hWnd, GWLP_HWNDPARENT, owner.ToInt32()));
+  }
 }
 "@
 $targetPid = ${pid}
+$overlayHwnd = [IntPtr]::new([Int64]"${overlayHwnd}")
+$lastOwnerHwnd = [IntPtr]::Zero
 while ($true) {
   if (-not (Get-Process -Id $targetPid)) { break }
   $script:found = [IntPtr]::Zero
@@ -554,6 +585,10 @@ while ($true) {
   if ($script:found -eq [IntPtr]::Zero -or [Win32WindowBounds]::IsIconic($script:found)) {
     '{"visible":false,"x":0,"y":0,"width":0,"height":0}'
   } else {
+    if ($lastOwnerHwnd -ne $script:found) {
+      [Win32WindowBounds]::SetWindowOwner($overlayHwnd, $script:found) | Out-Null
+      $lastOwnerHwnd = $script:found
+    }
     $rect = New-Object Win32WindowBounds+RECT
     $point = New-Object Win32WindowBounds+POINT
     [Win32WindowBounds]::GetClientRect($script:found, [ref]$rect) | Out-Null

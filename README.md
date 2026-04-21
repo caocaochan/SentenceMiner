@@ -85,8 +85,8 @@ The helper starts automatically on first playback. You should not need to run `S
 - optional `bind_default_key`
 - optional `bind_toggle_key`, `toggle_key`
 - optional overlay settings: `overlay_enabled`, `overlay_exe_path`, `overlay_yomitan_extension_path`,
-  `overlay_hide_mpv_subtitles`, `overlay_font_family`, `overlay_font_size_px`,
-  `overlay_bottom_offset_pct`, `overlay_max_width_pct`
+  `overlay_hide_mpv_subtitles`, `overlay_hide_mpv_osc`, `overlay_font_family`,
+  `overlay_font_size_px`, `overlay_bottom_offset_pct`, `overlay_max_width_pct`
 
 If you change the helper listen host or port, keep `helper_url` aligned with `server_host` and `server_port`.
 
@@ -98,7 +98,7 @@ The Windows release can launch `SentenceMinerOverlay.exe`, a transparent Electro
 
 Use the SentenceMiner settings dialog's Yomitan button to open Yomitan's settings page in the overlay profile. Dictionaries are not bundled; import them from Yomitan settings after the overlay has started.
 
-When `overlay_hide_mpv_subtitles=yes`, the mpv script temporarily hides native mpv subtitles while the overlay is active and restores the previous `sub-visibility` value when SentenceMiner is disabled or mpv exits.
+When `overlay_hide_mpv_subtitles=yes`, the mpv script temporarily hides native mpv subtitles while the overlay is active and restores the previous `sub-visibility` value when SentenceMiner is disabled or mpv exits. When `overlay_hide_mpv_osc=yes`, SentenceMiner also suppresses mpv's built-in OSC while the overlay is active so mouse movement for Yomitan scanning does not pop up mpv controls; set it to `no` to leave OSC behavior unchanged.
 
 In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe`, `ffmpeg_path` points at the bundled `ffmpeg.exe`, and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and `ffmpeg_path=ffmpeg` to rely on auto-discovery and `PATH`.
 
