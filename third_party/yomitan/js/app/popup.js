@@ -751,7 +751,21 @@ export class Popup extends EventDispatcher {
         if (this._visibleValue === value) { return; }
         this._visibleValue = value;
         this._frame.style.setProperty('visibility', value ? 'visible' : 'hidden', 'important');
+        this._notifySentenceMinerPopupVisibility(value);
         void this._invokeSafe('displayVisibilityChanged', {value});
+    }
+
+    /**
+     * @param {boolean} visible
+     */
+    _notifySentenceMinerPopupVisibility(visible) {
+        if (window.parent === window) { return; }
+
+        window.parent.postMessage({
+            sentenceMinerOverlay: true,
+            type: 'yomitan-popup-visibility',
+            visible,
+        }, '*');
     }
 
     /**

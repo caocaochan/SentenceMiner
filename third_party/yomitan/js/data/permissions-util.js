@@ -40,6 +40,10 @@ function ankiFieldMarkerMayUseClipboard(marker) {
  * @returns {Promise<boolean>}
  */
 export function hasPermissions(permissions) {
+    if (!canUseChromePermissionsMethod('contains')) {
+        return getFallbackPermissions().then((grantedPermissions) => hasAllPermissions(grantedPermissions, permissions));
+    }
+
     return new Promise((resolve, reject) => {
         chrome.permissions.contains(permissions, (result) => {
             const e = chrome.runtime.lastError;
@@ -58,6 +62,10 @@ export function hasPermissions(permissions) {
  * @returns {Promise<boolean>}
  */
 export function setPermissionsGranted(permissions, shouldHave) {
+    if (!canUseChromePermissionsMethod(shouldHave ? 'request' : 'remove')) {
+        return Promise.resolve(shouldHave);
+    }
+
     return (
         shouldHave ?
         new Promise((resolve, reject) => {
@@ -87,6 +95,10 @@ export function setPermissionsGranted(permissions, shouldHave) {
  * @returns {Promise<chrome.permissions.Permissions>}
  */
 export function getAllPermissions() {
+    if (!canUseChromePermissionsMethod('getAll')) {
+        return getFallbackPermissions();
+    }
+
     return new Promise((resolve, reject) => {
         chrome.permissions.getAll((result) => {
             const e = chrome.runtime.lastError;
@@ -97,6 +109,83 @@ export function getAllPermissions() {
             }
         });
     });
+}
+
+/**
+ * Electron can load the extension but does not expose Chrome's dynamic permissions API.
+ * Keep this manifest-based fallback so the backend can start inside SentenceMiner's overlay.
+ * @param {'contains'|'getAll'|'remove'|'request'} method
+ * @returns {boolean}
+ */
+function canUseChromePermissionsMethod(method) {
+    return (
+        typeof chrome === 'object' &&
+        chrome !== null &&
+        typeof chrome.permissions === 'object' &&
+        chrome.permissions !== null &&
+        typeof chrome.permissions[method] === 'function'
+    );
+}
+
+/**
+ * @returns {Promise<chrome.permissions.Permissions>}
+ */
+async function getFallbackPermissions() {
+    const manifest = (
+        typeof chrome === 'object' &&
+        chrome !== null &&
+        typeof chrome.runtime === 'object' &&
+        chrome.runtime !== null &&
+        typeof chrome.runtime.getManifest === 'function'
+    ) ? chrome.runtime.getManifest() : {};
+
+    return {
+        permissions: uniqueStrings([
+            ...arrayFromManifestField(manifest.permissions),
+            ...arrayFromManifestField(manifest.optional_permissions),
+        ]),
+        origins: uniqueStrings(arrayFromManifestField(manifest.host_permissions)),
+    };
+}
+
+/**
+ * @param {chrome.permissions.Permissions} grantedPermissions
+ * @param {chrome.permissions.Permissions} requiredPermissions
+ * @returns {boolean}
+ */
+function hasAllPermissions(grantedPermissions, requiredPermissions) {
+    return hasAllStrings(grantedPermissions.permissions, requiredPermissions.permissions) &&
+        hasAllStrings(grantedPermissions.origins, requiredPermissions.origins);
+}
+
+/**
+ * @param {string[]|undefined} available
+ * @param {string[]|undefined} required
+ * @returns {boolean}
+ */
+function hasAllStrings(available, required) {
+    if (!Array.isArray(required) || required.length === 0) {
+        return true;
+    }
+
+    const availableSet = new Set(Array.isArray(available) ? available : []);
+    return required.every((value) => availableSet.has(value));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function arrayFromManifestField(value) {
+    return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+}
+
+/**
+ * @param {string[]} values
+ * @returns {string[]}
+ */
+function uniqueStrings(values) {
+    return [...new Set(values)];
 }
 
 /**

@@ -57,6 +57,15 @@ export class FrameClient {
     }
 
     /**
+     * Electron's extension bridge for SentenceMiner uses Yomitan's cross-frame API path.
+     * Keep this method for newer popup callers that probe for the alternate window path.
+     * @returns {boolean}
+     */
+    usesWindowMessaging() {
+        return false;
+    }
+
+    /**
      * @template [T=unknown]
      * @param {T} data
      * @returns {import('frame-client').Message<T>}

@@ -45,4 +45,12 @@ await Application.main(false, async (application) => {
         browser: browser,
     });
     await frontend.prepare();
+
+    window.addEventListener('message', (event) => {
+        const {data, source} = event;
+        if (source !== window || typeof data !== 'object' || data === null) { return; }
+        if (data.sentenceMinerOverlay !== true || data.type !== 'close-yomitan-popup') { return; }
+
+        application.triggerClosePopups();
+    });
 });

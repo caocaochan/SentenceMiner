@@ -1,4 +1,8 @@
-import { hasVisibleYomitanPopup, shouldOverlayBeInteractive } from './overlay-interactivity.js';
+import {
+  hasVisibleYomitanPopup,
+  shouldCloseYomitanPopupOnPointerDown,
+  shouldOverlayBeInteractive,
+} from './overlay-interactivity.js';
 import { buildOverlayStatusPayload, buildOverlayStyleVars, buildOverlaySubtitleView } from './overlay-state.js';
 
 const state = {
@@ -35,6 +39,18 @@ document.addEventListener('pointerup', () => {
   updateSelectionState();
   updateInteractive();
 });
+document.addEventListener('pointerdown', (event) => {
+  if (!shouldCloseYomitanPopupOnPointerDown({
+    button: event.button,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    yomitanPopupVisible: isYomitanPopupVisible(),
+  })) {
+    return;
+  }
+
+  closeYomitanPopup();
+}, true);
 document.addEventListener('selectionchange', () => {
   updateSelectionState();
   updateInteractive();
@@ -225,6 +241,13 @@ function updateYomitanPopupVisibility() {
 
 function isYomitanPopupVisible() {
   return state.yomitanPopupVisibleFromMessage || state.yomitanPopupVisibleFromDom;
+}
+
+function closeYomitanPopup() {
+  window.postMessage({
+    sentenceMinerOverlay: true,
+    type: 'close-yomitan-popup',
+  }, '*');
 }
 
 function reportOverlayStatus() {
