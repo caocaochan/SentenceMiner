@@ -88,6 +88,7 @@ const elements = {
   settingsCancel: document.getElementById('settings-cancel'),
   settingsSave: document.getElementById('settings-save'),
   settingsForm: document.getElementById('settings-form'),
+  settingsTabsContainer: document.querySelector('.settings-tabs'),
   settingsTabs: [...document.querySelectorAll('[data-settings-tab]')],
   settingsTabPanels: [...document.querySelectorAll('[data-settings-panel]')],
   settingsOptionsStatus: document.getElementById('settings-options-status'),
@@ -146,10 +147,13 @@ elements.settingsAnkiNoteType.addEventListener('change', () => {
 elements.settingsAppearanceSubtitleCardFontFamilySelect.addEventListener('change', () => {
   syncSubtitleCardFontCustomInputVisibility();
 });
-elements.settingsTabs.forEach((tab) => {
-  tab.addEventListener('click', () => {
-    activateSettingsTab(tab.dataset.settingsTab);
-  });
+elements.settingsTabsContainer?.addEventListener('click', (event) => {
+  const tab = event.target instanceof Element ? event.target.closest('[data-settings-tab]') : null;
+  if (!(tab instanceof HTMLElement)) {
+    return;
+  }
+
+  activateSettingsTab(tab.dataset.settingsTab);
 });
 document.addEventListener('keydown', handleDocumentKeydown);
 

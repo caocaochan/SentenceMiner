@@ -438,7 +438,10 @@ async function readJsonBody<T>(request: http.IncomingMessage): Promise<T> {
 
 async function serveStatic(response: http.ServerResponse, filename: string, contentType: string): Promise<void> {
   const content = await fs.readFile(path.join(WEB_ROOT, filename), 'utf8');
-  response.writeHead(200, { 'content-type': contentType });
+  response.writeHead(200, {
+    'content-type': contentType,
+    'cache-control': 'no-store',
+  });
   response.end(content);
 }
 

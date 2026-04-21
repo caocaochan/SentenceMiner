@@ -50,6 +50,7 @@ test('GET /icons.svg serves local Lucide sprite assets', async (t) => {
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type') ?? '', /image\/svg\+xml/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.match(body, /<symbol id="pickaxe"/);
 });
 
