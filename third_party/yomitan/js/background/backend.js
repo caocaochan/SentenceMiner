@@ -519,8 +519,8 @@ export class Backend {
         // Tab ID isn't set in background (e.g. browser_action)
         /** @type {import('application').ApiMessage<'applicationBackendReady'>} */
         const data = {action: 'applicationBackendReady'};
+        this._sendMessageIgnoreResponse(data);
         if (typeof sender.tab === 'undefined') {
-            this._sendMessageIgnoreResponse(data);
             return false;
         } else {
             const {id} = sender.tab;

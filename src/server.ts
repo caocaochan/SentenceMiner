@@ -431,6 +431,11 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/overlay-interactivity.js') {
+    await serveStatic(response, 'overlay-interactivity.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/overlay.css') {
     await serveStatic(response, 'overlay.css', 'text/css; charset=utf-8');
     return;

@@ -73,6 +73,7 @@ test('GET overlay assets serves the browser overlay page and scripts', async (t)
   const html = await fetch(`${harness.baseUrl}/overlay.html`);
   const js = await fetch(`${harness.baseUrl}/overlay.js`);
   const stateJs = await fetch(`${harness.baseUrl}/overlay-state.js`);
+  const interactivityJs = await fetch(`${harness.baseUrl}/overlay-interactivity.js`);
   const css = await fetch(`${harness.baseUrl}/overlay.css`);
 
   assert.equal(html.status, 200);
@@ -81,6 +82,8 @@ test('GET overlay assets serves the browser overlay page and scripts', async (t)
   assert.match(js.headers.get('content-type') ?? '', /text\/javascript/);
   assert.equal(stateJs.status, 200);
   assert.match(await stateJs.text(), /buildOverlaySubtitleView/);
+  assert.equal(interactivityJs.status, 200);
+  assert.match(await interactivityJs.text(), /shouldOverlayBeInteractive/);
   assert.equal(css.status, 200);
   assert.match(css.headers.get('content-type') ?? '', /text\/css/);
 });
