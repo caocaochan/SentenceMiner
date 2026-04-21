@@ -1,4 +1,4 @@
-import { buildOverlayStyleVars, buildOverlaySubtitleView } from './overlay-state.js';
+import { buildOverlayStatusPayload, buildOverlayStyleVars, buildOverlaySubtitleView } from './overlay-state.js';
 
 const state = {
   app: null,
@@ -38,6 +38,7 @@ window.addEventListener('blur', () => {
 });
 
 void bootstrap();
+window.setInterval(reportOverlayStatus, 1000);
 
 async function bootstrap() {
   await refreshState({ suppressErrors: true });
@@ -96,7 +97,9 @@ function connectWebSocket() {
   });
 
   socket.addEventListener('close', () => {
+    state.app = null;
     hideSubtitle();
+    reportOverlayStatus();
     setInteractive(false);
     if (state.reconnectTimerId === null) {
       state.reconnectTimerId = window.setTimeout(() => {
@@ -122,6 +125,7 @@ function render() {
 
   elements.text.textContent = view.text;
   elements.subtitle.hidden = false;
+  reportOverlayStatus();
 }
 
 function applySubtitleUpdate(payload) {
@@ -150,10 +154,31 @@ function applyStyleVars() {
 function hideSubtitle() {
   elements.text.textContent = '';
   elements.subtitle.hidden = true;
+  reportOverlayStatus();
 }
 
 function setInteractive(interactive) {
   window.sentenceMinerOverlay?.setInteractive?.(Boolean(interactive));
+}
+
+function reportOverlayStatus() {
+  const payload = buildOverlayStatusPayload(state.app);
+  const body = JSON.stringify(payload);
+
+  if (navigator.sendBeacon?.('/api/overlay/status', new Blob([body], { type: 'application/json' }))) {
+    return;
+  }
+
+  fetch('/api/overlay/status', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body,
+    keepalive: true,
+  }).catch(() => {
+    // Status heartbeats are best effort; rendering should never depend on them.
+  });
 }
 
 function isPointerOverSubtitle() {

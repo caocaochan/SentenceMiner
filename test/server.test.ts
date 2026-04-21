@@ -8,7 +8,9 @@ import path from 'node:path';
 import { DEFAULT_CONFIG, getEditableSettings } from '../src/config.ts';
 import { PlayerCommandStore } from '../src/player-command-store.ts';
 import { createRequestHandler, listenForAppServer, probeRunningHelper } from '../src/server.ts';
+import type { SubtitleTranscriptResult } from '../src/subtitle-transcript.ts';
 import { TranscriptStore } from '../src/transcript-store.ts';
+import type { AppConfig, SubtitleTrackPayload } from '../src/types.ts';
 import { WebSocketHub } from '../src/ws.ts';
 
 test('GET /api/state exposes editable settings', async (t) => {
@@ -228,6 +230,120 @@ test('POST /api/session reloads config from disk before a new playback session s
   assert.equal(harness.config.runtime.captureAudio, false);
 });
 
+test('POST /api/session responds before transcript loading finishes', async (t) => {
+  const deferred = createDeferred<SubtitleTranscriptResult>();
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: () => deferred.promise,
+  });
+
+  const response = await fetch(`${harness.baseUrl}/api/session`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'start',
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      durationMs: 60000,
+      playbackTimeMs: 0,
+      subtitleTrack: buildExternalTrack('session-1'),
+    }),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.state.transcriptStatus, 'loading');
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'loading');
+
+  deferred.resolve({
+    status: 'ready',
+    transcript: [buildCue('loaded later', 1000)],
+    message: null,
+  });
+  await flushPromises();
+
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'ready');
+  assert.equal(harness.transcriptStore.getState().transcript[0]?.text, 'loaded later');
+});
+
+test('delayed transcript results cannot overwrite a newer session', async (t) => {
+  const first = createDeferred<SubtitleTranscriptResult>();
+  const second = createDeferred<SubtitleTranscriptResult>();
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: (_config, track) => (track.sessionId === 'session-1' ? first.promise : second.promise),
+  });
+
+  await postSession(harness.baseUrl, 'session-1');
+  await postSession(harness.baseUrl, 'session-2');
+
+  first.resolve({
+    status: 'ready',
+    transcript: [buildCue('stale first session', 1000, 'session-1')],
+    message: null,
+  });
+  await flushPromises();
+
+  assert.equal(harness.transcriptStore.getState().session?.sessionId, 'session-2');
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'loading');
+  assert.deepEqual(harness.transcriptStore.getState().transcript, []);
+
+  second.resolve({
+    status: 'ready',
+    transcript: [buildCue('fresh second session', 2000, 'session-2')],
+    message: null,
+  });
+  await flushPromises();
+
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'ready');
+  assert.equal(harness.transcriptStore.getState().transcript[0]?.text, 'fresh second session');
+});
+
+test('delayed transcript results cannot overwrite a newer subtitle track', async (t) => {
+  const first = createDeferred<SubtitleTranscriptResult>();
+  const second = createDeferred<SubtitleTranscriptResult>();
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: (_config, track) => (track.trackId === 1 ? first.promise : second.promise),
+  });
+
+  await postSession(harness.baseUrl, 'session-1', buildExternalTrack('session-1', 1));
+
+  const response = await fetch(`${harness.baseUrl}/api/subtitle-track`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(buildExternalTrack('session-1', 2)),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.state.transcriptStatus, 'loading');
+
+  first.resolve({
+    status: 'ready',
+    transcript: [buildCue('stale first track', 1000)],
+    message: null,
+  });
+  await flushPromises();
+
+  assert.equal(harness.transcriptStore.getState().session?.subtitleTrack?.trackId, 2);
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'loading');
+  assert.deepEqual(harness.transcriptStore.getState().transcript, []);
+
+  second.resolve({
+    status: 'ready',
+    transcript: [buildCue('fresh second track', 2000)],
+    message: null,
+  });
+  await flushPromises();
+
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'ready');
+  assert.equal(harness.transcriptStore.getState().transcript[0]?.text, 'fresh second track');
+});
+
 test('POST /api/subtitle-track reloads the active transcript for the current session', async (t) => {
   const harness = await createServerHarness(t);
   await fetch(`${harness.baseUrl}/api/session`, {
@@ -265,7 +381,9 @@ test('POST /api/subtitle-track reloads the active transcript for the current ses
 
   assert.equal(response.status, 200);
   assert.equal(payload.success, true);
-  assert.equal(payload.state.transcriptStatus, 'error');
+  assert.equal(payload.state.transcriptStatus, 'loading');
+  await flushPromises();
+  assert.equal(harness.transcriptStore.getState().transcriptStatus, 'error');
 });
 
 test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
@@ -293,6 +411,41 @@ test('POST /api/overlay/yomitan-settings accepts settings open requests', async 
   assert.equal(response.status, 200);
   assert.equal(payload.success, true);
   assert.match(payload.message, /Yomitan settings/);
+});
+
+test('POST and GET /api/overlay/status track fresh overlay visibility on the server clock', async (t) => {
+  let now = 10000;
+  const harness = await createServerHarness(t, {
+    now: () => now,
+  });
+
+  const postResponse = await fetch(`${harness.baseUrl}/api/overlay/status`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+      visible: true,
+      text: 'overlay subtitle',
+      updatedAtMs: 1,
+    }),
+  });
+  const postPayload = await postResponse.json();
+
+  assert.equal(postResponse.status, 200);
+  assert.equal(postPayload.status.updatedAtMs, 10000);
+  assert.equal(postPayload.status.fresh, true);
+  assert.equal(postPayload.status.visible, true);
+
+  now += 3000;
+  const getResponse = await fetch(`${harness.baseUrl}/api/overlay/status`);
+  const getPayload = await getResponse.json();
+
+  assert.equal(getResponse.status, 200);
+  assert.equal(getPayload.status.fresh, false);
+  assert.equal(getPayload.status.ageMs, 3000);
+  assert.equal(getPayload.status.text, 'overlay subtitle');
 });
 
 test('POST /api/history/mine accepts batch selections and updates Anki once', async (t) => {
@@ -810,7 +963,13 @@ test('listenForAppServer still rejects port conflicts from non-SentenceMiner ser
   );
 });
 
-async function createServerHarness(t: TestContext) {
+async function createServerHarness(
+  t: TestContext,
+  options: {
+    loadSubtitleTranscript?: (config: AppConfig, track: SubtitleTrackPayload) => Promise<SubtitleTranscriptResult>;
+    now?: () => number;
+  } = {},
+) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-server-test-'));
   const configPath = path.join(tempRoot, 'sentenceminer.conf');
   await fs.writeFile(configPath, 'anki_deck=Anime\nanki_note_type=Sentence\ncapture_audio=yes\n', 'utf8');
@@ -886,9 +1045,11 @@ async function createServerHarness(t: TestContext) {
         fontRequests += 1;
         return installedFonts;
       },
+      loadSubtitleTranscript: options.loadSubtitleTranscript,
       requestShutdown: (reason) => {
         shutdownReasons.push(reason);
       },
+      now: options.now,
     }),
   );
 
@@ -916,6 +1077,67 @@ async function createServerHarness(t: TestContext) {
     shutdownReasons,
     transcriptStore,
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function buildExternalTrack(sessionId: string, trackId = 1): SubtitleTrackPayload {
+  return {
+    sessionId,
+    filePath: 'C:\\Videos\\episode.mkv',
+    kind: 'external',
+    externalFilePath: `C:\\Videos\\episode-${trackId}.srt`,
+    trackId,
+    ffIndex: null,
+    codec: 'subrip',
+    title: `Track ${trackId}`,
+    lang: 'en',
+  };
+}
+
+function buildCue(text: string, startMs: number, sessionId = 'session-1') {
+  return {
+    id: `${sessionId}:${startMs}`,
+    orderIndex: 0,
+    sessionId,
+    filePath: 'C:\\Videos\\episode.mkv',
+    text,
+    startMs,
+    endMs: startMs + 1000,
+    playbackTimeMs: startMs,
+  };
+}
+
+async function postSession(baseUrl: string, sessionId: string, subtitleTrack = buildExternalTrack(sessionId)): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/session`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'start',
+      sessionId,
+      filePath: 'C:\\Videos\\episode.mkv',
+      durationMs: 60000,
+      playbackTimeMs: 0,
+      subtitleTrack,
+    }),
+  });
+
+  assert.equal(response.status, 200);
 }
 
 function createAnkiNote(noteId: number, sentence: string) {

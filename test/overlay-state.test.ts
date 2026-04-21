@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildOverlayStyleVars, buildOverlaySubtitleView } from '../web/overlay-state.js';
+import { buildOverlayStatusPayload, buildOverlayStyleVars, buildOverlaySubtitleView } from '../web/overlay-state.js';
 
 test('buildOverlaySubtitleView hides the overlay without an active subtitle', () => {
   assert.deepEqual(
@@ -31,6 +31,40 @@ test('buildOverlaySubtitleView exposes trimmed active subtitle text', () => {
     {
       visible: true,
       text: 'selectable subtitle text',
+    },
+  );
+});
+
+test('buildOverlayStatusPayload reports the rendered overlay subtitle', () => {
+  assert.deepEqual(
+    buildOverlayStatusPayload({
+      state: {
+        session: { sessionId: 'session-1' },
+        currentSubtitle: {
+          text: '  selectable subtitle text  ',
+        },
+      },
+    }),
+    {
+      sessionId: 'session-1',
+      visible: true,
+      text: 'selectable subtitle text',
+    },
+  );
+});
+
+test('buildOverlayStatusPayload reports hidden state without stale text', () => {
+  assert.deepEqual(
+    buildOverlayStatusPayload({
+      state: {
+        session: { sessionId: 'session-1' },
+        currentSubtitle: null,
+      },
+    }),
+    {
+      sessionId: 'session-1',
+      visible: false,
+      text: '',
     },
   );
 });

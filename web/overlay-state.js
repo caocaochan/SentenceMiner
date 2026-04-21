@@ -9,6 +9,17 @@ export function buildOverlaySubtitleView(statePayload) {
   };
 }
 
+export function buildOverlayStatusPayload(statePayload) {
+  const view = buildOverlaySubtitleView(statePayload);
+  const sessionId = statePayload?.state?.session?.sessionId;
+
+  return {
+    sessionId: typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : null,
+    visible: view.visible,
+    text: view.visible ? view.text : '',
+  };
+}
+
 export function buildOverlayStyleVars(statePayload) {
   const overlay = statePayload?.config?.overlay ?? {};
   const fontSizePx = clampNumber(overlay.fontSizePx, 12, 96, 42);

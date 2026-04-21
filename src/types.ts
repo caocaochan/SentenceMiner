@@ -32,6 +32,18 @@ export interface SubtitleEventPayload {
   filePath: string;
 }
 
+export interface OverlayStatusPayload {
+  sessionId: string | null;
+  visible: boolean;
+  text: string;
+}
+
+export interface OverlayStatus extends OverlayStatusPayload {
+  fresh: boolean;
+  updatedAtMs: number | null;
+  ageMs: number | null;
+}
+
 export interface MinePayload extends SubtitleEventPayload {
   screenshotPath?: string | null;
   audioPath?: string | null;

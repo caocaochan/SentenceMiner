@@ -24,7 +24,7 @@ import {
 import { listInstalledFonts } from './fonts.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { PlayerCommandStore } from './player-command-store.ts';
-import { loadSubtitleTranscript } from './subtitle-transcript.ts';
+import { loadSubtitleTranscript, type SubtitleTranscriptResult } from './subtitle-transcript.ts';
 import { TranscriptStore } from './transcript-store.ts';
 import type {
   AppConfig,
@@ -32,6 +32,8 @@ import type {
   HistoryMineBatchPayload,
   HistoryMineRequest,
   MinePayload,
+  OverlayStatus,
+  OverlayStatusPayload,
   ServerConfig,
   SessionPayload,
   SettingsOptions,
@@ -44,6 +46,7 @@ import { WebSocketHub } from './ws.ts';
 
 const APP_ROOT = resolveAppRoot();
 const WEB_ROOT = path.join(APP_ROOT, 'web');
+const OVERLAY_STATUS_FRESH_MS = 2500;
 
 export interface ServerContext {
   config: AppConfig;
@@ -53,7 +56,14 @@ export interface ServerContext {
   sockets: WebSocketHub;
   settingsOptionsCache?: SettingsOptionsCache;
   listInstalledFonts?: () => Promise<string[]>;
+  loadSubtitleTranscript?: (config: AppConfig, track: SubtitleTrackPayload) => Promise<SubtitleTranscriptResult>;
   requestShutdown?: (reason: string) => void;
+  overlayStatus?: OverlayStatusRuntime;
+  now?: () => number;
+}
+
+interface OverlayStatusRuntime extends OverlayStatusPayload {
+  updatedAtMs: number | null;
 }
 
 export type ListenResult = 'started' | 'already-running';
@@ -273,7 +283,7 @@ export async function routeRequest(
       context.transcriptStore.startSession(payload);
       broadcastState(context.config, context.transcriptStore, context.sockets);
       if (payload.subtitleTrack) {
-        await syncTranscriptTrack(context, payload.subtitleTrack);
+        scheduleTranscriptTrackSync(context, payload.subtitleTrack);
       }
     } else {
       context.transcriptStore.stopSession(payload.sessionId);
@@ -304,7 +314,7 @@ export async function routeRequest(
     assertActiveSession(context.transcriptStore, payload.sessionId);
     context.transcriptStore.setSubtitleTrack(payload);
     broadcastState(context.config, context.transcriptStore, context.sockets);
-    await syncTranscriptTrack(context, payload);
+    scheduleTranscriptTrackSync(context, payload);
     respondJson(response, 200, {
       success: true,
       message: 'Subtitle track updated.',
@@ -341,6 +351,24 @@ export async function routeRequest(
     respondJson(response, 200, {
       success: true,
       message: 'Yomitan settings open request sent to the overlay.',
+    });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/overlay/status') {
+    const payload = parseOverlayStatusPayload(await readJsonBody<unknown>(request));
+    updateOverlayStatus(context, payload);
+    respondJson(response, 200, {
+      success: true,
+      status: getOverlayStatus(context),
+    });
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/api/overlay/status') {
+    respondJson(response, 200, {
+      success: true,
+      status: getOverlayStatus(context),
     });
     return;
   }
@@ -588,8 +616,27 @@ function assertActiveHistoryMineRequest(transcriptStore: TranscriptStore, payloa
   assertActiveSession(transcriptStore, payload.sessionId);
 }
 
+function scheduleTranscriptTrackSync(context: ServerContext, track: SubtitleTrackPayload): void {
+  void syncTranscriptTrack(context, { ...track }).catch((error) => {
+    if (!isActiveSubtitleTrack(context.transcriptStore, track)) {
+      return;
+    }
+
+    context.transcriptStore.setTranscriptError(
+      track,
+      error instanceof Error ? error.message : String(error),
+    );
+    broadcastState(context.config, context.transcriptStore, context.sockets);
+  });
+}
+
 async function syncTranscriptTrack(context: ServerContext, track: SubtitleTrackPayload): Promise<void> {
-  const result = await loadSubtitleTranscript(context.config, track);
+  const loader = context.loadSubtitleTranscript ?? loadSubtitleTranscript;
+  const result = await loader(context.config, track);
+  if (!isActiveSubtitleTrack(context.transcriptStore, track)) {
+    return;
+  }
+
   if (result.status === 'ready') {
     context.transcriptStore.setTranscript(track, result.transcript);
   } else if (result.status === 'unavailable') {
@@ -599,6 +646,60 @@ async function syncTranscriptTrack(context: ServerContext, track: SubtitleTrackP
   }
 
   broadcastState(context.config, context.transcriptStore, context.sockets);
+}
+
+function isActiveSubtitleTrack(transcriptStore: TranscriptStore, track: SubtitleTrackPayload): boolean {
+  const session = transcriptStore.getState().session;
+  return Boolean(
+    session &&
+      session.sessionId === track.sessionId &&
+      session.subtitleTrack &&
+      subtitleTrackKey(session.subtitleTrack) === subtitleTrackKey(track),
+  );
+}
+
+function subtitleTrackKey(track: SubtitleTrackPayload): string {
+  return [
+    track.sessionId,
+    track.filePath,
+    track.kind,
+    track.externalFilePath ?? '',
+    track.trackId ?? '',
+    track.ffIndex ?? '',
+    track.codec ?? '',
+    track.title ?? '',
+    track.lang ?? '',
+  ].join('::');
+}
+
+function updateOverlayStatus(context: ServerContext, payload: OverlayStatusPayload): void {
+  context.overlayStatus = {
+    ...payload,
+    updatedAtMs: getNow(context),
+  };
+}
+
+function getOverlayStatus(context: ServerContext): OverlayStatus {
+  const status = context.overlayStatus ?? {
+    sessionId: null,
+    visible: false,
+    text: '',
+    updatedAtMs: null,
+  };
+  const ageMs = status.updatedAtMs == null ? null : Math.max(0, getNow(context) - status.updatedAtMs);
+
+  return {
+    sessionId: status.sessionId,
+    visible: status.visible,
+    text: status.text,
+    updatedAtMs: status.updatedAtMs,
+    ageMs,
+    fresh: ageMs != null && ageMs <= OVERLAY_STATUS_FRESH_MS,
+  };
+}
+
+function getNow(context: ServerContext): number {
+  return context.now?.() ?? Date.now();
 }
 
 class HttpError extends Error {
@@ -879,6 +980,16 @@ function parseSubtitleEventPayload(value: unknown, fieldName: string): SubtitleE
   };
 }
 
+function parseOverlayStatusPayload(value: unknown): OverlayStatusPayload {
+  const root = getRecord(value, 'overlay status payload');
+
+  return {
+    sessionId: root.sessionId == null ? null : getString(root.sessionId, 'overlay status payload.sessionId'),
+    visible: getBoolean(root.visible, 'overlay status payload.visible'),
+    text: getString(root.text, 'overlay status payload.text'),
+  };
+}
+
 function getString(value: unknown, fieldName: string, options: { allowEmpty?: boolean } = {}): string {
   if (typeof value !== 'string') {
     throw new HttpError(400, `${fieldName} must be a string.`);
@@ -908,18 +1019,18 @@ function getInteger(value: unknown, fieldName: string): number {
   return value;
 }
 
-function getNullableInteger(value: unknown, fieldName: string): number | null {
-  if (value == null) {
-    return null;
-  }
-
-  return getInteger(value, fieldName);
-}
-
 function getBoolean(value: unknown, fieldName: string): boolean {
   if (typeof value !== 'boolean') {
     throw new HttpError(400, `${fieldName} must be a boolean.`);
   }
 
   return value;
+}
+
+function getNullableInteger(value: unknown, fieldName: string): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  return getInteger(value, fieldName);
 }

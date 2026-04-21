@@ -74,6 +74,7 @@ local state = {
     overlay_osc_hidden = false,
     last_overlay_start_attempt = 0,
     last_overlay_process_probe = 0,
+    last_overlay_status_warn = 0,
 }
 
 local JSON_NULL = {}
@@ -932,8 +933,57 @@ local function ensure_overlay_running()
     end
 
     state.overlay_pid = pid
-    hide_mpv_subtitles_for_overlay()
-    hide_mpv_osc_for_overlay()
+end
+
+local function overlay_status_is_rendering(status)
+    if type(status) ~= "table" then
+        return false
+    end
+
+    if status.fresh ~= true or status.visible ~= true then
+        return false
+    end
+
+    if tostring(status.sessionId or "") ~= tostring(state.session_id or "") then
+        return false
+    end
+
+    return trim_output(status.text or "") ~= nil
+end
+
+local function sync_overlay_visibility()
+    if not is_truthy(opts.overlay_enabled) or not state.session_id or not state.helper_ready then
+        restore_mpv_subtitles_after_overlay()
+        restore_mpv_osc_after_overlay()
+        return
+    end
+
+    if not state.overlay_pid then
+        restore_mpv_subtitles_after_overlay()
+        restore_mpv_osc_after_overlay()
+        return
+    end
+
+    local response, err = helper_request("GET", "/api/overlay/status", nil, 1000)
+    if not response then
+        restore_mpv_subtitles_after_overlay()
+        restore_mpv_osc_after_overlay()
+        local now = mp.get_time()
+        if (now - state.last_overlay_status_warn) >= 5 then
+            state.last_overlay_status_warn = now
+            msg.warn("could not read SentenceMiner overlay status: " .. tostring(err))
+        end
+        return
+    end
+
+    if overlay_status_is_rendering(response.status) then
+        hide_mpv_subtitles_for_overlay()
+        hide_mpv_osc_for_overlay()
+        return
+    end
+
+    restore_mpv_subtitles_after_overlay()
+    restore_mpv_osc_after_overlay()
 end
 
 local function stop_overlay_process()
@@ -1159,7 +1209,7 @@ local function start_session()
             state.session_id = nil
             state.last_subtitle_key = nil
             msg.warn("could not start helper session: " .. tostring(request_err))
-            mp.osd_message("SentenceMiner: could not start helper session", 4)
+            mp.osd_message("SentenceMiner: could not start helper session: " .. tostring(request_err), 5)
             return
         end
 
@@ -1501,6 +1551,9 @@ end)
 mp.add_periodic_timer(1.0, function()
     if state.session_id and state.helper_ready then
         ensure_overlay_running()
+        sync_overlay_visibility()
+    else
+        sync_overlay_visibility()
     end
 end)
 

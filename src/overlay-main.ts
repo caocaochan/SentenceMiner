@@ -59,9 +59,7 @@ app.whenReady().then(async () => {
   overlayWindow.webContents.on('did-finish-load', () => {
     appendLog('overlay page loaded');
   });
-  overlayWindow.loadURL(`${trimTrailingSlash(args.helperUrl)}/overlay.html`).catch((error) => {
-    appendLog(`loadURL failed: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  void loadOverlayPageWithRetry(overlayWindow, `${trimTrailingSlash(args.helperUrl)}/overlay.html`);
   startBoundsWatcher(args.mpvPid, overlayWindow);
   setTimeout(showFallbackWindowIfNeeded, 2000);
 
@@ -138,6 +136,30 @@ function createOverlayWindow(persistentSession: Session, helperUrl: string): Bro
   });
 
   return window;
+}
+
+async function loadOverlayPageWithRetry(window: BrowserWindow, url: string): Promise<void> {
+  let attempt = 0;
+  while (!window.isDestroyed()) {
+    try {
+      await window.loadURL(url);
+      appendLog(`overlay page load requested ${url}`);
+      return;
+    } catch (error) {
+      attempt += 1;
+      const delayMs = Math.min(5000, 500 * attempt);
+      appendLog(
+        `loadURL failed attempt=${attempt} retryInMs=${delayMs}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      await delay(delayMs);
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function loadYomitanExtension(persistentSession: Session, extensionPath: string): Promise<void> {
