@@ -335,9 +335,7 @@ export class Backend {
 
             const options = this._getProfileOptions({current: true}, false);
             if (options.general.showGuide) {
-                void this._openWelcomeGuidePageOnce().catch((e) => {
-                    log.warn(e);
-                });
+                void this._openWelcomeGuidePageOnce();
             }
 
             this._clipboardMonitor.on('change', this._onClipboardTextChange.bind(this));
@@ -519,8 +517,8 @@ export class Backend {
         // Tab ID isn't set in background (e.g. browser_action)
         /** @type {import('application').ApiMessage<'applicationBackendReady'>} */
         const data = {action: 'applicationBackendReady'};
-        this._sendMessageIgnoreResponse(data);
         if (typeof sender.tab === 'undefined') {
+            this._sendMessageIgnoreResponse(data);
             return false;
         } else {
             const {id} = sender.tab;

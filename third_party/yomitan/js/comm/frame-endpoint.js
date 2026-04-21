@@ -48,7 +48,6 @@ export class FrameEndpoint {
         /** @type {import('frame-client').FrameEndpointReadyDetails} */
         const details = {secret: this._secret};
         void this._api.broadcastTab({action: 'frameEndpointReady', params: details});
-        this._postWindowFallbackMessage('frameEndpointReady', details);
     }
 
     /**
@@ -106,21 +105,5 @@ export class FrameEndpoint {
         /** @type {import('frame-client').FrameEndpointConnectedDetails} */
         const details = {secret, token};
         void this._api.sendMessageToFrame(hostFrameId, {action: 'frameEndpointConnected', params: details});
-        this._postWindowFallbackMessage('frameEndpointConnected', details);
-    }
-
-    /**
-     * @param {string} action
-     * @param {import('core').SerializableObject} params
-     */
-    _postWindowFallbackMessage(action, params) {
-        if (window.parent === window) { return; }
-
-        window.parent.postMessage({
-            sentenceMinerFrameClientFallback: true,
-            action,
-            params,
-            frameId: -1,
-        }, '*');
     }
 }

@@ -17,7 +17,6 @@
  */
 
 import {isObjectNotArray} from '../core/object-utilities.js';
-import {ExtensionError} from '../core/extension-error.js';
 import {deferPromise, generateId} from '../core/utilities.js';
 
 export class FrameClient {
@@ -28,8 +27,6 @@ export class FrameClient {
         this._token = null;
         /** @type {?number} */
         this._frameId = null;
-        /** @type {boolean} */
-        this._useWindowMessaging = false;
     }
 
     /** @type {number} */
@@ -46,11 +43,10 @@ export class FrameClient {
      * @param {number} [timeout]
      */
     async connect(frame, targetOrigin, hostFrameId, setupFrame, timeout = 10000) {
-        const {secret, token, frameId, useWindowMessaging} = await this._connectInternal(frame, targetOrigin, hostFrameId, setupFrame, timeout);
+        const {secret, token, frameId} = await this._connectInternal(frame, targetOrigin, hostFrameId, setupFrame, timeout);
         this._secret = secret;
         this._token = token;
         this._frameId = frameId;
-        this._useWindowMessaging = useWindowMessaging;
     }
 
     /**
@@ -58,13 +54,6 @@ export class FrameClient {
      */
     isConnected() {
         return (this._secret !== null);
-    }
-
-    /**
-     * @returns {boolean}
-     */
-    usesWindowMessaging() {
-        return this._useWindowMessaging;
     }
 
     /**
@@ -85,73 +74,12 @@ export class FrameClient {
     }
 
     /**
-     * @template [T=unknown]
-     * @param {import('extension').HtmlElementWithContentWindow} frame
-     * @param {string} targetOrigin
-     * @param {T} data
-     * @param {number} [timeout]
-     * @returns {Promise<unknown>}
-     */
-    invokeWindow(frame, targetOrigin, data, timeout = 10000) {
-        return new Promise((resolve, reject) => {
-            const contentWindow = frame.contentWindow;
-            if (contentWindow === null) {
-                reject(new Error('Frame missing content window'));
-                return;
-            }
-
-            const requestId = generateId(16);
-            /** @type {?import('core').Timeout} */
-            let timer = null;
-
-            /**
-             * @param {MessageEvent<unknown>} event
-             */
-            const onMessage = (event) => {
-                if (event.source !== contentWindow || event.origin !== targetOrigin) { return; }
-
-                const {data: message} = event;
-                if (!isObjectNotArray(message)) { return; }
-                if (message.sentenceMinerFrameClientFallback !== true || message.action !== 'frameClientDirectApiResponse') { return; }
-                if (message.requestId !== requestId) { return; }
-
-                cleanup();
-                if (typeof message.error !== 'undefined') {
-                    reject(ExtensionError.deserialize(/** @type {import('core').SerializedError} */ (message.error)));
-                    return;
-                }
-                resolve(message.result);
-            };
-
-            const cleanup = () => {
-                if (timer === null) { return; }
-                clearTimeout(timer);
-                timer = null;
-                window.removeEventListener('message', onMessage, false);
-            };
-
-            timer = setTimeout(() => {
-                cleanup();
-                reject(new Error('Timeout'));
-            }, timeout);
-            window.addEventListener('message', onMessage, false);
-
-            contentWindow.postMessage({
-                sentenceMinerFrameClientFallback: true,
-                action: 'frameClientDirectApi',
-                requestId,
-                message: this.createMessage(data),
-            }, targetOrigin);
-        });
-    }
-
-    /**
      * @param {import('extension').HtmlElementWithContentWindow} frame
      * @param {string} targetOrigin
      * @param {number} hostFrameId
      * @param {(frame: import('extension').HtmlElementWithContentWindow) => void} setupFrame
      * @param {number} timeout
-     * @returns {Promise<{secret: string, token: string, frameId: number, useWindowMessaging: boolean}>}
+     * @returns {Promise<{secret: string, token: string, frameId: number}>}
      */
     _connectInternal(frame, targetOrigin, hostFrameId, setupFrame, timeout) {
         return new Promise((resolve, reject) => {
@@ -186,26 +114,14 @@ export class FrameClient {
 
             /** @type {import('extension').ChromeRuntimeOnMessageCallback<import('application').ApiMessageAny>} */
             const onMessage = (message) => {
-                void onMessageInner(message, false);
+                void onMessageInner(message);
                 return false;
             };
 
             /**
-             * @param {MessageEvent<unknown>} event
-             */
-            const onWindowMessage = (event) => {
-                if (event.source !== frame.contentWindow || event.origin !== targetOrigin) { return; }
-
-                const {data: message} = event;
-                if (!isObjectNotArray(message) || message.sentenceMinerFrameClientFallback !== true) { return; }
-                void onMessageInner(/** @type {import('application').ApiMessageAny} */ (message), true);
-            };
-
-            /**
              * @param {import('application').ApiMessageAny} message
-             * @param {boolean} useWindowMessaging
              */
-            const onMessageInner = async (message, useWindowMessaging) => {
+            const onMessageInner = async (message) => {
                 try {
                     if (!isObjectNotArray(message)) { return; }
                     const {action, params} = message;
@@ -229,10 +145,7 @@ export class FrameClient {
                                 const token2 = tokenMap.get(secret);
                                 if (typeof token2 !== 'undefined' && token === token2 && typeof frameId === 'number') {
                                     cleanup();
-                                    if (useWindowMessaging) {
-                                        console.info('SentenceMiner: Yomitan popup frame connected with direct window messaging fallback.');
-                                    }
-                                    resolve({secret, token, frameId, useWindowMessaging});
+                                    resolve({secret, token, frameId});
                                 }
                             }
                             break;
@@ -271,7 +184,6 @@ export class FrameClient {
                 }
 
                 chrome.runtime.onMessage.removeListener(onMessage);
-                window.removeEventListener('message', onWindowMessage, false);
                 frame.removeEventListener('load', onLoad);
             };
 
@@ -282,7 +194,6 @@ export class FrameClient {
             }, timeout);
 
             chrome.runtime.onMessage.addListener(onMessage);
-            window.addEventListener('message', onWindowMessage, false);
             frame.addEventListener('load', onLoad);
 
             // Prevent unhandled rejections

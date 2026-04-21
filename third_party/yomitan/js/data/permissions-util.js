@@ -19,19 +19,6 @@
 import {getFieldMarkers} from './anki-util.js';
 
 /**
- * @returns {?chrome.permissions}
- */
-function getPermissionsApi() {
-    const api = chrome.permissions;
-    return (
-        api !== null &&
-        typeof api === 'object' &&
-        typeof api.contains === 'function' &&
-        typeof api.getAll === 'function'
-    ) ? api : null;
-}
-
-/**
  * This function returns whether an Anki field marker might require clipboard permissions.
  * This is speculative and may not guarantee that the field marker actually does require the permission,
  * as the custom handlebars template is not deeply inspected.
@@ -53,13 +40,8 @@ function ankiFieldMarkerMayUseClipboard(marker) {
  * @returns {Promise<boolean>}
  */
 export function hasPermissions(permissions) {
-    const api = getPermissionsApi();
-    if (api === null) {
-        return Promise.resolve(false);
-    }
-
     return new Promise((resolve, reject) => {
-        api.contains(permissions, (result) => {
+        chrome.permissions.contains(permissions, (result) => {
             const e = chrome.runtime.lastError;
             if (e) {
                 reject(new Error(e.message));
@@ -76,15 +58,10 @@ export function hasPermissions(permissions) {
  * @returns {Promise<boolean>}
  */
 export function setPermissionsGranted(permissions, shouldHave) {
-    const api = getPermissionsApi();
-    if (api === null) {
-        return Promise.resolve(false);
-    }
-
     return (
         shouldHave ?
         new Promise((resolve, reject) => {
-            api.request(permissions, (result) => {
+            chrome.permissions.request(permissions, (result) => {
                 const e = chrome.runtime.lastError;
                 if (e) {
                     reject(new Error(e.message));
@@ -94,7 +71,7 @@ export function setPermissionsGranted(permissions, shouldHave) {
             });
         }) :
         new Promise((resolve, reject) => {
-            api.remove(permissions, (result) => {
+            chrome.permissions.remove(permissions, (result) => {
                 const e = chrome.runtime.lastError;
                 if (e) {
                     reject(new Error(e.message));
@@ -110,17 +87,8 @@ export function setPermissionsGranted(permissions, shouldHave) {
  * @returns {Promise<chrome.permissions.Permissions>}
  */
 export function getAllPermissions() {
-    const api = getPermissionsApi();
-    if (api === null) {
-        const manifest = chrome.runtime.getManifest();
-        return Promise.resolve({
-            permissions: manifest.permissions ?? [],
-            origins: manifest.host_permissions ?? [],
-        });
-    }
-
     return new Promise((resolve, reject) => {
-        api.getAll((result) => {
+        chrome.permissions.getAll((result) => {
             const e = chrome.runtime.lastError;
             if (e) {
                 reject(new Error(e.message));
