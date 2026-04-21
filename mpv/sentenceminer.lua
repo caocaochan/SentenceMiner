@@ -15,6 +15,8 @@ local opts = {
     capture_image = "yes",
     bind_default_key = "no",
     default_key = "Ctrl+m",
+    bind_bookmark_key = "yes",
+    bookmark_key = "Ctrl+b",
     bind_toggle_key = "yes",
     toggle_key = "Ctrl+Shift+m",
     server_host = "127.0.0.1",
@@ -1178,6 +1180,52 @@ local function mine_current()
     mp.osd_message("SentenceMiner: " .. message, 3)
 end
 
+local function bookmark_current()
+    if not is_sentence_miner_enabled() then
+        mp.osd_message("SentenceMiner: disabled", 2)
+        return
+    end
+
+    if not state.session_id then
+        mp.osd_message("SentenceMiner: no active session", 2)
+        return
+    end
+
+    local function send_bookmark_request()
+        local _, subtitle_err = helper_request("POST", "/api/subtitle-event", current_subtitle_payload())
+        if subtitle_err then
+            state.helper_ready = false
+            mp.osd_message("SentenceMiner: " .. tostring(subtitle_err), 4)
+            return
+        end
+
+        local response, request_err = helper_request("POST", "/api/bookmark/current", {
+            sessionId = state.session_id,
+        })
+        if not response then
+            state.helper_ready = false
+            mp.osd_message("SentenceMiner: " .. tostring(request_err), 4)
+            return
+        end
+
+        mp.osd_message("SentenceMiner: bookmark toggled", 2)
+    end
+
+    if state.helper_ready then
+        send_bookmark_request()
+        return
+    end
+
+    ensure_helper_ready(function(ok, err)
+        if not ok then
+            mp.osd_message("SentenceMiner: " .. tostring(err), 4)
+            return
+        end
+
+        send_bookmark_request()
+    end)
+end
+
 local function set_sentence_miner_enabled(enabled)
     state.enabled = enabled
 
@@ -1216,10 +1264,15 @@ mp.add_periodic_timer(0.5, function()
 end)
 
 mp.register_script_message("mine", mine_current)
+mp.register_script_message("bookmark", bookmark_current)
 mp.register_script_message("toggle-enabled", toggle_sentence_miner_enabled)
 
 if is_truthy(opts.bind_default_key) then
     mp.add_forced_key_binding(opts.default_key, "sentenceminer-mine", mine_current)
+end
+
+if is_truthy(opts.bind_bookmark_key) then
+    mp.add_forced_key_binding(opts.bookmark_key, "sentenceminer-bookmark", bookmark_current)
 end
 
 if is_truthy(opts.bind_toggle_key) then

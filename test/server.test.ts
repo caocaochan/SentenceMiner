@@ -379,6 +379,64 @@ test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
   assert.deepEqual(harness.shutdownReasons, ['runtime shutdown request']);
 });
 
+test('POST /api/bookmark/current accepts the active current cue', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'bookmark me',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+  ]);
+  harness.transcriptStore.pushSubtitle({
+    sessionId: 'session-1',
+    filePath: 'C:\\Videos\\episode.mkv',
+    text: 'bookmark me',
+    startMs: 1000,
+    endMs: 1400,
+    playbackTimeMs: 1200,
+  });
+
+  const response = await fetch(`${harness.baseUrl}/api/bookmark/current`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.equal(payload.message, 'Bookmark toggle sent to the transcript page.');
+});
+
+test('POST /api/bookmark/current rejects when there is no current cue', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+
+  const response = await fetch(`${harness.baseUrl}/api/bookmark/current`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sessionId: 'session-1',
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(payload.success, false);
+  assert.equal(payload.message, 'No current transcript line is available to bookmark.');
+});
+
 test('POST /api/history/mine accepts batch selections and updates Anki once', async (t) => {
   const harness = await createServerHarness(t);
   harness.config.runtime.captureAudio = false;

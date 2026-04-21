@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildTranscriptBookmarkKey,
   buildTranscriptStructureSignature,
   computeTranscriptFollowScrollTarget,
   computeTranscriptItemUiState,
+  filterTranscriptEntriesForBookmarkView,
+  shouldHandleTranscriptBookmarkShortcut,
   shouldRebuildTranscriptList,
 } from '../web/transcript-render.js';
 import { buildHistoryEntryKey } from '../web/history-selection.js';
@@ -49,6 +52,63 @@ test('pending actions only disable the relevant transcript buttons', () => {
   assert.equal(firstUi.active, true);
   assert.equal(secondUi.goToDisabled, false);
   assert.equal(secondUi.selected, true);
+});
+
+test('transcript bookmark key ignores session-specific cue identity', () => {
+  const first = buildCue('session-1-cue-1', 'same text', 100);
+  const second = {
+    ...buildCue('session-2-cue-99', 'same text', 100),
+    sessionId: 'session-2',
+  };
+
+  assert.equal(buildTranscriptBookmarkKey(first), buildTranscriptBookmarkKey(second));
+});
+
+test('bookmarked-only transcript filter keeps only bookmarked entries', () => {
+  const first = buildCue('cue-1', 'one', 100);
+  const second = buildCue('cue-2', 'two', 200);
+  const third = buildCue('cue-3', 'three', 300);
+  const bookmarkedKeys = new Set([
+    buildTranscriptBookmarkKey(first),
+    buildTranscriptBookmarkKey(third),
+  ]);
+
+  const filtered = filterTranscriptEntriesForBookmarkView([first, second, third], bookmarkedKeys, true);
+
+  assert.deepEqual(
+    filtered.map((entry) => entry.text),
+    ['one', 'three'],
+  );
+});
+
+test('bookmarked-only transcript filter can return an empty list', () => {
+  const first = buildCue('cue-1', 'one', 100);
+
+  assert.deepEqual(filterTranscriptEntriesForBookmarkView([first], new Set(), true), []);
+});
+
+test('transcript item UI state includes bookmarked state', () => {
+  const first = buildCue('cue-1', 'one', 100);
+  const second = buildCue('cue-2', 'two', 200);
+  const bookmarkedKeys = new Set([buildTranscriptBookmarkKey(second)]);
+
+  const firstUi = computeTranscriptItemUiState([first, second], new Set(), new Set(), 'cue-1', first, bookmarkedKeys);
+  const secondUi = computeTranscriptItemUiState([first, second], new Set(), new Set(), 'cue-1', second, bookmarkedKeys);
+
+  assert.equal(firstUi.bookmarked, false);
+  assert.equal(secondUi.bookmarked, true);
+});
+
+test('transcript bookmark shortcut is active for plain B outside editable controls', () => {
+  assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'b', targetTagName: 'BODY' }), true);
+  assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'B', targetTagName: 'DIV' }), true);
+});
+
+test('transcript bookmark shortcut is ignored in modal, editable controls, and modified key chords', () => {
+  assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'b', settingsModalOpen: true }), false);
+  assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'b', targetTagName: 'INPUT' }), false);
+  assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'b', targetIsContentEditable: true }), false);
+  assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'b', ctrlKey: true }), false);
 });
 
 test('selected middle transcript lines cannot be toggled out of a consecutive block', () => {

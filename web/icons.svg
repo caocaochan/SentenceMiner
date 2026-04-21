@@ -30,6 +30,9 @@
   <symbol id="check" viewBox="0 0 24 24">
     <path d="M20 6 9 17l-5-5" />
   </symbol>
+  <symbol id="bookmark" viewBox="0 0 24 24">
+    <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+  </symbol>
   <symbol id="x" viewBox="0 0 24 24">
     <path d="M18 6 6 18" />
     <path d="m6 6 12 12" />

@@ -334,6 +334,26 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'POST' && url.pathname === '/api/bookmark/current') {
+    const payload = getRecord(await readJsonBody<unknown>(request), 'bookmark payload');
+    const sessionId = getString(payload.sessionId, 'bookmark payload.sessionId', { allowEmpty: false });
+    assertActiveSession(context.transcriptStore, sessionId);
+    const currentCueState = context.transcriptStore.getCurrentCueState();
+    if (!currentCueState.currentCueId) {
+      throw new HttpError(409, 'No current transcript line is available to bookmark.');
+    }
+
+    broadcastBookmarkCurrent(context.sockets, {
+      sessionId,
+      currentCueId: currentCueState.currentCueId,
+    });
+    respondJson(response, 200, {
+      success: true,
+      message: 'Bookmark toggle sent to the transcript page.',
+    });
+    return;
+  }
+
   if (method === 'POST' && url.pathname === '/api/history/go-to') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
     assertActiveSession(context.transcriptStore, payload.sessionId);
@@ -672,6 +692,19 @@ function broadcastToast(
 ): void {
   sockets.broadcastJson({
     type: 'toast',
+    payload,
+  });
+}
+
+function broadcastBookmarkCurrent(
+  sockets: WebSocketHub,
+  payload: {
+    sessionId: string;
+    currentCueId: string;
+  },
+): void {
+  sockets.broadcastJson({
+    type: 'bookmark-current',
     payload,
   });
 }
