@@ -21,6 +21,7 @@ local opts = {
     overlay_exe_path = "",
     overlay_yomitan_extension_path = "",
     overlay_hide_mpv_subtitles = "yes",
+    overlay_hide_mpv_osc = "yes",
     overlay_font_family = "",
     overlay_font_size_px = 42,
     overlay_bottom_offset_pct = 14,
@@ -70,6 +71,7 @@ local state = {
     overlay_pid = nil,
     previous_sub_visibility = nil,
     overlay_subtitles_hidden = false,
+    overlay_osc_hidden = false,
     last_overlay_start_attempt = 0,
     last_overlay_process_probe = 0,
 }
@@ -788,6 +790,33 @@ local function restore_mpv_subtitles_after_overlay()
     state.overlay_subtitles_hidden = false
 end
 
+local function hide_mpv_osc_for_overlay()
+    if not is_truthy(opts.overlay_hide_mpv_osc) or state.overlay_osc_hidden then
+        return
+    end
+
+    local ok, err = pcall(mp.commandv, "script-message", "osc-visibility", "never", "no-osd")
+    if not ok then
+        msg.warn("could not hide mpv OSC for SentenceMiner overlay: " .. tostring(err))
+        return
+    end
+
+    state.overlay_osc_hidden = true
+end
+
+local function restore_mpv_osc_after_overlay()
+    if not state.overlay_osc_hidden then
+        return
+    end
+
+    local ok, err = pcall(mp.commandv, "script-message", "osc-visibility", "auto", "no-osd")
+    if not ok then
+        msg.warn("could not restore mpv OSC after SentenceMiner overlay: " .. tostring(err))
+    end
+
+    state.overlay_osc_hidden = false
+end
+
 local function spawn_overlay_process()
     if not is_windows() then
         return nil, "overlay is currently implemented only on Windows"
@@ -884,6 +913,8 @@ local function ensure_overlay_running()
         end
 
         msg.warn("SentenceMiner overlay process exited; attempting restart")
+        restore_mpv_subtitles_after_overlay()
+        restore_mpv_osc_after_overlay()
         state.overlay_pid = nil
     end
 
@@ -902,10 +933,12 @@ local function ensure_overlay_running()
 
     state.overlay_pid = pid
     hide_mpv_subtitles_for_overlay()
+    hide_mpv_osc_for_overlay()
 end
 
 local function stop_overlay_process()
     restore_mpv_subtitles_after_overlay()
+    restore_mpv_osc_after_overlay()
 
     if not state.overlay_pid then
         return
