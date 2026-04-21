@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SentenceMiner</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/styles.css?v=20260421-ui2">
+    <link rel="stylesheet" href="/styles.css?v=20260421-ui3">
   </head>
   <body>
     <div class="app-shell">
@@ -75,19 +75,19 @@
 
         <form id="settings-form" class="settings-form">
           <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-            <button class="settings-tab" id="settings-tab-anki" data-settings-tab="anki" type="button" role="tab" aria-controls="settings-panel-anki" aria-selected="true">
+            <button class="settings-tab" id="settings-tab-anki" data-settings-tab="anki" type="button" role="tab" aria-controls="settings-panel-anki" aria-selected="true" onclick="window.setSettingsTab?.('anki')">
               <svg class="lucide-icon" aria-hidden="true"><use href="/icons.svg#database"></use></svg>
               <span>Anki</span>
             </button>
-            <button class="settings-tab" id="settings-tab-fields" data-settings-tab="fields" type="button" role="tab" aria-controls="settings-panel-fields" aria-selected="false">
+            <button class="settings-tab" id="settings-tab-fields" data-settings-tab="fields" type="button" role="tab" aria-controls="settings-panel-fields" aria-selected="false" onclick="window.setSettingsTab?.('fields')">
               <svg class="lucide-icon" aria-hidden="true"><use href="/icons.svg#list-checks"></use></svg>
               <span>Fields</span>
             </button>
-            <button class="settings-tab" id="settings-tab-capture" data-settings-tab="capture" type="button" role="tab" aria-controls="settings-panel-capture" aria-selected="false">
+            <button class="settings-tab" id="settings-tab-capture" data-settings-tab="capture" type="button" role="tab" aria-controls="settings-panel-capture" aria-selected="false" onclick="window.setSettingsTab?.('capture')">
               <svg class="lucide-icon" aria-hidden="true"><use href="/icons.svg#audio-lines"></use></svg>
               <span>Capture</span>
             </button>
-            <button class="settings-tab" id="settings-tab-appearance" data-settings-tab="appearance" type="button" role="tab" aria-controls="settings-panel-appearance" aria-selected="false">
+            <button class="settings-tab" id="settings-tab-appearance" data-settings-tab="appearance" type="button" role="tab" aria-controls="settings-panel-appearance" aria-selected="false" onclick="window.setSettingsTab?.('appearance')">
               <svg class="lucide-icon" aria-hidden="true"><use href="/icons.svg#type"></use></svg>
               <span>Appearance</span>
             </button>
@@ -262,6 +262,6 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js?v=20260421-ui2"></script>
+    <script type="module" src="/app.js?v=20260421-ui3"></script>
   </body>
 </html>

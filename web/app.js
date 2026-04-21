@@ -386,6 +386,8 @@ function activateSettingsTab(tabName) {
   renderSettingsTabs();
 }
 
+window.setSettingsTab = activateSettingsTab;
+
 function buildHistoryActionButton(label, action, entry, iconName) {
   const button = document.createElement('button');
   button.type = 'button';

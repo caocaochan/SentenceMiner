@@ -556,7 +556,7 @@ h3 {
 .modal-panel {
   position: relative;
   width: min(920px, 100%);
-  height: auto;
+  height: min(92vh, 920px);
   max-height: min(92vh, 920px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
