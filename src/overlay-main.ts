@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { app, BrowserWindow, ipcMain, session } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, session } from 'electron';
 
 interface OverlayArgs {
   helperUrl: string;
@@ -20,21 +20,38 @@ interface WindowBounds {
 
 const args = parseArgs(process.argv.slice(2));
 const userDataPath = resolveUserDataPath(args.mpvPid);
+const logPath = path.join(userDataPath, 'overlay.log');
 let overlayWindow: BrowserWindow | null = null;
 let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
+let receivedBounds = false;
 
 fs.mkdirSync(userDataPath, { recursive: true });
+appendLog('boot: created user data directory');
 app.setPath('userData', userDataPath);
+appendLog('boot: set userData path');
 app.commandLine.appendSwitch('disk-cache-dir', path.join(userDataPath, 'DiskCache'));
+appendLog('boot: set disk cache dir');
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+appendLog('boot: disabled gpu shader disk cache');
 app.setName('SentenceMiner Overlay');
+appendLog('boot: set app name');
 
 app.whenReady().then(async () => {
+  appendLog(`starting overlay helperUrl=${args.helperUrl} mpvPid=${args.mpvPid ?? 'none'} userData=${userDataPath}`);
   await loadYomitanExtension(args.yomitanExtensionPath);
   overlayWindow = createOverlayWindow(args.helperUrl);
-  overlayWindow.loadURL(`${trimTrailingSlash(args.helperUrl)}/overlay.html`);
+  overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
+    appendLog(`page load failed ${errorCode} ${errorDescription} ${validatedUrl}`);
+  });
+  overlayWindow.webContents.on('did-finish-load', () => {
+    appendLog('overlay page loaded');
+  });
+  overlayWindow.loadURL(`${trimTrailingSlash(args.helperUrl)}/overlay.html`).catch((error) => {
+    appendLog(`loadURL failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
   startBoundsWatcher(args.mpvPid);
+  setTimeout(showFallbackWindowIfNeeded, 2000);
 });
 
 app.on('window-all-closed', () => {
@@ -145,16 +162,19 @@ function resolveUserDataPath(mpvPid: number | null): string {
 
 function startBoundsWatcher(mpvPid: number | null): void {
   if (process.platform !== 'win32') {
+    appendLog('non-Windows platform; showing fallback overlay window');
     overlayWindow?.showInactive();
     return;
   }
 
   if (!mpvPid || !Number.isInteger(mpvPid) || mpvPid <= 0) {
+    appendLog('missing mpv pid; showing fallback overlay window');
     overlayWindow?.showInactive();
     return;
   }
 
   const script = buildWindowBoundsScript(mpvPid);
+  appendLog(`starting window bounds watcher for mpv pid ${mpvPid}`);
   boundsWatcher = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -178,10 +198,15 @@ function startBoundsWatcher(mpvPid: number | null): void {
   boundsWatcher.stderr.on('data', (chunk: string) => {
     const message = chunk.trim();
     if (message) {
+      appendLog(`bounds watcher stderr: ${message}`);
       console.warn(`SentenceMiner overlay bounds watcher: ${message}`);
     }
   });
-  boundsWatcher.on('exit', () => {
+  boundsWatcher.on('error', (error) => {
+    appendLog(`bounds watcher failed: ${error.message}`);
+  });
+  boundsWatcher.on('exit', (code, signal) => {
+    appendLog(`bounds watcher exited code=${code ?? 'null'} signal=${signal ?? 'null'}`);
     app.quit();
   });
 }
@@ -203,9 +228,11 @@ function applyBoundsLine(line: string): void {
     return;
   }
 
+  receivedBounds = true;
   const nextKey = `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
   if (nextKey !== lastBoundsKey) {
     lastBoundsKey = nextKey;
+    appendLog(`applying bounds ${nextKey}`);
     overlayWindow.setBounds({
       x: Math.round(bounds.x),
       y: Math.round(bounds.y),
@@ -217,6 +244,25 @@ function applyBoundsLine(line: string): void {
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
   }
+  overlayWindow.moveTop();
+}
+
+function showFallbackWindowIfNeeded(): void {
+  if (!overlayWindow || overlayWindow.isDestroyed() || receivedBounds) {
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const area = display.workArea;
+  const fallbackBounds = {
+    x: area.x,
+    y: area.y,
+    width: area.width,
+    height: area.height,
+  };
+  appendLog(`no mpv bounds received; showing fallback bounds ${JSON.stringify(fallbackBounds)}`);
+  overlayWindow.setBounds(fallbackBounds);
+  overlayWindow.showInactive();
   overlayWindow.moveTop();
 }
 
@@ -275,10 +321,11 @@ while ($true) {
 }
 
 function parseArgs(argv: string[]): OverlayArgs {
+  const positional = argv.filter((arg) => !arg.startsWith('--'));
   return {
-    helperUrl: readStringArg(argv, '--helper-url') || 'http://127.0.0.1:8766',
-    mpvPid: readIntegerArg(argv, '--mpv-pid'),
-    yomitanExtensionPath: readStringArg(argv, '--yomitan-extension-path') || '',
+    helperUrl: readStringArg(argv, '--helper-url') || positional[0] || 'http://127.0.0.1:8766',
+    mpvPid: readIntegerArg(argv, '--mpv-pid') ?? parseInteger(positional[1]),
+    yomitanExtensionPath: readStringArg(argv, '--yomitan-extension-path') || positional[2] || '',
   };
 }
 
@@ -297,10 +344,27 @@ function readIntegerArg(argv: string[], key: string): number | null {
     return null;
   }
 
+  return parseInteger(value);
+}
+
+function parseInteger(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) ? parsed : null;
 }
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
+}
+
+function appendLog(message: string): void {
+  try {
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
+  } catch {
+    // Logging must never prevent the overlay from starting.
+  }
 }

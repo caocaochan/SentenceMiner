@@ -69,6 +69,8 @@ local state = {
     overlay_pid = nil,
     previous_sub_visibility = nil,
     overlay_subtitles_hidden = false,
+    last_overlay_start_attempt = 0,
+    last_overlay_process_probe = 0,
 }
 
 local JSON_NULL = {}
@@ -797,14 +799,12 @@ local function spawn_overlay_process()
 
     local working_dir = parent_dir(overlay_exe_path) or get_script_dir() or "."
     local argument_parts = {
-        "'--helper-url'",
+        "'--'",
         string.format("'%s'", powershell_escape(opts.helper_url)),
-        "'--mpv-pid'",
         string.format("'%s'", powershell_escape(tostring(utils.getpid()))),
     }
     local yomitan_extension_path = resolve_overlay_yomitan_extension_path()
     if yomitan_extension_path then
-        table.insert(argument_parts, "'--yomitan-extension-path'")
         table.insert(argument_parts, string.format("'%s'", powershell_escape(yomitan_extension_path)))
     end
 
@@ -841,14 +841,56 @@ local function spawn_overlay_process()
     return pid, nil
 end
 
+local function is_overlay_process_alive()
+    if not state.overlay_pid or not is_windows() then
+        return state.overlay_pid ~= nil
+    end
+
+    local result = utils.subprocess({
+        args = {
+            "powershell",
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            string.format(
+                "if (Get-Process -Id %s -ErrorAction SilentlyContinue) { 'yes' }",
+                powershell_escape(tostring(state.overlay_pid))
+            ),
+        },
+        cancellable = false,
+        playback_only = false,
+        max_size = 1024 * 16,
+    })
+
+    return result.status == 0 and trim_output(result.stdout) == "yes"
+end
+
 local function ensure_overlay_running()
     if not is_truthy(opts.overlay_enabled) then
         return
     end
 
     if state.overlay_pid ~= nil then
+        local now = mp.get_time()
+        if (now - state.last_overlay_process_probe) < 2 then
+            return
+        end
+
+        state.last_overlay_process_probe = now
+        if is_overlay_process_alive() then
+            return
+        end
+
+        msg.warn("SentenceMiner overlay process exited; attempting restart")
+        state.overlay_pid = nil
+    end
+
+    local now = mp.get_time()
+    if (now - state.last_overlay_start_attempt) < 2 then
         return
     end
+    state.last_overlay_start_attempt = now
 
     local pid, err = spawn_overlay_process()
     if not pid then
@@ -1419,6 +1461,9 @@ mp.add_periodic_timer(0.2, function()
     sync_subtitle_track_state()
     sync_subtitle_state()
     sync_player_command()
+    if state.session_id and state.helper_ready then
+        ensure_overlay_running()
+    end
 end)
 
 mp.register_script_message("mine", mine_current)
