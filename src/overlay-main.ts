@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { app, BrowserWindow, ipcMain, screen, session } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, session, type Session } from 'electron';
 
 interface OverlayArgs {
   helperUrl: string;
@@ -20,10 +20,12 @@ interface WindowBounds {
 
 const args = parseArgs(process.argv.slice(2));
 const userDataPath = resolveUserDataPath(args.mpvPid);
+const persistentSessionPath = resolvePersistentSessionPath();
 const logPath = path.join(userDataPath, 'overlay.log');
 let overlayWindow: BrowserWindow | null = null;
 let yomitanSettingsWindow: BrowserWindow | null = null;
 let yomitanExtensionId: string | null = null;
+let overlaySession: Session | null = null;
 let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
 let lastVisibilityKey = '';
@@ -31,6 +33,8 @@ let receivedBounds = false;
 
 fs.mkdirSync(userDataPath, { recursive: true });
 appendLog('boot: created user data directory');
+fs.mkdirSync(persistentSessionPath, { recursive: true });
+appendLog(`boot: using persistent session path ${persistentSessionPath}`);
 app.setPath('userData', userDataPath);
 appendLog('boot: set userData path');
 app.commandLine.appendSwitch('disk-cache-dir', path.join(userDataPath, 'DiskCache'));
@@ -42,9 +46,10 @@ appendLog('boot: set app name');
 
 app.whenReady().then(async () => {
   appendLog(`starting overlay helperUrl=${args.helperUrl} mpvPid=${args.mpvPid ?? 'none'} userData=${userDataPath}`);
-  setupExtensionDiagnostics();
-  await loadYomitanExtension(args.yomitanExtensionPath);
-  overlayWindow = createOverlayWindow(args.helperUrl);
+  const persistentSession = getOverlaySession();
+  setupExtensionDiagnostics(persistentSession);
+  await loadYomitanExtension(persistentSession, args.yomitanExtensionPath);
+  overlayWindow = createOverlayWindow(persistentSession, args.helperUrl);
   overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
     appendLog(`page load failed ${errorCode} ${errorDescription} ${validatedUrl}`);
   });
@@ -80,7 +85,7 @@ ipcMain.on('overlay:open-yomitan-settings', () => {
   openYomitanSettingsWindow();
 });
 
-function createOverlayWindow(helperUrl: string): BrowserWindow {
+function createOverlayWindow(persistentSession: Session, helperUrl: string): BrowserWindow {
   const preload = path.join(__dirname, 'overlay-preload.cjs');
   const window = new BrowserWindow({
     width: 1280,
@@ -100,6 +105,7 @@ function createOverlayWindow(helperUrl: string): BrowserWindow {
     hasShadow: false,
     backgroundColor: '#00000000',
     webPreferences: {
+      session: persistentSession,
       preload,
       contextIsolation: true,
       nodeIntegration: false,
@@ -128,7 +134,7 @@ function createOverlayWindow(helperUrl: string): BrowserWindow {
   return window;
 }
 
-async function loadYomitanExtension(extensionPath: string): Promise<void> {
+async function loadYomitanExtension(persistentSession: Session, extensionPath: string): Promise<void> {
   const normalizedPath = extensionPath.trim();
   if (!normalizedPath) {
     return;
@@ -140,25 +146,25 @@ async function loadYomitanExtension(extensionPath: string): Promise<void> {
   }
 
   try {
-    const readyPromise = waitForExtensionReady();
-    const extensions = (session.defaultSession as any).extensions;
+    const readyPromise = waitForExtensionReady(persistentSession);
+    const extensions = (persistentSession as any).extensions;
     if (extensions?.loadExtension) {
       const extension = await extensions.loadExtension(normalizedPath, {
         allowFileAccess: true,
       });
       yomitanExtensionId = extension?.id ?? null;
       await readyPromise;
-      await startYomitanServiceWorker();
+      await startYomitanServiceWorker(persistentSession);
       appendLog(`loaded Yomitan extension id=${yomitanExtensionId ?? 'unknown'} path=${normalizedPath}`);
       return;
     }
 
-    const extension = await session.defaultSession.loadExtension(normalizedPath, {
+    const extension = await persistentSession.loadExtension(normalizedPath, {
       allowFileAccess: true,
     });
     yomitanExtensionId = extension?.id ?? null;
     await readyPromise;
-    await startYomitanServiceWorker();
+    await startYomitanServiceWorker(persistentSession);
     appendLog(`loaded Yomitan extension id=${yomitanExtensionId ?? 'unknown'} path=${normalizedPath}`);
   } catch (error) {
     appendLog(`could not load Yomitan extension: ${error instanceof Error ? error.message : String(error)}`);
@@ -166,15 +172,15 @@ async function loadYomitanExtension(extensionPath: string): Promise<void> {
   }
 }
 
-function setupExtensionDiagnostics(): void {
-  session.defaultSession.on('extension-loaded', (_event, extension) => {
+function setupExtensionDiagnostics(persistentSession: Session): void {
+  persistentSession.on('extension-loaded', (_event, extension) => {
     appendLog(`extension loaded event id=${extension.id} name=${extension.name}`);
   });
-  session.defaultSession.on('extension-ready', (_event, extension) => {
+  persistentSession.on('extension-ready', (_event, extension) => {
     appendLog(`extension ready event id=${extension.id} name=${extension.name}`);
   });
 
-  const serviceWorkers = session.defaultSession.serviceWorkers;
+  const serviceWorkers = persistentSession.serviceWorkers;
   serviceWorkers.on('registration-completed', (_event, details) => {
     appendLog(`service worker registered scope=${details.scope}`);
   });
@@ -188,32 +194,32 @@ function setupExtensionDiagnostics(): void {
   });
 }
 
-function waitForExtensionReady(): Promise<void> {
+function waitForExtensionReady(persistentSession: Session): Promise<void> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       appendLog('timed out waiting for extension ready event; continuing');
-      session.defaultSession.off('extension-ready', onReady);
+      persistentSession.off('extension-ready', onReady);
       resolve();
     }, 5000);
 
     const onReady = () => {
       clearTimeout(timeout);
-      session.defaultSession.off('extension-ready', onReady);
+      persistentSession.off('extension-ready', onReady);
       resolve();
     };
 
-    session.defaultSession.on('extension-ready', onReady);
+    persistentSession.on('extension-ready', onReady);
   });
 }
 
-async function startYomitanServiceWorker(): Promise<void> {
+async function startYomitanServiceWorker(persistentSession: Session): Promise<void> {
   if (!yomitanExtensionId) {
     return;
   }
 
   const scope = `chrome-extension://${yomitanExtensionId}/`;
   try {
-    await session.defaultSession.serviceWorkers.startWorkerForScope(scope);
+    await persistentSession.serviceWorkers.startWorkerForScope(scope);
     appendLog(`started Yomitan service worker scope=${scope}`);
   } catch (error) {
     appendLog(`could not start Yomitan service worker: ${error instanceof Error ? error.message : String(error)}`);
@@ -246,7 +252,7 @@ function openYomitanSettingsWindow(): void {
     backgroundColor: '#ffffff',
     show: false,
     webPreferences: {
-      session: session.defaultSession,
+      session: getOverlaySession(),
       devTools: true,
     },
   });
@@ -298,16 +304,106 @@ function logYomitanSettingsState(): void {
   });
 }
 
+function getOverlaySession(): Session {
+  if (!overlaySession) {
+    migrateLegacySessionStorage();
+    overlaySession = session.fromPath(persistentSessionPath, {
+      cache: false,
+    });
+  }
+
+  return overlaySession;
+}
+
 function resolveUserDataPath(mpvPid: number | null): string {
-  const base =
-    process.env.LOCALAPPDATA ||
-    process.env.APPDATA ||
-    path.join(process.env.USERPROFILE || process.cwd(), 'AppData', 'Local');
+  const base = resolveLocalDataBase();
   const profileName = mpvPid && Number.isInteger(mpvPid) && mpvPid > 0
     ? `mpv-${mpvPid}`
     : 'manual';
 
   return path.join(base, 'SentenceMinerOverlay', profileName);
+}
+
+function resolvePersistentSessionPath(): string {
+  return path.join(resolveLocalDataBase(), 'SentenceMinerOverlay', 'profile');
+}
+
+function resolveLocalDataBase(): string {
+  return (
+    process.env.LOCALAPPDATA ||
+    process.env.APPDATA ||
+    path.join(process.env.USERPROFILE || process.cwd(), 'AppData', 'Local')
+  );
+}
+
+function migrateLegacySessionStorage(): void {
+  if (hasSessionStorage(persistentSessionPath)) {
+    return;
+  }
+
+  const legacySessionPath = findLatestLegacySessionPath();
+  if (!legacySessionPath) {
+    return;
+  }
+
+  for (const entry of [
+    'Local Extension Settings',
+    'IndexedDB',
+    'Local Storage',
+    'Session Storage',
+    'databases',
+    'Preferences',
+  ]) {
+    const sourcePath = path.join(legacySessionPath, entry);
+    if (!fs.existsSync(sourcePath)) {
+      continue;
+    }
+
+    try {
+      fs.cpSync(sourcePath, path.join(persistentSessionPath, entry), {
+        recursive: true,
+        force: false,
+        errorOnExist: false,
+      });
+    } catch (error) {
+      appendLog(`could not migrate legacy session entry ${entry}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  appendLog(`migrated Yomitan session storage from ${legacySessionPath}`);
+}
+
+function findLatestLegacySessionPath(): string | null {
+  const base = path.join(resolveLocalDataBase(), 'SentenceMinerOverlay');
+  if (!fs.existsSync(base)) {
+    return null;
+  }
+
+  const currentPath = path.resolve(userDataPath);
+  const persistentPath = path.resolve(persistentSessionPath);
+  const candidates = fs.readdirSync(base, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(base, entry.name))
+    .filter((candidatePath) => {
+      const resolved = path.resolve(candidatePath);
+      return resolved !== currentPath && resolved !== persistentPath && hasSessionStorage(candidatePath);
+    })
+    .map((candidatePath) => ({
+      path: candidatePath,
+      mtime: fs.statSync(candidatePath).mtimeMs,
+    }))
+    .sort((a, b) => b.mtime - a.mtime);
+
+  return candidates[0]?.path ?? null;
+}
+
+function hasSessionStorage(profilePath: string): boolean {
+  return [
+    'Local Extension Settings',
+    'IndexedDB',
+    'Local Storage',
+    'Preferences',
+  ].some((entry) => fs.existsSync(path.join(profilePath, entry)));
 }
 
 function startBoundsWatcher(mpvPid: number | null): void {
