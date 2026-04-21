@@ -41,6 +41,7 @@ appendLog('boot: set app name');
 
 app.whenReady().then(async () => {
   appendLog(`starting overlay helperUrl=${args.helperUrl} mpvPid=${args.mpvPid ?? 'none'} userData=${userDataPath}`);
+  setupExtensionDiagnostics();
   await loadYomitanExtension(args.yomitanExtensionPath);
   overlayWindow = createOverlayWindow(args.helperUrl);
   overlayWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
@@ -138,12 +139,15 @@ async function loadYomitanExtension(extensionPath: string): Promise<void> {
   }
 
   try {
+    const readyPromise = waitForExtensionReady();
     const extensions = (session.defaultSession as any).extensions;
     if (extensions?.loadExtension) {
       const extension = await extensions.loadExtension(normalizedPath, {
         allowFileAccess: true,
       });
       yomitanExtensionId = extension?.id ?? null;
+      await readyPromise;
+      await startYomitanServiceWorker();
       appendLog(`loaded Yomitan extension id=${yomitanExtensionId ?? 'unknown'} path=${normalizedPath}`);
       return;
     }
@@ -152,10 +156,66 @@ async function loadYomitanExtension(extensionPath: string): Promise<void> {
       allowFileAccess: true,
     });
     yomitanExtensionId = extension?.id ?? null;
+    await readyPromise;
+    await startYomitanServiceWorker();
     appendLog(`loaded Yomitan extension id=${yomitanExtensionId ?? 'unknown'} path=${normalizedPath}`);
   } catch (error) {
     appendLog(`could not load Yomitan extension: ${error instanceof Error ? error.message : String(error)}`);
     console.warn(`SentenceMiner overlay: could not load Yomitan extension: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function setupExtensionDiagnostics(): void {
+  session.defaultSession.on('extension-loaded', (_event, extension) => {
+    appendLog(`extension loaded event id=${extension.id} name=${extension.name}`);
+  });
+  session.defaultSession.on('extension-ready', (_event, extension) => {
+    appendLog(`extension ready event id=${extension.id} name=${extension.name}`);
+  });
+
+  const serviceWorkers = session.defaultSession.serviceWorkers;
+  serviceWorkers.on('registration-completed', (_event, details) => {
+    appendLog(`service worker registered scope=${details.scope}`);
+  });
+  serviceWorkers.on('running-status-changed', (details: any) => {
+    appendLog(`service worker status version=${details.versionId} status=${details.runningStatus}`);
+  });
+  serviceWorkers.on('console-message', (_event, details) => {
+    appendLog(
+      `service worker console[${details.level}] ${details.sourceUrl}:${details.lineNumber} ${details.message}`,
+    );
+  });
+}
+
+function waitForExtensionReady(): Promise<void> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      appendLog('timed out waiting for extension ready event; continuing');
+      session.defaultSession.off('extension-ready', onReady);
+      resolve();
+    }, 5000);
+
+    const onReady = () => {
+      clearTimeout(timeout);
+      session.defaultSession.off('extension-ready', onReady);
+      resolve();
+    };
+
+    session.defaultSession.on('extension-ready', onReady);
+  });
+}
+
+async function startYomitanServiceWorker(): Promise<void> {
+  if (!yomitanExtensionId) {
+    return;
+  }
+
+  const scope = `chrome-extension://${yomitanExtensionId}/`;
+  try {
+    await session.defaultSession.serviceWorkers.startWorkerForScope(scope);
+    appendLog(`started Yomitan service worker scope=${scope}`);
+  } catch (error) {
+    appendLog(`could not start Yomitan service worker: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -167,6 +227,7 @@ function openYomitanSettingsWindow(): void {
 
   const url = `chrome-extension://${yomitanExtensionId}/settings.html`;
   if (yomitanSettingsWindow && !yomitanSettingsWindow.isDestroyed()) {
+    appendLog(`reloading Yomitan settings ${url}`);
     yomitanSettingsWindow.show();
     yomitanSettingsWindow.focus();
     yomitanSettingsWindow.loadURL(url).catch((error) => {
@@ -181,14 +242,29 @@ function openYomitanSettingsWindow(): void {
     minWidth: 900,
     minHeight: 640,
     title: 'Yomitan Settings',
+    backgroundColor: '#ffffff',
     show: false,
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
+      session: session.defaultSession,
+      devTools: true,
     },
   });
   yomitanSettingsWindow.setMenuBarVisibility(false);
+  yomitanSettingsWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    appendLog(`Yomitan settings console[${level}] ${sourceId}:${line} ${message}`);
+  });
+  yomitanSettingsWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
+    appendLog(`Yomitan settings load failed ${errorCode} ${errorDescription} ${validatedUrl}`);
+  });
+  yomitanSettingsWindow.webContents.on('did-finish-load', () => {
+    appendLog(`Yomitan settings page loaded ${url}`);
+    setTimeout(logYomitanSettingsState, 1000);
+    setTimeout(logYomitanSettingsState, 3000);
+  });
+  yomitanSettingsWindow.webContents.on('render-process-gone', (_event, details) => {
+    appendLog(`Yomitan settings renderer gone reason=${details.reason} exitCode=${details.exitCode}`);
+  });
+  appendLog(`opening Yomitan settings ${url}`);
   yomitanSettingsWindow.once('ready-to-show', () => {
     yomitanSettingsWindow?.show();
     yomitanSettingsWindow?.focus();
@@ -198,6 +274,26 @@ function openYomitanSettingsWindow(): void {
   });
   yomitanSettingsWindow.loadURL(url).catch((error) => {
     appendLog(`failed to open Yomitan settings: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
+function logYomitanSettingsState(): void {
+  if (!yomitanSettingsWindow || yomitanSettingsWindow.isDestroyed()) {
+    return;
+  }
+
+  yomitanSettingsWindow.webContents.executeJavaScript(
+    `({
+      bodyHidden: document.body.hidden,
+      loaded: document.documentElement.dataset.loaded || '',
+      loadingStalled: document.documentElement.dataset.loadingStalled || '',
+      textLength: document.body.innerText.length,
+      hasChromeRuntime: typeof chrome === 'object' && !!chrome.runtime
+    })`,
+  ).then((state) => {
+    appendLog(`Yomitan settings state ${JSON.stringify(state)}`);
+  }).catch((error) => {
+    appendLog(`failed to inspect Yomitan settings state: ${error instanceof Error ? error.message : String(error)}`);
   });
 }
 

@@ -335,7 +335,9 @@ export class Backend {
 
             const options = this._getProfileOptions({current: true}, false);
             if (options.general.showGuide) {
-                void this._openWelcomeGuidePageOnce();
+                void this._openWelcomeGuidePageOnce().catch((e) => {
+                    log.warn(e);
+                });
             }
 
             this._clipboardMonitor.on('change', this._onClipboardTextChange.bind(this));
