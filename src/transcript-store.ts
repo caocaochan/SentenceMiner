@@ -118,6 +118,16 @@ export class TranscriptStore {
       this.#state.currentSubtitle,
       this.#state.session.playbackTimeMs,
     );
+    if (!this.#state.currentSubtitle) {
+      this.#state.currentSubtitle = buildSubtitleFromCueAtTime(
+        this.#transcriptByStart,
+        {
+          sessionId: this.#state.session.sessionId,
+          filePath: this.#state.session.filePath,
+          playbackTimeMs: this.#state.session.playbackTimeMs,
+        },
+      );
+    }
     return this.getState();
   }
 
@@ -151,7 +161,7 @@ export class TranscriptStore {
       ? {
           ...payload,
         }
-      : null;
+      : buildSubtitleFromCueAtTime(this.#transcriptByStart, payload);
     this.#state.currentCueId = matchTranscriptCueId(this.#transcriptByStart, payload, payload.playbackTimeMs);
 
     return this.getState();
@@ -263,6 +273,34 @@ function matchTranscriptCueId(
 function findMostRecentCueByStartTime(transcript: TranscriptCue[], pointInTime: number): TranscriptCue | null {
   const index = findLastCueIndexAtOrBefore(transcript, pointInTime);
   return index === -1 ? null : transcript[index];
+}
+
+function buildSubtitleFromCueAtTime(
+  transcript: TranscriptCue[],
+  payload: Pick<SubtitleEventPayload, 'sessionId' | 'filePath' | 'playbackTimeMs'>,
+): SubtitleEventPayload | null {
+  if (payload.playbackTimeMs == null) {
+    return null;
+  }
+
+  const cue = findCueAtTime(transcript, payload.playbackTimeMs);
+  if (!cue) {
+    return null;
+  }
+
+  return {
+    sessionId: payload.sessionId,
+    filePath: payload.filePath || cue.filePath,
+    text: cue.text,
+    startMs: cue.startMs,
+    endMs: cue.endMs,
+    playbackTimeMs: payload.playbackTimeMs,
+  };
+}
+
+function findCueAtTime(transcript: TranscriptCue[], pointInTime: number): TranscriptCue | null {
+  const candidates = findCuesAtTime(transcript, pointInTime);
+  return candidates[0] ?? null;
 }
 
 function normalizeComparableText(text: string): string {

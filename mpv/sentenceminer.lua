@@ -55,6 +55,7 @@ local opts = {
 options.read_options(opts, "sentenceminer")
 
 local AUDIO_NORMALIZATION_FILTER = "loudnorm=I=-16:TP=-1.5:LRA=11"
+local EMPTY_SUBTITLE_PLAYBACK_BUCKET_MS = 250
 
 local state = {
     enabled = false,
@@ -465,12 +466,18 @@ local function current_subtitle_track_payload()
 end
 
 local function subtitle_key(payload)
+    local blank_playback_bucket = ""
+    if (payload.text == nil or payload.text == "") and payload.startMs == nil and payload.endMs == nil and payload.playbackTimeMs ~= nil then
+        blank_playback_bucket = tostring(math.floor((tonumber(payload.playbackTimeMs) or 0) / EMPTY_SUBTITLE_PLAYBACK_BUCKET_MS))
+    end
+
     return table.concat({
         payload.sessionId or "",
         payload.filePath or "",
         tostring(payload.startMs),
         tostring(payload.endMs),
         payload.text or "",
+        blank_playback_bucket,
     }, "::")
 end
 
