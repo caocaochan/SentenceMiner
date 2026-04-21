@@ -730,7 +730,13 @@ export class Display extends EventDispatcher {
     /**
      * @param {MessageEvent<import('display').WindowApiFrameClientMessageAny>} details
      */
-    _onWindowMessage({data}) {
+    _onWindowMessage(event) {
+        const {data} = event;
+        if (this._isSentenceMinerDirectApiMessage(data)) {
+            void this._onSentenceMinerDirectApiMessage(event);
+            return;
+        }
+
         /** @type {import('display').WindowApiMessageAny} */
         let data2;
         try {
@@ -746,6 +752,49 @@ export class Display extends EventDispatcher {
         } catch (e) {
             // NOP
         }
+    }
+
+    /**
+     * @param {unknown} data
+     * @returns {boolean}
+     */
+    _isSentenceMinerDirectApiMessage(data) {
+        return (
+            typeof data === 'object' &&
+            data !== null &&
+            /** @type {import('core').SerializableObject} */ (data).sentenceMinerFrameClientFallback === true &&
+            /** @type {import('core').SerializableObject} */ (data).action === 'frameClientDirectApi'
+        );
+    }
+
+    /**
+     * @param {MessageEvent<unknown>} event
+     */
+    async _onSentenceMinerDirectApiMessage(event) {
+        const {data, origin, source} = event;
+        if (source === null || typeof source.postMessage !== 'function' || !this._isSentenceMinerDirectApiMessage(data)) {
+            return;
+        }
+
+        const {requestId, message} = /** @type {import('core').SerializableObject} */ (data);
+        if (typeof requestId !== 'string') { return; }
+
+        /** @type {import('core').SerializableObject} */
+        const response = {
+            sentenceMinerFrameClientFallback: true,
+            action: 'frameClientDirectApiResponse',
+            requestId,
+        };
+
+        try {
+            /** @type {import('display').DirectApiMessageAny} */
+            const messageInner = this._authenticateMessageData(message);
+            response.result = await this._onDisplayPopupMessage2(messageInner);
+        } catch (error) {
+            response.error = ExtensionError.serialize(error);
+        }
+
+        source.postMessage(response, origin);
     }
 
     /** @type {import('display').DirectApiHandler<'displaySetOptionsContext'>} */

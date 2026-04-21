@@ -60,6 +60,9 @@ app.whenReady().then(async () => {
   overlayWindow.webContents.on('did-finish-load', () => {
     appendLog('overlay page loaded');
   });
+  overlayWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    appendLog(`overlay console[${level}] ${sourceId}:${line} ${message}`);
+  });
   void loadOverlayPageWithRetry(overlayWindow, `${trimTrailingSlash(args.helperUrl)}/overlay.html`);
   startBoundsWatcher(args.mpvPid, overlayWindow);
   setTimeout(showFallbackWindowIfNeeded, 2000);

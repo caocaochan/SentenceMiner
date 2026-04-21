@@ -751,7 +751,21 @@ export class Popup extends EventDispatcher {
         if (this._visibleValue === value) { return; }
         this._visibleValue = value;
         this._frame.style.setProperty('visibility', value ? 'visible' : 'hidden', 'important');
+        this._notifySentenceMinerPopupVisibility(value);
         void this._invokeSafe('displayVisibilityChanged', {value});
+    }
+
+    /**
+     * @param {boolean} visible
+     */
+    _notifySentenceMinerPopupVisibility(visible) {
+        if (window.parent === window) { return; }
+
+        window.parent.postMessage({
+            sentenceMinerOverlay: true,
+            type: 'yomitan-popup-visibility',
+            visible,
+        }, '*');
     }
 
     /**
@@ -791,6 +805,12 @@ export class Popup extends EventDispatcher {
 
         /** @type {import('display').DirectApiMessage<TName>} */
         const message = {action, params};
+        if (this._frameClient.usesWindowMessaging()) {
+            return /** @type {import('display').DirectApiReturn<TName>} */ (
+                await this._frameClient.invokeWindow(this._frame, this._targetOrigin, message)
+            );
+        }
+
         const wrappedMessage = this._frameClient.createMessage(message);
         return /** @type {import('display').DirectApiReturn<TName>} */ (await this._application.crossFrame.invoke(
             this._frameClient.frameId,

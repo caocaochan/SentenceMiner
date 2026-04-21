@@ -1,9 +1,15 @@
+import { hasVisibleYomitanPopup, shouldOverlayBeInteractive } from './overlay-interactivity.js';
 import { buildOverlayStatusPayload, buildOverlayStyleVars, buildOverlaySubtitleView } from './overlay-state.js';
 
 const state = {
   app: null,
+  hasSelection: false,
+  interactive: false,
+  pointerOverSubtitle: false,
   reconnectTimerId: null,
   selectionActive: false,
+  yomitanPopupVisibleFromDom: false,
+  yomitanPopupVisibleFromMessage: false,
 };
 
 const elements = {
@@ -12,33 +18,57 @@ const elements = {
   text: document.getElementById('overlay-subtitle-text'),
 };
 
-elements.subtitle.addEventListener('pointerenter', () => setInteractive(true));
+elements.subtitle.addEventListener('pointerenter', () => {
+  state.pointerOverSubtitle = true;
+  updateInteractive();
+});
 elements.subtitle.addEventListener('pointerleave', () => {
-  if (!state.selectionActive && document.getSelection()?.isCollapsed !== false) {
-    setInteractive(false);
-  }
+  state.pointerOverSubtitle = false;
+  updateInteractive();
 });
 elements.subtitle.addEventListener('pointerdown', () => {
   state.selectionActive = true;
-  setInteractive(true);
+  updateInteractive();
 });
 document.addEventListener('pointerup', () => {
   state.selectionActive = false;
-  if (document.getSelection()?.isCollapsed !== false && !isPointerOverSubtitle()) {
-    setInteractive(false);
-  }
+  updateSelectionState();
+  updateInteractive();
 });
 document.addEventListener('selectionchange', () => {
-  const hasSelection = document.getSelection()?.isCollapsed === false;
-  setInteractive(hasSelection || isPointerOverSubtitle());
+  updateSelectionState();
+  updateInteractive();
 });
 window.addEventListener('blur', () => {
   state.selectionActive = false;
-  setInteractive(false);
+  state.pointerOverSubtitle = false;
+  state.hasSelection = false;
+  updateInteractive();
+});
+window.addEventListener('message', (event) => {
+  const { data } = event;
+  if (!data || typeof data !== 'object' || data.sentenceMinerOverlay !== true) {
+    return;
+  }
+
+  if (data.type === 'yomitan-popup-visibility') {
+    state.yomitanPopupVisibleFromMessage = Boolean(data.visible);
+    console.info(`SentenceMiner: Yomitan popup visibility ${state.yomitanPopupVisibleFromMessage ? 'visible' : 'hidden'}.`);
+    updateInteractive();
+  }
 });
 
 void bootstrap();
 window.setInterval(reportOverlayStatus, 1000);
+window.setInterval(updateYomitanPopupVisibility, 250);
+
+const popupObserver = new MutationObserver(updateYomitanPopupVisibility);
+popupObserver.observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['class', 'hidden', 'style'],
+  childList: true,
+  subtree: true,
+});
 
 async function bootstrap() {
   await refreshState({ suppressErrors: true });
@@ -100,7 +130,9 @@ function connectWebSocket() {
     state.app = null;
     hideSubtitle();
     reportOverlayStatus();
-    setInteractive(false);
+    state.yomitanPopupVisibleFromDom = false;
+    state.yomitanPopupVisibleFromMessage = false;
+    updateInteractive();
     if (state.reconnectTimerId === null) {
       state.reconnectTimerId = window.setTimeout(() => {
         state.reconnectTimerId = null;
@@ -159,6 +191,40 @@ function hideSubtitle() {
 
 function setInteractive(interactive) {
   window.sentenceMinerOverlay?.setInteractive?.(Boolean(interactive));
+}
+
+function updateInteractive() {
+  const interactive = shouldOverlayBeInteractive({
+    hasSelection: state.hasSelection,
+    pointerOverSubtitle: state.pointerOverSubtitle || isPointerOverSubtitle(),
+    selectionActive: state.selectionActive,
+    yomitanPopupVisible: isYomitanPopupVisible(),
+  });
+
+  if (state.interactive === interactive) {
+    return;
+  }
+
+  state.interactive = interactive;
+  setInteractive(interactive);
+}
+
+function updateSelectionState() {
+  state.hasSelection = document.getSelection()?.isCollapsed === false;
+}
+
+function updateYomitanPopupVisibility() {
+  const visible = hasVisibleYomitanPopup(document);
+  if (visible === state.yomitanPopupVisibleFromDom) {
+    return;
+  }
+
+  state.yomitanPopupVisibleFromDom = visible;
+  updateInteractive();
+}
+
+function isYomitanPopupVisible() {
+  return state.yomitanPopupVisibleFromMessage || state.yomitanPopupVisibleFromDom;
 }
 
 function reportOverlayStatus() {
