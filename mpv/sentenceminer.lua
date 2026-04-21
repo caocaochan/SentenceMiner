@@ -17,7 +17,7 @@ local opts = {
     default_key = "Ctrl+m",
     bind_toggle_key = "yes",
     toggle_key = "Ctrl+Shift+m",
-    overlay_enabled = "no",
+    overlay_enabled = "yes",
     overlay_exe_path = "",
     overlay_yomitan_extension_path = "",
     overlay_hide_mpv_subtitles = "yes",
@@ -818,6 +818,16 @@ local function restore_mpv_osc_after_overlay()
     state.overlay_osc_hidden = false
 end
 
+local function hide_mpv_ui_for_overlay()
+    hide_mpv_subtitles_for_overlay()
+    hide_mpv_osc_for_overlay()
+end
+
+local function restore_mpv_ui_after_overlay()
+    restore_mpv_subtitles_after_overlay()
+    restore_mpv_osc_after_overlay()
+end
+
 local function spawn_overlay_process()
     if not is_windows() then
         return nil, "overlay is currently implemented only on Windows"
@@ -914,8 +924,7 @@ local function ensure_overlay_running()
         end
 
         msg.warn("SentenceMiner overlay process exited; attempting restart")
-        restore_mpv_subtitles_after_overlay()
-        restore_mpv_osc_after_overlay()
+        restore_mpv_ui_after_overlay()
         state.overlay_pid = nil
     end
 
@@ -933,41 +942,24 @@ local function ensure_overlay_running()
     end
 
     state.overlay_pid = pid
-end
-
-local function overlay_status_is_rendering(status)
-    if type(status) ~= "table" then
-        return false
-    end
-
-    if status.fresh ~= true or status.visible ~= true then
-        return false
-    end
-
-    if tostring(status.sessionId or "") ~= tostring(state.session_id or "") then
-        return false
-    end
-
-    return trim_output(status.text or "") ~= nil
+    hide_mpv_ui_for_overlay()
 end
 
 local function sync_overlay_visibility()
     if not is_truthy(opts.overlay_enabled) or not state.session_id or not state.helper_ready then
-        restore_mpv_subtitles_after_overlay()
-        restore_mpv_osc_after_overlay()
+        restore_mpv_ui_after_overlay()
         return
     end
 
     if not state.overlay_pid then
-        restore_mpv_subtitles_after_overlay()
-        restore_mpv_osc_after_overlay()
+        restore_mpv_ui_after_overlay()
         return
     end
 
+    hide_mpv_ui_for_overlay()
+
     local response, err = helper_request("GET", "/api/overlay/status", nil, 1000)
     if not response then
-        restore_mpv_subtitles_after_overlay()
-        restore_mpv_osc_after_overlay()
         local now = mp.get_time()
         if (now - state.last_overlay_status_warn) >= 5 then
             state.last_overlay_status_warn = now
@@ -975,20 +967,10 @@ local function sync_overlay_visibility()
         end
         return
     end
-
-    if overlay_status_is_rendering(response.status) then
-        hide_mpv_subtitles_for_overlay()
-        hide_mpv_osc_for_overlay()
-        return
-    end
-
-    restore_mpv_subtitles_after_overlay()
-    restore_mpv_osc_after_overlay()
 end
 
 local function stop_overlay_process()
-    restore_mpv_subtitles_after_overlay()
-    restore_mpv_osc_after_overlay()
+    restore_mpv_ui_after_overlay()
 
     if not state.overlay_pid then
         return

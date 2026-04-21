@@ -30,7 +30,7 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.overlay.fontFamily, '');
   assert.equal(payload.config.settings.overlay.fontSizePx, 42);
   assert.equal(payload.config.settings.overlay.bottomOffsetPct, 14);
-  assert.equal(payload.config.overlay.enabled, false);
+  assert.equal(payload.config.overlay.enabled, true);
   assert.equal(payload.config.overlay.hideMpvSubtitles, true);
   assert.equal(payload.config.overlay.fontSizePx, 42);
 });

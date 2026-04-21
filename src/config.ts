@@ -49,7 +49,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     subtitleCardFontSizePx: 0,
   },
   overlay: {
-    enabled: false,
+    enabled: true,
     exePath: '',
     yomitanExtensionPath: '',
     hideMpvSubtitles: true,
