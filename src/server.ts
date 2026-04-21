@@ -352,6 +352,26 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/overlay.html') {
+    await serveStatic(response, 'overlay.html', 'text/html; charset=utf-8');
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/overlay.js') {
+    await serveStatic(response, 'overlay.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/overlay-state.js') {
+    await serveStatic(response, 'overlay-state.js', 'text/javascript; charset=utf-8');
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/overlay.css') {
+    await serveStatic(response, 'overlay.css', 'text/css; charset=utf-8');
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/history-selection.js') {
     await serveStatic(response, 'history-selection.js', 'text/javascript; charset=utf-8');
     return;
@@ -524,6 +544,7 @@ export function buildStatePayload(config: AppConfig, transcriptStore: Transcript
       capture: config.capture,
       server: config.server,
       appearance: config.appearance,
+      overlay: config.overlay,
       settings: getEditableSettings(config),
     },
     state: transcriptStore.getState(),

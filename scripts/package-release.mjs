@@ -8,16 +8,20 @@ const distRoot = path.join(repoRoot, 'dist');
 const buildRoot = path.join(distRoot, 'build');
 const packageRoot = path.join(distRoot, 'SentenceMiner');
 const helperBuildRoot = path.join(buildRoot, 'helper');
+const overlayBuildRoot = path.join(buildRoot, 'overlay', 'packaged', 'SentenceMinerOverlay-win32-x64');
 const helperSourceRoot = path.join(packageRoot, 'scripts', 'sentenceminer-helper');
+const overlaySourceRoot = path.join(packageRoot, 'scripts', 'sentenceminer-overlay');
 
 if (process.platform !== 'win32') {
   throw new Error('Windows release packaging is required for SentenceMiner-latest.zip.');
 }
 
 run(process.execPath, [path.join(repoRoot, 'scripts', 'build-helper.mjs')], 'build the helper executable');
+run(process.execPath, [path.join(repoRoot, 'scripts', 'build-overlay.mjs')], 'build the overlay executable');
 
 await fs.rm(packageRoot, { recursive: true, force: true });
 await fs.mkdir(helperSourceRoot, { recursive: true });
+await fs.mkdir(overlaySourceRoot, { recursive: true });
 await fs.mkdir(path.join(packageRoot, 'script-opts'), { recursive: true });
 
 await copyIntoPackage('packaging/README.md', 'README.md');
@@ -26,6 +30,7 @@ await copyIntoPackage(
   path.join(helperBuildRoot, 'SentenceMinerHelper.exe'),
   'scripts/sentenceminer-helper/SentenceMinerHelper.exe',
 );
+await copyIntoPackage(overlayBuildRoot, 'scripts/sentenceminer-overlay');
 await copyBundledFfmpeg();
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
@@ -53,6 +58,7 @@ async function writePackagedMpvConfig() {
 
   const packaged = source
     .replace(/^helper_exe_path=.*$/m, 'helper_exe_path=sentenceminer-helper/SentenceMinerHelper.exe')
+    .replace(/^overlay_exe_path=.*$/m, 'overlay_exe_path=sentenceminer-overlay/SentenceMinerOverlay.exe')
     .replace(/^ffmpeg_path=.*$/m, 'ffmpeg_path=../scripts/sentenceminer-helper/ffmpeg.exe')
     .replace(/^bind_default_key=.*$/m, 'bind_default_key=yes')
     .replace(/^default_key=.*$/m, 'default_key=Ctrl+m');

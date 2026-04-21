@@ -17,6 +17,13 @@ local opts = {
     default_key = "Ctrl+m",
     bind_toggle_key = "yes",
     toggle_key = "Ctrl+Shift+m",
+    overlay_enabled = "no",
+    overlay_exe_path = "",
+    overlay_yomitan_extension_path = "",
+    overlay_hide_mpv_subtitles = "yes",
+    overlay_font_size_px = 42,
+    overlay_bottom_offset_pct = 14,
+    overlay_max_width_pct = 86,
     server_host = "127.0.0.1",
     server_port = 8766,
     anki_url = "http://127.0.0.1:8765",
@@ -59,6 +66,9 @@ local state = {
     helper_ready = false,
     helper_starting = false,
     helper_waiters = {},
+    overlay_pid = nil,
+    previous_sub_visibility = nil,
+    overlay_subtitles_hidden = false,
 }
 
 local JSON_NULL = {}
@@ -557,6 +567,60 @@ local function resolve_helper_exe_path()
     return nil, "could not find SentenceMinerHelper.exe; copy sentenceminer-helper next to sentenceminer.lua or set helper_exe_path"
 end
 
+local function resolve_overlay_exe_path()
+    if not is_truthy(opts.overlay_enabled) then
+        return nil, "overlay is disabled"
+    end
+
+    local configured = opts.overlay_exe_path
+    local script_dir = get_script_dir()
+    local candidates = {}
+
+    local function add_candidate(path)
+        if path and path ~= "" then
+            table.insert(candidates, expand_mpv_path(path))
+        end
+    end
+
+    if configured ~= nil and configured ~= "" then
+        add_candidate(configured)
+        if not configured:lower():match("%.exe$") then
+            add_candidate(utils.join_path(configured, "SentenceMinerOverlay.exe"))
+        end
+
+        if script_dir and script_dir ~= "" and not is_absolute_path(configured) then
+            local relative = utils.join_path(script_dir, configured)
+            add_candidate(relative)
+            if not configured:lower():match("%.exe$") then
+                add_candidate(utils.join_path(relative, "SentenceMinerOverlay.exe"))
+            end
+
+            local parent = parent_dir(script_dir)
+            if parent then
+                local parent_relative = utils.join_path(parent, configured)
+                add_candidate(parent_relative)
+                if not configured:lower():match("%.exe$") then
+                    add_candidate(utils.join_path(parent_relative, "SentenceMinerOverlay.exe"))
+                end
+            end
+        end
+    elseif script_dir and script_dir ~= "" then
+        add_candidate(utils.join_path(utils.join_path(script_dir, "sentenceminer-overlay"), "SentenceMinerOverlay.exe"))
+        local parent = parent_dir(script_dir)
+        if parent then
+            add_candidate(utils.join_path(utils.join_path(parent, "sentenceminer-overlay"), "SentenceMinerOverlay.exe"))
+        end
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if file_exists(candidate) then
+            return candidate, nil
+        end
+    end
+
+    return nil, "could not find SentenceMinerOverlay.exe; copy sentenceminer-overlay next to sentenceminer.lua or set overlay_exe_path"
+end
+
 local function resolve_ffmpeg_path()
     local configured = trim_output(opts.ffmpeg_path) or "ffmpeg"
     local script_dir = get_script_dir()
@@ -675,6 +739,133 @@ local function spawn_helper_process()
     end
 
     return true, nil
+end
+
+local function hide_mpv_subtitles_for_overlay()
+    if not is_truthy(opts.overlay_hide_mpv_subtitles) or state.overlay_subtitles_hidden then
+        return
+    end
+
+    state.previous_sub_visibility = mp.get_property("sub-visibility")
+    state.overlay_subtitles_hidden = true
+    mp.set_property("sub-visibility", "no")
+end
+
+local function restore_mpv_subtitles_after_overlay()
+    if not state.overlay_subtitles_hidden then
+        return
+    end
+
+    if state.previous_sub_visibility ~= nil then
+        mp.set_property("sub-visibility", state.previous_sub_visibility)
+    end
+
+    state.previous_sub_visibility = nil
+    state.overlay_subtitles_hidden = false
+end
+
+local function spawn_overlay_process()
+    if not is_windows() then
+        return nil, "overlay is currently implemented only on Windows"
+    end
+
+    local overlay_exe_path, resolve_err = resolve_overlay_exe_path()
+    if not overlay_exe_path then
+        return nil, resolve_err
+    end
+
+    local working_dir = parent_dir(overlay_exe_path) or get_script_dir() or "."
+    local argument_parts = {
+        "'--helper-url'",
+        string.format("'%s'", powershell_escape(opts.helper_url)),
+        "'--mpv-pid'",
+        string.format("'%s'", powershell_escape(tostring(utils.getpid()))),
+    }
+    if opts.overlay_yomitan_extension_path ~= nil and opts.overlay_yomitan_extension_path ~= "" then
+        table.insert(argument_parts, "'--yomitan-extension-path'")
+        table.insert(argument_parts, string.format("'%s'", powershell_escape(expand_mpv_path(opts.overlay_yomitan_extension_path))))
+    end
+
+    local command = string.format(
+        "$p = Start-Process -FilePath '%s' -ArgumentList @(%s) -WorkingDirectory '%s' -WindowStyle Hidden -PassThru; $p.Id",
+        powershell_escape(overlay_exe_path),
+        table.concat(argument_parts, ","),
+        powershell_escape(working_dir)
+    )
+
+    local result = utils.subprocess({
+        args = {
+            "powershell",
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            command,
+        },
+        cancellable = false,
+        playback_only = false,
+        max_size = 1024 * 1024,
+    })
+
+    if result.status ~= 0 then
+        return nil, result.error_string or result.stderr or "failed to start overlay"
+    end
+
+    local pid = tonumber(trim_output(result.stdout) or "")
+    if not pid then
+        return nil, "overlay started but did not report a process id"
+    end
+
+    return pid, nil
+end
+
+local function ensure_overlay_running()
+    if not is_truthy(opts.overlay_enabled) then
+        return
+    end
+
+    if state.overlay_pid ~= nil then
+        return
+    end
+
+    local pid, err = spawn_overlay_process()
+    if not pid then
+        msg.warn("could not start SentenceMiner overlay: " .. tostring(err))
+        mp.osd_message("SentenceMiner overlay: " .. tostring(err), 4)
+        return
+    end
+
+    state.overlay_pid = pid
+    hide_mpv_subtitles_for_overlay()
+end
+
+local function stop_overlay_process()
+    restore_mpv_subtitles_after_overlay()
+
+    if not state.overlay_pid then
+        return
+    end
+
+    if is_windows() then
+        local result = utils.subprocess({
+            args = {
+                "powershell",
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                string.format("Stop-Process -Id %s -ErrorAction SilentlyContinue", powershell_escape(tostring(state.overlay_pid))),
+            },
+            cancellable = false,
+            playback_only = false,
+            max_size = 1024 * 1024,
+        })
+        if result.status ~= 0 then
+            msg.warn("could not stop SentenceMiner overlay: " .. tostring(result.stderr or result.error_string or "unknown error"))
+        end
+    end
+
+    state.overlay_pid = nil
 end
 
 local function open_helper_site()
@@ -884,6 +1075,8 @@ local function start_session()
                 state.open_browser_when_ready = false
             end
         end
+
+        ensure_overlay_running()
     end)
 end
 
@@ -1183,6 +1376,7 @@ local function set_sentence_miner_enabled(enabled)
 
     state.open_browser_when_ready = false
     stop_session()
+    stop_overlay_process()
     shutdown_helper()
     mp.osd_message("SentenceMiner: disabled", 2)
 end
@@ -1196,6 +1390,7 @@ mp.register_event("file-loaded", start_session)
 mp.register_event("end-file", stop_session)
 mp.register_event("shutdown", function()
     stop_session()
+    stop_overlay_process()
     shutdown_helper()
 end)
 mp.add_periodic_timer(0.2, function()

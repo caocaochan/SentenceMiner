@@ -25,6 +25,27 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.runtime.captureAudio, true);
   assert.equal(payload.config.settings.appearance.subtitleCardFontFamily, '');
   assert.equal(payload.config.settings.appearance.subtitleCardFontSizePx, 0);
+  assert.equal(payload.config.overlay.enabled, false);
+  assert.equal(payload.config.overlay.hideMpvSubtitles, true);
+  assert.equal(payload.config.overlay.fontSizePx, 42);
+});
+
+test('GET overlay assets serves the browser overlay page and scripts', async (t) => {
+  const harness = await createServerHarness(t);
+
+  const html = await fetch(`${harness.baseUrl}/overlay.html`);
+  const js = await fetch(`${harness.baseUrl}/overlay.js`);
+  const stateJs = await fetch(`${harness.baseUrl}/overlay-state.js`);
+  const css = await fetch(`${harness.baseUrl}/overlay.css`);
+
+  assert.equal(html.status, 200);
+  assert.match(await html.text(), /SentenceMiner Overlay/);
+  assert.equal(js.status, 200);
+  assert.match(js.headers.get('content-type') ?? '', /text\/javascript/);
+  assert.equal(stateJs.status, 200);
+  assert.match(await stateJs.text(), /buildOverlaySubtitleView/);
+  assert.equal(css.status, 200);
+  assert.match(css.headers.get('content-type') ?? '', /text\/css/);
 });
 
 test('GET /api/settings/options returns live Anki deck and note type options', async (t) => {

@@ -20,6 +20,7 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 ## What v1 does
 
 - shows the full active subtitle transcript on `localhost`
+- optionally shows the current subtitle in a transparent Windows overlay above `mpv`
 - keeps the text selectable and Yomitan-friendly
 - auto-starts the helper on Windows when `mpv` loads a file
 - updates an existing Anki note only when its sentence matches the mined subtitle text
@@ -83,10 +84,18 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_image`
 - optional `bind_default_key`
 - optional `bind_toggle_key`, `toggle_key`
+- optional overlay settings: `overlay_enabled`, `overlay_exe_path`, `overlay_yomitan_extension_path`,
+  `overlay_hide_mpv_subtitles`, `overlay_font_size_px`, `overlay_bottom_offset_pct`, `overlay_max_width_pct`
 
 If you change the helper listen host or port, keep `helper_url` aligned with `server_host` and `server_port`.
 
 SentenceMiner now starts disabled every time `mpv` launches. Use `Ctrl+Shift+m` to enable it for the current session; that toggle is not saved back to `sentenceminer.conf`.
+
+### Browser overlay
+
+The Windows release can launch `SentenceMinerOverlay.exe`, a transparent Electron window that follows the `mpv` client area and renders the active subtitle as selectable browser text. Set `overlay_enabled=yes` to opt in. If you want Yomitan inside the overlay, set `overlay_yomitan_extension_path` to an unpacked Yomitan extension directory; extension support is best-effort because Electron supports a subset of Chrome extension APIs.
+
+When `overlay_hide_mpv_subtitles=yes`, the mpv script temporarily hides native mpv subtitles while the overlay is active and restores the previous `sub-visibility` value when SentenceMiner is disabled or mpv exits.
 
 In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe`, `ffmpeg_path` points at the bundled `ffmpeg.exe`, and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and `ffmpeg_path=ffmpeg` to rely on auto-discovery and `PATH`.
 
@@ -99,6 +108,7 @@ npm install
 node --experimental-strip-types src/main.ts
 node --experimental-strip-types --test test/*.test.ts
 node scripts/build-helper.mjs
+node scripts/build-overlay.mjs
 node scripts/package-release.mjs
 ```
 

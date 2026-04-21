@@ -151,6 +151,13 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
       'capture_image_include_subtitles=no',
       'subtitle_card_font_family=Atkinson Hyperlegible, sans-serif',
       'subtitle_card_font_size_px=22',
+      'overlay_enabled=yes',
+      'overlay_exe_path=sentenceminer-overlay/SentenceMinerOverlay.exe',
+      'overlay_yomitan_extension_path=C:\\Tools\\Yomitan',
+      'overlay_hide_mpv_subtitles=no',
+      'overlay_font_size_px=48',
+      'overlay_bottom_offset_pct=18',
+      'overlay_max_width_pct=80',
     ].join('\n'),
     'utf8',
   );
@@ -171,6 +178,13 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.capture.imageIncludeSubtitles, false);
   assert.equal(config.appearance.subtitleCardFontFamily, 'Atkinson Hyperlegible, sans-serif');
   assert.equal(config.appearance.subtitleCardFontSizePx, 22);
+  assert.equal(config.overlay.enabled, true);
+  assert.equal(config.overlay.exePath, 'sentenceminer-overlay/SentenceMinerOverlay.exe');
+  assert.equal(config.overlay.yomitanExtensionPath, 'C:\\Tools\\Yomitan');
+  assert.equal(config.overlay.hideMpvSubtitles, false);
+  assert.equal(config.overlay.fontSizePx, 48);
+  assert.equal(config.overlay.bottomOffsetPct, 18);
+  assert.equal(config.overlay.maxWidthPct, 80);
   assert.equal(config.server.host, '127.0.0.1');
 });
 

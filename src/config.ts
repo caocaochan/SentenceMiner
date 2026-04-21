@@ -48,6 +48,15 @@ export const DEFAULT_CONFIG: AppConfig = {
     subtitleCardFontFamily: '',
     subtitleCardFontSizePx: 0,
   },
+  overlay: {
+    enabled: false,
+    exePath: '',
+    yomitanExtensionPath: '',
+    hideMpvSubtitles: true,
+    fontSizePx: 42,
+    bottomOffsetPct: 14,
+    maxWidthPct: 86,
+  },
 };
 
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
@@ -133,6 +142,9 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
       ...config.appearance,
       subtitleCardFontFamily: settings.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: settings.appearance.subtitleCardFontSizePx,
+    },
+    overlay: {
+      ...config.overlay,
     },
   });
 }
@@ -447,6 +459,48 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         subtitleCardFontSizePx: parseNumber(key, value),
       };
       return;
+    case 'overlay_enabled':
+      config.overlay = {
+        ...config.overlay,
+        enabled: parseBoolean(key, value),
+      };
+      return;
+    case 'overlay_exe_path':
+      config.overlay = {
+        ...config.overlay,
+        exePath: value,
+      };
+      return;
+    case 'overlay_yomitan_extension_path':
+      config.overlay = {
+        ...config.overlay,
+        yomitanExtensionPath: value,
+      };
+      return;
+    case 'overlay_hide_mpv_subtitles':
+      config.overlay = {
+        ...config.overlay,
+        hideMpvSubtitles: parseBoolean(key, value),
+      };
+      return;
+    case 'overlay_font_size_px':
+      config.overlay = {
+        ...config.overlay,
+        fontSizePx: parseNumber(key, value),
+      };
+      return;
+    case 'overlay_bottom_offset_pct':
+      config.overlay = {
+        ...config.overlay,
+        bottomOffsetPct: parseNumber(key, value),
+      };
+      return;
+    case 'overlay_max_width_pct':
+      config.overlay = {
+        ...config.overlay,
+        maxWidthPct: parseNumber(key, value),
+      };
+      return;
     case 'ffmpeg_path':
       config.runtime = {
         ...config.runtime,
@@ -554,6 +608,10 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
     appearance: {
       ...base.appearance,
       ...overrides.appearance,
+    },
+    overlay: {
+      ...base.overlay,
+      ...overrides.overlay,
     },
   };
 }

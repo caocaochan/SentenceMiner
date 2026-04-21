@@ -89,6 +89,16 @@ export interface AppearanceConfig {
   subtitleCardFontSizePx: number;
 }
 
+export interface OverlayConfig {
+  enabled: boolean;
+  exePath: string;
+  yomitanExtensionPath: string;
+  hideMpvSubtitles: boolean;
+  fontSizePx: number;
+  bottomOffsetPct: number;
+  maxWidthPct: number;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -100,6 +110,7 @@ export interface AppConfig {
   capture: CaptureConfig;
   runtime: RuntimeConfig;
   appearance: AppearanceConfig;
+  overlay: OverlayConfig;
 }
 
 export interface EditableAnkiSettings {
@@ -137,6 +148,7 @@ export interface StatePayload {
     capture: CaptureConfig;
     server: ServerConfig;
     appearance: AppearanceConfig;
+    overlay: OverlayConfig;
     settings: EditableSettings;
   };
   state: TranscriptState;
