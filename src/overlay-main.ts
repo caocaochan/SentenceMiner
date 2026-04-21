@@ -26,6 +26,7 @@ let yomitanSettingsWindow: BrowserWindow | null = null;
 let yomitanExtensionId: string | null = null;
 let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
+let lastVisibilityKey = '';
 let receivedBounds = false;
 
 fs.mkdirSync(userDataPath, { recursive: true });
@@ -322,7 +323,7 @@ function startBoundsWatcher(mpvPid: number | null): void {
     return;
   }
 
-  const script = buildWindowBoundsScript(mpvPid);
+  const script = buildWindowBoundsScript(mpvPid, process.pid);
   appendLog(`starting window bounds watcher for mpv pid ${mpvPid}`);
   boundsWatcher = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
     windowsHide: true,
@@ -372,12 +373,18 @@ function applyBoundsLine(line: string): void {
     return;
   }
 
+  receivedBounds = true;
+  const visibilityKey = bounds.visible ? 'visible' : 'hidden';
+  if (visibilityKey !== lastVisibilityKey) {
+    lastVisibilityKey = visibilityKey;
+    appendLog(`mpv window visibility ${visibilityKey}`);
+  }
+
   if (!bounds.visible || bounds.width <= 0 || bounds.height <= 0) {
     overlayWindow.hide();
     return;
   }
 
-  receivedBounds = true;
   const nextKey = `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
   if (nextKey !== lastBoundsKey) {
     lastBoundsKey = nextKey;
@@ -415,7 +422,7 @@ function showFallbackWindowIfNeeded(): void {
   overlayWindow.moveTop();
 }
 
-function buildWindowBoundsScript(pid: number): string {
+function buildWindowBoundsScript(pid: number, overlayPid: number): string {
   return `
 $ErrorActionPreference = 'SilentlyContinue'
 Add-Type @"
@@ -426,14 +433,67 @@ public static class Win32WindowBounds {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
 }
 "@
 $targetPid = ${pid}
+$overlayPid = ${overlayPid}
+$GW_HWNDPREV = 3
+
+function Test-PointInsideRect($x, $y, $rect) {
+  return $x -ge $rect.Left -and $x -lt $rect.Right -and $y -ge $rect.Top -and $y -lt $rect.Bottom
+}
+
+function Test-PointUncovered($x, $y, $targetHwnd) {
+  $window = [Win32WindowBounds]::GetWindow($targetHwnd, $GW_HWNDPREV)
+  while ($window -ne [IntPtr]::Zero) {
+    $windowPid = 0
+    [Win32WindowBounds]::GetWindowThreadProcessId($window, [ref]$windowPid) | Out-Null
+    if (
+      $windowPid -ne $targetPid -and
+      $windowPid -ne $overlayPid -and
+      [Win32WindowBounds]::IsWindowVisible($window) -and
+      -not [Win32WindowBounds]::IsIconic($window)
+    ) {
+      $windowRect = New-Object Win32WindowBounds+RECT
+      if ([Win32WindowBounds]::GetWindowRect($window, [ref]$windowRect) -and (Test-PointInsideRect $x $y $windowRect)) {
+        return $false
+      }
+    }
+    $window = [Win32WindowBounds]::GetWindow($window, $GW_HWNDPREV)
+  }
+  return $true
+}
+
+function Test-ClientAreaVisible($targetHwnd, $x, $y, $width, $height) {
+  if ($width -le 0 -or $height -le 0) { return $false }
+  $sampleXs = @(
+    $x + [Math]::Max(1, [Math]::Floor($width * 0.20)),
+    $x + [Math]::Max(1, [Math]::Floor($width * 0.50)),
+    $x + [Math]::Max(1, [Math]::Floor($width * 0.80))
+  )
+  $sampleYs = @(
+    $y + [Math]::Max(1, [Math]::Floor($height * 0.25)),
+    $y + [Math]::Max(1, [Math]::Floor($height * 0.50)),
+    $y + [Math]::Max(1, [Math]::Floor($height * 0.75))
+  )
+
+  foreach ($sampleY in $sampleYs) {
+    foreach ($sampleX in $sampleXs) {
+      if (Test-PointUncovered $sampleX $sampleY $targetHwnd) {
+        return $true
+      }
+    }
+  }
+  return $false
+}
+
 while ($true) {
   if (-not (Get-Process -Id $targetPid)) { break }
   $script:found = [IntPtr]::Zero
@@ -455,12 +515,15 @@ while ($true) {
     $point = New-Object Win32WindowBounds+POINT
     [Win32WindowBounds]::GetClientRect($script:found, [ref]$rect) | Out-Null
     [Win32WindowBounds]::ClientToScreen($script:found, [ref]$point) | Out-Null
+    $width = [Math]::Max(0, $rect.Right - $rect.Left)
+    $height = [Math]::Max(0, $rect.Bottom - $rect.Top)
+    $visible = Test-ClientAreaVisible $script:found $point.X $point.Y $width $height
     $payload = @{
-      visible = $true
+      visible = $visible
       x = $point.X
       y = $point.Y
-      width = [Math]::Max(0, $rect.Right - $rect.Left)
-      height = [Math]::Max(0, $rect.Bottom - $rect.Top)
+      width = $width
+      height = $height
     }
     $payload | ConvertTo-Json -Compress
   }
