@@ -2,7 +2,7 @@
 
 SentenceMiner is an `mpv`-first sentence mining workflow:
 
-- a local helper server hosts a live subtitle page you can scan with Yomitan
+- a local helper server hosts a live subtitle transcript page
 - an `mpv` Lua script watches the current subtitle in real time
 - when you trigger the mining action, it captures the subtitle text, matching audio, and a screenshot
 - captured audio is loudness-normalized so mined cards play back at a more consistent volume
@@ -20,8 +20,7 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 ## What v1 does
 
 - shows the full active subtitle transcript on `localhost`
-- optionally shows the current subtitle in a transparent Windows overlay above `mpv`
-- keeps the text selectable and Yomitan-friendly
+- keeps the active transcript visible in a browser
 - auto-starts the helper on Windows when `mpv` loads a file
 - updates an existing Anki note only when its sentence matches the mined subtitle text
 - returns an error when no existing sentence matches
@@ -33,7 +32,7 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 - [src/server.ts](C:/Users/CaoCao/Downloads/SentenceMiner/src/server.ts) helper server, API routes, and WebSocket fanout
 - [src/main.ts](C:/Users/CaoCao/Downloads/SentenceMiner/src/main.ts) executable entrypoint for development and packaged helpers
 - [src/anki.ts](C:/Users/CaoCao/Downloads/SentenceMiner/src/anki.ts) AnkiConnect note lookup and updates
-- [web/index.html](C:/Users/CaoCao/Downloads/SentenceMiner/web/index.html) local Yomitan-facing subtitle site
+- [web/index.html](C:/Users/CaoCao/Downloads/SentenceMiner/web/index.html) local subtitle transcript site
 - [mpv/sentenceminer.lua](C:/Users/CaoCao/Downloads/SentenceMiner/mpv/sentenceminer.lua) `mpv` integration and capture workflow
 - [scripts/build-helper.mjs](C:/Users/CaoCao/Downloads/SentenceMiner/scripts/build-helper.mjs) Windows helper executable build
 
@@ -84,21 +83,10 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_image`
 - optional `bind_default_key`
 - optional `bind_toggle_key`, `toggle_key`
-- optional overlay settings: `overlay_enabled`, `overlay_exe_path`, `overlay_yomitan_extension_path`,
-  `overlay_hide_mpv_subtitles`, `overlay_hide_mpv_osc`, `overlay_font_family`,
-  `overlay_font_size_px`, `overlay_bottom_offset_pct`, `overlay_max_width_pct`
 
 If you change the helper listen host or port, keep `helper_url` aligned with `server_host` and `server_port`.
 
 SentenceMiner now starts disabled every time `mpv` launches. Use `Ctrl+Shift+m` to enable it for the current session; that toggle is not saved back to `sentenceminer.conf`.
-
-### Browser overlay
-
-The Windows release launches `SentenceMinerOverlay.exe` by default, a transparent Electron window that follows the `mpv` client area and renders the active subtitle as selectable browser text. Set `overlay_enabled=no` to opt out. The packaged release includes Yomitan at `scripts/sentenceminer-overlay/Yomitan` and sets `overlay_yomitan_extension_path` to that folder; extension support is best-effort because Electron supports a subset of Chrome extension APIs.
-
-Use the SentenceMiner settings dialog's Yomitan button to open Yomitan's settings page in the overlay profile. Dictionaries are not bundled; import them from Yomitan settings after the overlay has started.
-
-When `overlay_hide_mpv_subtitles=yes`, the mpv script temporarily hides native mpv subtitles while the overlay is active and restores the previous `sub-visibility` value when SentenceMiner is disabled or mpv exits. When `overlay_hide_mpv_osc=yes`, SentenceMiner also suppresses mpv's built-in OSC while the overlay is active so mouse movement for Yomitan scanning does not pop up mpv controls; set it to `no` to leave OSC behavior unchanged.
 
 In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe`, `ffmpeg_path` points at the bundled `ffmpeg.exe`, and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and `ffmpeg_path=ffmpeg` to rely on auto-discovery and `PATH`.
 
@@ -111,7 +99,6 @@ npm install
 node --experimental-strip-types src/main.ts
 node --experimental-strip-types --test test/*.test.ts
 node scripts/build-helper.mjs
-node scripts/build-overlay.mjs
 node scripts/package-release.mjs
 ```
 

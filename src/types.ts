@@ -32,18 +32,6 @@ export interface SubtitleEventPayload {
   filePath: string;
 }
 
-export interface OverlayStatusPayload {
-  sessionId: string | null;
-  visible: boolean;
-  text: string;
-}
-
-export interface OverlayStatus extends OverlayStatusPayload {
-  fresh: boolean;
-  updatedAtMs: number | null;
-  ageMs: number | null;
-}
-
 export interface MinePayload extends SubtitleEventPayload {
   screenshotPath?: string | null;
   audioPath?: string | null;
@@ -101,17 +89,6 @@ export interface AppearanceConfig {
   subtitleCardFontSizePx: number;
 }
 
-export interface OverlayConfig {
-  enabled: boolean;
-  exePath: string;
-  yomitanExtensionPath: string;
-  hideMpvSubtitles: boolean;
-  fontFamily: string;
-  fontSizePx: number;
-  bottomOffsetPct: number;
-  maxWidthPct: number;
-}
-
 export interface ServerConfig {
   host: string;
   port: number;
@@ -123,7 +100,6 @@ export interface AppConfig {
   capture: CaptureConfig;
   runtime: RuntimeConfig;
   appearance: AppearanceConfig;
-  overlay: OverlayConfig;
 }
 
 export interface EditableAnkiSettings {
@@ -139,18 +115,11 @@ export interface EditableRuntimeSettings {
   captureImage: boolean;
 }
 
-export interface EditableOverlaySettings {
-  fontFamily: string;
-  fontSizePx: number;
-  bottomOffsetPct: number;
-}
-
 export interface EditableSettings {
   anki: EditableAnkiSettings;
   capture: CaptureConfig;
   runtime: EditableRuntimeSettings;
   appearance: AppearanceConfig;
-  overlay: EditableOverlaySettings;
 }
 
 export interface SettingsOptions {
@@ -168,7 +137,6 @@ export interface StatePayload {
     capture: CaptureConfig;
     server: ServerConfig;
     appearance: AppearanceConfig;
-    overlay: OverlayConfig;
     settings: EditableSettings;
   };
   state: TranscriptState;

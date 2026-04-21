@@ -32,8 +32,6 @@ import type {
   HistoryMineBatchPayload,
   HistoryMineRequest,
   MinePayload,
-  OverlayStatus,
-  OverlayStatusPayload,
   ServerConfig,
   SessionPayload,
   SettingsOptions,
@@ -46,7 +44,6 @@ import { WebSocketHub } from './ws.ts';
 
 const APP_ROOT = resolveAppRoot();
 const WEB_ROOT = path.join(APP_ROOT, 'web');
-const OVERLAY_STATUS_FRESH_MS = 2500;
 
 export interface ServerContext {
   config: AppConfig;
@@ -58,12 +55,6 @@ export interface ServerContext {
   listInstalledFonts?: () => Promise<string[]>;
   loadSubtitleTranscript?: (config: AppConfig, track: SubtitleTrackPayload) => Promise<SubtitleTranscriptResult>;
   requestShutdown?: (reason: string) => void;
-  overlayStatus?: OverlayStatusRuntime;
-  now?: () => number;
-}
-
-interface OverlayStatusRuntime extends OverlayStatusPayload {
-  updatedAtMs: number | null;
 }
 
 export type ListenResult = 'started' | 'already-running';
@@ -343,36 +334,6 @@ export async function routeRequest(
     return;
   }
 
-  if (method === 'POST' && url.pathname === '/api/overlay/yomitan-settings') {
-    context.sockets.broadcastJson({
-      type: 'overlay:open-yomitan-settings',
-      payload: {},
-    });
-    respondJson(response, 200, {
-      success: true,
-      message: 'Yomitan settings open request sent to the overlay.',
-    });
-    return;
-  }
-
-  if (method === 'POST' && url.pathname === '/api/overlay/status') {
-    const payload = parseOverlayStatusPayload(await readJsonBody<unknown>(request));
-    updateOverlayStatus(context, payload);
-    respondJson(response, 200, {
-      success: true,
-      status: getOverlayStatus(context),
-    });
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/api/overlay/status') {
-    respondJson(response, 200, {
-      success: true,
-      status: getOverlayStatus(context),
-    });
-    return;
-  }
-
   if (method === 'POST' && url.pathname === '/api/history/go-to') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
     assertActiveSession(context.transcriptStore, payload.sessionId);
@@ -413,31 +374,6 @@ export async function routeRequest(
 
   if (method === 'GET' && url.pathname === '/app.js') {
     await serveStatic(response, 'app.js', 'text/javascript; charset=utf-8');
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/overlay.html') {
-    await serveStatic(response, 'overlay.html', 'text/html; charset=utf-8');
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/overlay.js') {
-    await serveStatic(response, 'overlay.js', 'text/javascript; charset=utf-8');
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/overlay-state.js') {
-    await serveStatic(response, 'overlay-state.js', 'text/javascript; charset=utf-8');
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/overlay-interactivity.js') {
-    await serveStatic(response, 'overlay-interactivity.js', 'text/javascript; charset=utf-8');
-    return;
-  }
-
-  if (method === 'GET' && url.pathname === '/overlay.css') {
-    await serveStatic(response, 'overlay.css', 'text/css; charset=utf-8');
     return;
   }
 
@@ -677,36 +613,6 @@ function subtitleTrackKey(track: SubtitleTrackPayload): string {
   ].join('::');
 }
 
-function updateOverlayStatus(context: ServerContext, payload: OverlayStatusPayload): void {
-  context.overlayStatus = {
-    ...payload,
-    updatedAtMs: getNow(context),
-  };
-}
-
-function getOverlayStatus(context: ServerContext): OverlayStatus {
-  const status = context.overlayStatus ?? {
-    sessionId: null,
-    visible: false,
-    text: '',
-    updatedAtMs: null,
-  };
-  const ageMs = status.updatedAtMs == null ? null : Math.max(0, getNow(context) - status.updatedAtMs);
-
-  return {
-    sessionId: status.sessionId,
-    visible: status.visible,
-    text: status.text,
-    updatedAtMs: status.updatedAtMs,
-    ageMs,
-    fresh: ageMs != null && ageMs <= OVERLAY_STATUS_FRESH_MS,
-  };
-}
-
-function getNow(context: ServerContext): number {
-  return context.now?.() ?? Date.now();
-}
-
 class HttpError extends Error {
   readonly statusCode: number;
 
@@ -724,7 +630,6 @@ export function buildStatePayload(config: AppConfig, transcriptStore: Transcript
       capture: config.capture,
       server: config.server,
       appearance: config.appearance,
-      overlay: config.overlay,
       settings: getEditableSettings(config),
     },
     state: transcriptStore.getState(),
@@ -774,7 +679,6 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
   const capture = getRecord(root.capture, 'capture');
   const runtime = getRecord(root.runtime, 'runtime');
   const appearance = getRecord(root.appearance, 'appearance');
-  const overlay = getRecord(root.overlay, 'overlay');
 
   return {
     anki: {
@@ -811,11 +715,6 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
       subtitleCardFontFamily: getString(appearance.subtitleCardFontFamily, 'appearance.subtitleCardFontFamily'),
       subtitleCardFontSizePx: getInteger(appearance.subtitleCardFontSizePx, 'appearance.subtitleCardFontSizePx'),
     },
-    overlay: {
-      fontFamily: getString(overlay.fontFamily, 'overlay.fontFamily'),
-      fontSizePx: getInteger(overlay.fontSizePx, 'overlay.fontSizePx'),
-      bottomOffsetPct: getInteger(overlay.bottomOffsetPct, 'overlay.bottomOffsetPct'),
-    },
   };
 }
 
@@ -838,14 +737,6 @@ async function validateEditableSettings(config: AppConfig, settings: EditableSet
 
   if (settings.appearance.subtitleCardFontSizePx < 0) {
     throw new HttpError(400, 'appearance.subtitleCardFontSizePx must be 0 or greater.');
-  }
-
-  if (settings.overlay.fontSizePx < 0) {
-    throw new HttpError(400, 'overlay.fontSizePx must be 0 or greater.');
-  }
-
-  if (settings.overlay.bottomOffsetPct < 0) {
-    throw new HttpError(400, 'overlay.bottomOffsetPct must be 0 or greater.');
   }
 
   const noteFields = await listModelFieldNames(config.anki, settings.anki.noteType);
@@ -879,7 +770,6 @@ function replaceConfig(target: AppConfig, next: AppConfig): void {
   target.capture = next.capture;
   target.runtime = next.runtime;
   target.appearance = next.appearance;
-  target.overlay = next.overlay;
 }
 
 async function refreshConfigFromDisk(context: ServerContext): Promise<void> {
@@ -982,16 +872,6 @@ function parseSubtitleEventPayload(value: unknown, fieldName: string): SubtitleE
     endMs: getNullableInteger(root.endMs, `${fieldName}.endMs`),
     playbackTimeMs: getNullableInteger(root.playbackTimeMs, `${fieldName}.playbackTimeMs`),
     filePath: getString(root.filePath, `${fieldName}.filePath`, { allowEmpty: false }),
-  };
-}
-
-function parseOverlayStatusPayload(value: unknown): OverlayStatusPayload {
-  const root = getRecord(value, 'overlay status payload');
-
-  return {
-    sessionId: root.sessionId == null ? null : getString(root.sessionId, 'overlay status payload.sessionId'),
-    visible: getBoolean(root.visible, 'overlay status payload.visible'),
-    text: getString(root.text, 'overlay status payload.text'),
   };
 }
 

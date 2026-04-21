@@ -27,12 +27,6 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.runtime.captureAudio, true);
   assert.equal(payload.config.settings.appearance.subtitleCardFontFamily, '');
   assert.equal(payload.config.settings.appearance.subtitleCardFontSizePx, 0);
-  assert.equal(payload.config.settings.overlay.fontFamily, '');
-  assert.equal(payload.config.settings.overlay.fontSizePx, 42);
-  assert.equal(payload.config.settings.overlay.bottomOffsetPct, 14);
-  assert.equal(payload.config.overlay.enabled, true);
-  assert.equal(payload.config.overlay.hideMpvSubtitles, true);
-  assert.equal(payload.config.overlay.fontSizePx, 42);
 });
 
 test('GET /api/health returns a lightweight readiness payload', async (t) => {
@@ -65,27 +59,6 @@ test('GET /api/capture-settings returns capture settings without full state', as
   });
   assert.equal(payload.state, undefined);
   assert.equal(payload.config, undefined);
-});
-
-test('GET overlay assets serves the browser overlay page and scripts', async (t) => {
-  const harness = await createServerHarness(t);
-
-  const html = await fetch(`${harness.baseUrl}/overlay.html`);
-  const js = await fetch(`${harness.baseUrl}/overlay.js`);
-  const stateJs = await fetch(`${harness.baseUrl}/overlay-state.js`);
-  const interactivityJs = await fetch(`${harness.baseUrl}/overlay-interactivity.js`);
-  const css = await fetch(`${harness.baseUrl}/overlay.css`);
-
-  assert.equal(html.status, 200);
-  assert.match(await html.text(), /SentenceMiner Overlay/);
-  assert.equal(js.status, 200);
-  assert.match(js.headers.get('content-type') ?? '', /text\/javascript/);
-  assert.equal(stateJs.status, 200);
-  assert.match(await stateJs.text(), /buildOverlaySubtitleView/);
-  assert.equal(interactivityJs.status, 200);
-  assert.match(await interactivityJs.text(), /shouldOverlayBeInteractive/);
-  assert.equal(css.status, 200);
-  assert.match(css.headers.get('content-type') ?? '', /text\/css/);
 });
 
 test('GET /api/settings/options returns live Anki deck and note type options', async (t) => {
@@ -148,9 +121,6 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   payload.runtime.captureAudio = false;
   payload.appearance.subtitleCardFontFamily = 'Noto Sans JP';
   payload.appearance.subtitleCardFontSizePx = 20;
-  payload.overlay.fontFamily = 'Yu Gothic UI';
-  payload.overlay.fontSizePx = 54;
-  payload.overlay.bottomOffsetPct = 21;
 
   const response = await fetch(`${harness.baseUrl}/api/settings`, {
     method: 'POST',
@@ -168,9 +138,6 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.equal(harness.config.runtime.captureAudio, false);
   assert.equal(harness.config.appearance.subtitleCardFontFamily, 'Noto Sans JP');
   assert.equal(harness.config.appearance.subtitleCardFontSizePx, 20);
-  assert.equal(harness.config.overlay.fontFamily, 'Yu Gothic UI');
-  assert.equal(harness.config.overlay.fontSizePx, 54);
-  assert.equal(harness.config.overlay.bottomOffsetPct, 21);
 
   const configFile = await fs.readFile(harness.configPath, 'utf8');
   assert.match(configFile, /anki_deck=Mining/);
@@ -178,9 +145,6 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.match(configFile, /capture_audio=no/);
   assert.match(configFile, /subtitle_card_font_family=Noto Sans JP/);
   assert.match(configFile, /subtitle_card_font_size_px=20/);
-  assert.match(configFile, /overlay_font_family=Yu Gothic UI/);
-  assert.match(configFile, /overlay_font_size_px=54/);
-  assert.match(configFile, /overlay_bottom_offset_pct=21/);
 });
 
 test('POST /api/settings rejects invalid note field mappings with a 400', async (t) => {
@@ -401,54 +365,6 @@ test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
   assert.equal(response.status, 200);
   assert.equal(payload.success, true);
   assert.deepEqual(harness.shutdownReasons, ['runtime shutdown request']);
-});
-
-test('POST /api/overlay/yomitan-settings accepts settings open requests', async (t) => {
-  const harness = await createServerHarness(t);
-
-  const response = await fetch(`${harness.baseUrl}/api/overlay/yomitan-settings`, {
-    method: 'POST',
-  });
-  const payload = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.equal(payload.success, true);
-  assert.match(payload.message, /Yomitan settings/);
-});
-
-test('POST and GET /api/overlay/status track fresh overlay visibility on the server clock', async (t) => {
-  let now = 10000;
-  const harness = await createServerHarness(t, {
-    now: () => now,
-  });
-
-  const postResponse = await fetch(`${harness.baseUrl}/api/overlay/status`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sessionId: 'session-1',
-      visible: true,
-      text: 'overlay subtitle',
-      updatedAtMs: 1,
-    }),
-  });
-  const postPayload = await postResponse.json();
-
-  assert.equal(postResponse.status, 200);
-  assert.equal(postPayload.status.updatedAtMs, 10000);
-  assert.equal(postPayload.status.fresh, true);
-  assert.equal(postPayload.status.visible, true);
-
-  now += 3000;
-  const getResponse = await fetch(`${harness.baseUrl}/api/overlay/status`);
-  const getPayload = await getResponse.json();
-
-  assert.equal(getResponse.status, 200);
-  assert.equal(getPayload.status.fresh, false);
-  assert.equal(getPayload.status.ageMs, 3000);
-  assert.equal(getPayload.status.text, 'overlay subtitle');
 });
 
 test('POST /api/history/mine accepts batch selections and updates Anki once', async (t) => {
@@ -970,7 +886,6 @@ async function createServerHarness(
   t: TestContext,
   options: {
     loadSubtitleTranscript?: (config: AppConfig, track: SubtitleTrackPayload) => Promise<SubtitleTranscriptResult>;
-    now?: () => number;
   } = {},
 ) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-server-test-'));
@@ -1052,7 +967,6 @@ async function createServerHarness(
       requestShutdown: (reason) => {
         shutdownReasons.push(reason);
       },
-      now: options.now,
     }),
   );
 

@@ -116,12 +116,6 @@ const elements = {
   settingsAppearanceSubtitleCardFontFamilyCustomField: document.getElementById('settings-appearance-subtitle-card-font-family-custom-field'),
   settingsAppearanceSubtitleCardFontFamilyCustom: document.getElementById('settings-appearance-subtitle-card-font-family-custom'),
   settingsAppearanceSubtitleCardFontSizePx: document.getElementById('settings-appearance-subtitle-card-font-size-px'),
-  settingsOverlayFontFamilySelect: document.getElementById('settings-overlay-font-family-select'),
-  settingsOverlayFontFamilyCustomField: document.getElementById('settings-overlay-font-family-custom-field'),
-  settingsOverlayFontFamilyCustom: document.getElementById('settings-overlay-font-family-custom'),
-  settingsOverlayFontSizePx: document.getElementById('settings-overlay-font-size-px'),
-  settingsOverlayBottomOffsetPct: document.getElementById('settings-overlay-bottom-offset-pct'),
-  settingsYomitanOpen: document.getElementById('settings-yomitan-open'),
 };
 
 elements.themeToggle.addEventListener('click', () => {
@@ -148,12 +142,6 @@ elements.settingsAnkiNoteType.addEventListener('change', () => {
 });
 elements.settingsAppearanceSubtitleCardFontFamilySelect.addEventListener('change', () => {
   syncSubtitleCardFontCustomInputVisibility();
-});
-elements.settingsOverlayFontFamilySelect.addEventListener('change', () => {
-  syncOverlayFontCustomInputVisibility();
-});
-elements.settingsYomitanOpen.addEventListener('click', () => {
-  void openYomitanSettings();
 });
 document.addEventListener('keydown', handleDocumentKeydown);
 
@@ -655,11 +643,6 @@ function hydrateSettingsForm() {
   elements.settingsAppearanceSubtitleCardFontSizePx.value = settings.appearance.subtitleCardFontSizePx
     ? String(settings.appearance.subtitleCardFontSizePx)
     : '';
-  syncOverlayFontPicker(settings.overlay?.fontFamily ?? '');
-  elements.settingsOverlayFontSizePx.value = settings.overlay?.fontSizePx
-    ? String(settings.overlay.fontSizePx)
-    : '';
-  elements.settingsOverlayBottomOffsetPct.value = String(settings.overlay?.bottomOffsetPct ?? 14);
 }
 
 async function refreshSettingsOptions(noteType, deck) {
@@ -725,7 +708,6 @@ async function refreshSettingsOptions(noteType, deck) {
       filename: elements.settingsFieldFilename.value,
     });
     syncSubtitleCardFontPicker(getCurrentSubtitleCardFontFamilyValue());
-    syncOverlayFontPicker(getCurrentOverlayFontFamilyValue());
   } catch (error) {
     if (requestId !== state.settingsRequestId) {
       return;
@@ -781,29 +763,6 @@ async function saveSettings() {
   }
 }
 
-async function openYomitanSettings() {
-  const previousText = elements.settingsYomitanOpen.textContent;
-  elements.settingsYomitanOpen.disabled = true;
-  elements.settingsYomitanOpen.textContent = 'Opening...';
-
-  try {
-    const response = await fetch('/api/overlay/yomitan-settings', {
-      method: 'POST',
-    });
-    const payload = await response.json();
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
-    }
-
-    showToast('Yomitan settings request sent to the overlay.');
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : String(error), 'error');
-  } finally {
-    elements.settingsYomitanOpen.disabled = false;
-    elements.settingsYomitanOpen.textContent = previousText;
-  }
-}
-
 function collectSettingsPayload() {
   return {
     anki: {
@@ -842,14 +801,6 @@ function collectSettingsPayload() {
         elements.settingsAppearanceSubtitleCardFontFamilyCustom.value,
       ),
       subtitleCardFontSizePx: Math.max(0, Math.floor(Number(elements.settingsAppearanceSubtitleCardFontSizePx.value) || 0)),
-    },
-    overlay: {
-      fontFamily: resolveFontSettingValue(
-        elements.settingsOverlayFontFamilySelect.value,
-        elements.settingsOverlayFontFamilyCustom.value,
-      ),
-      fontSizePx: Math.max(0, Math.floor(Number(elements.settingsOverlayFontSizePx.value) || 0)),
-      bottomOffsetPct: Math.max(0, Math.floor(Number(elements.settingsOverlayBottomOffsetPct.value) || 0)),
     },
   };
 }
@@ -1074,36 +1025,6 @@ function syncSubtitleCardFontCustomInputVisibility(forceVisible = null) {
   elements.settingsAppearanceSubtitleCardFontFamilyCustomField.hidden = !showCustomInput;
 }
 
-function syncOverlayFontPicker(currentValue) {
-  const pickerState = resolveFontPickerState(state.settingsOptions.fonts, currentValue);
-  populateSelect(
-    elements.settingsOverlayFontFamilySelect,
-    state.settingsOptions.fonts,
-    pickerState.selectValue,
-    {
-      allowBlank: true,
-      blankLabel: 'Default overlay font',
-      preserveUnknown: false,
-      extraOptions: [
-        {
-          value: CUSTOM_FONT_OPTION_VALUE,
-          label: 'Custom value',
-        },
-      ],
-    },
-  );
-  elements.settingsOverlayFontFamilyCustom.value = pickerState.customValue;
-  syncOverlayFontCustomInputVisibility(pickerState.showCustomInput);
-}
-
-function syncOverlayFontCustomInputVisibility(forceVisible = null) {
-  const showCustomInput =
-    typeof forceVisible === 'boolean'
-      ? forceVisible
-      : elements.settingsOverlayFontFamilySelect.value === CUSTOM_FONT_OPTION_VALUE;
-  elements.settingsOverlayFontFamilyCustomField.hidden = !showCustomInput;
-}
-
 function getCurrentSubtitleCardFontFamilyValue() {
   if (!elements.settingsAppearanceSubtitleCardFontFamilySelect.options.length) {
     return state.app?.config?.settings?.appearance?.subtitleCardFontFamily ?? '';
@@ -1112,17 +1033,6 @@ function getCurrentSubtitleCardFontFamilyValue() {
   return resolveFontSettingValue(
     elements.settingsAppearanceSubtitleCardFontFamilySelect.value,
     elements.settingsAppearanceSubtitleCardFontFamilyCustom.value,
-  );
-}
-
-function getCurrentOverlayFontFamilyValue() {
-  if (!elements.settingsOverlayFontFamilySelect.options.length) {
-    return state.app?.config?.settings?.overlay?.fontFamily ?? '';
-  }
-
-  return resolveFontSettingValue(
-    elements.settingsOverlayFontFamilySelect.value,
-    elements.settingsOverlayFontFamilyCustom.value,
   );
 }
 

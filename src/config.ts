@@ -48,16 +48,6 @@ export const DEFAULT_CONFIG: AppConfig = {
     subtitleCardFontFamily: '',
     subtitleCardFontSizePx: 0,
   },
-  overlay: {
-    enabled: true,
-    exePath: '',
-    yomitanExtensionPath: '',
-    hideMpvSubtitles: true,
-    fontFamily: '',
-    fontSizePx: 42,
-    bottomOffsetPct: 14,
-    maxWidthPct: 86,
-  },
 };
 
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
@@ -115,11 +105,6 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
       subtitleCardFontFamily: config.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: config.appearance.subtitleCardFontSizePx,
     },
-    overlay: {
-      fontFamily: config.overlay.fontFamily,
-      fontSizePx: config.overlay.fontSizePx,
-      bottomOffsetPct: config.overlay.bottomOffsetPct,
-    },
   };
 }
 
@@ -148,12 +133,6 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
       ...config.appearance,
       subtitleCardFontFamily: settings.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: settings.appearance.subtitleCardFontSizePx,
-    },
-    overlay: {
-      ...config.overlay,
-      fontFamily: settings.overlay.fontFamily,
-      fontSizePx: settings.overlay.fontSizePx,
-      bottomOffsetPct: settings.overlay.bottomOffsetPct,
     },
   });
 }
@@ -468,54 +447,6 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         subtitleCardFontSizePx: parseNumber(key, value),
       };
       return;
-    case 'overlay_enabled':
-      config.overlay = {
-        ...config.overlay,
-        enabled: parseBoolean(key, value),
-      };
-      return;
-    case 'overlay_exe_path':
-      config.overlay = {
-        ...config.overlay,
-        exePath: value,
-      };
-      return;
-    case 'overlay_yomitan_extension_path':
-      config.overlay = {
-        ...config.overlay,
-        yomitanExtensionPath: value,
-      };
-      return;
-    case 'overlay_hide_mpv_subtitles':
-      config.overlay = {
-        ...config.overlay,
-        hideMpvSubtitles: parseBoolean(key, value),
-      };
-      return;
-    case 'overlay_font_family':
-      config.overlay = {
-        ...config.overlay,
-        fontFamily: value,
-      };
-      return;
-    case 'overlay_font_size_px':
-      config.overlay = {
-        ...config.overlay,
-        fontSizePx: parseNumber(key, value),
-      };
-      return;
-    case 'overlay_bottom_offset_pct':
-      config.overlay = {
-        ...config.overlay,
-        bottomOffsetPct: parseNumber(key, value),
-      };
-      return;
-    case 'overlay_max_width_pct':
-      config.overlay = {
-        ...config.overlay,
-        maxWidthPct: parseNumber(key, value),
-      };
-      return;
     case 'ffmpeg_path':
       config.runtime = {
         ...config.runtime,
@@ -624,10 +555,6 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
       ...base.appearance,
       ...overrides.appearance,
     },
-    overlay: {
-      ...base.overlay,
-      ...overrides.overlay,
-    },
   };
 }
 
@@ -661,9 +588,6 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
   { key: 'subtitle_card_font_family', value: (settings) => settings.appearance.subtitleCardFontFamily },
   { key: 'subtitle_card_font_size_px', value: (settings) => String(settings.appearance.subtitleCardFontSizePx) },
-  { key: 'overlay_font_family', value: (settings) => settings.overlay.fontFamily },
-  { key: 'overlay_font_size_px', value: (settings) => String(settings.overlay.fontSizePx) },
-  { key: 'overlay_bottom_offset_pct', value: (settings) => String(settings.overlay.bottomOffsetPct) },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {

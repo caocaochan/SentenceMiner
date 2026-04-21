@@ -32,7 +32,7 @@
   --subtitle-card-font-family: var(--app-font-family);
   --subtitle-card-font-size: 1rem;
   --shell-surface: rgba(30, 32, 48, 1);
-  --overlay: rgba(54, 58, 79, 0.92);
+  --panel-surface: rgba(54, 58, 79, 0.92);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
   --sticky-top-gap: 0px;
   --sticky-stack-gap: 0px;
@@ -70,7 +70,7 @@
   --selected-rgb: 188, 192, 204;
   --primary-button-hover: #2c7af7;
   --shell-surface: rgba(230, 233, 239, 1);
-  --overlay: rgba(204, 208, 218, 0.92);
+  --panel-surface: rgba(204, 208, 218, 0.92);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.08);
 }
 
@@ -178,7 +178,7 @@ h1 {
 
 .history-panel,
 .status-card {
-  background: var(--overlay);
+  background: var(--panel-surface);
   border: 1px solid rgba(var(--border-contrast-rgb), 0.08);
   border-radius: 22px;
   box-shadow: var(--shadow);
