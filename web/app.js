@@ -114,6 +114,7 @@ const elements = {
   settingsAppearanceSubtitleCardFontFamilyCustomField: document.getElementById('settings-appearance-subtitle-card-font-family-custom-field'),
   settingsAppearanceSubtitleCardFontFamilyCustom: document.getElementById('settings-appearance-subtitle-card-font-family-custom'),
   settingsAppearanceSubtitleCardFontSizePx: document.getElementById('settings-appearance-subtitle-card-font-size-px'),
+  settingsYomitanOpen: document.getElementById('settings-yomitan-open'),
 };
 
 elements.themeToggle.addEventListener('click', () => {
@@ -140,6 +141,9 @@ elements.settingsAnkiNoteType.addEventListener('change', () => {
 });
 elements.settingsAppearanceSubtitleCardFontFamilySelect.addEventListener('change', () => {
   syncSubtitleCardFontCustomInputVisibility();
+});
+elements.settingsYomitanOpen.addEventListener('click', () => {
+  void openYomitanSettings();
 });
 document.addEventListener('keydown', handleDocumentKeydown);
 
@@ -724,6 +728,29 @@ async function saveSettings() {
         returnTarget?.focus();
       });
     }
+  }
+}
+
+async function openYomitanSettings() {
+  const previousText = elements.settingsYomitanOpen.textContent;
+  elements.settingsYomitanOpen.disabled = true;
+  elements.settingsYomitanOpen.textContent = 'Opening...';
+
+  try {
+    const response = await fetch('/api/overlay/yomitan-settings', {
+      method: 'POST',
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
+    }
+
+    showToast('Yomitan settings request sent to the overlay.');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), 'error');
+  } finally {
+    elements.settingsYomitanOpen.disabled = false;
+    elements.settingsYomitanOpen.textContent = previousText;
   }
 }
 

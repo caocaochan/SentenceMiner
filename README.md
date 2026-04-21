@@ -93,7 +93,9 @@ SentenceMiner now starts disabled every time `mpv` launches. Use `Ctrl+Shift+m` 
 
 ### Browser overlay
 
-The Windows release can launch `SentenceMinerOverlay.exe`, a transparent Electron window that follows the `mpv` client area and renders the active subtitle as selectable browser text. Set `overlay_enabled=yes` to opt in. If you want Yomitan inside the overlay, set `overlay_yomitan_extension_path` to an unpacked Yomitan extension directory; extension support is best-effort because Electron supports a subset of Chrome extension APIs.
+The Windows release can launch `SentenceMinerOverlay.exe`, a transparent Electron window that follows the `mpv` client area and renders the active subtitle as selectable browser text. Set `overlay_enabled=yes` to opt in. The packaged release includes Yomitan at `scripts/sentenceminer-overlay/Yomitan` and sets `overlay_yomitan_extension_path` to that folder; extension support is best-effort because Electron supports a subset of Chrome extension APIs.
+
+Use the SentenceMiner settings dialog's Yomitan button to open Yomitan's settings page in the overlay profile. Dictionaries are not bundled; import them from Yomitan settings after the overlay has started.
 
 When `overlay_hide_mpv_subtitles=yes`, the mpv script temporarily hides native mpv subtitles while the overlay is active and restores the previous `sub-visibility` value when SentenceMiner is disabled or mpv exits.
 

@@ -224,6 +224,19 @@ test('POST /api/runtime/shutdown requests helper shutdown', async (t) => {
   assert.deepEqual(harness.shutdownReasons, ['runtime shutdown request']);
 });
 
+test('POST /api/overlay/yomitan-settings accepts settings open requests', async (t) => {
+  const harness = await createServerHarness(t);
+
+  const response = await fetch(`${harness.baseUrl}/api/overlay/yomitan-settings`, {
+    method: 'POST',
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.match(payload.message, /Yomitan settings/);
+});
+
 test('POST /api/history/mine accepts batch selections and updates Anki once', async (t) => {
   const harness = await createServerHarness(t);
   harness.config.runtime.captureAudio = false;

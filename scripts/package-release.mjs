@@ -31,6 +31,7 @@ await copyIntoPackage(
   'scripts/sentenceminer-helper/SentenceMinerHelper.exe',
 );
 await copyIntoPackage(overlayBuildRoot, 'scripts/sentenceminer-overlay');
+await copyBundledYomitan();
 await copyBundledFfmpeg();
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
@@ -59,6 +60,7 @@ async function writePackagedMpvConfig() {
   const packaged = source
     .replace(/^helper_exe_path=.*$/m, 'helper_exe_path=sentenceminer-helper/SentenceMinerHelper.exe')
     .replace(/^overlay_exe_path=.*$/m, 'overlay_exe_path=sentenceminer-overlay/SentenceMinerOverlay.exe')
+    .replace(/^overlay_yomitan_extension_path=.*$/m, 'overlay_yomitan_extension_path=sentenceminer-overlay/Yomitan')
     .replace(/^ffmpeg_path=.*$/m, 'ffmpeg_path=../scripts/sentenceminer-helper/ffmpeg.exe')
     .replace(/^bind_default_key=.*$/m, 'bind_default_key=yes')
     .replace(/^default_key=.*$/m, 'default_key=Ctrl+m');
@@ -71,6 +73,11 @@ async function writePackagedHelperEntryPoint() {
   const source = "-- Placeholder entry point so mpv treats this helper asset folder as a valid script directory.\n";
 
   await fs.writeFile(destinationPath, source, 'utf8');
+}
+
+async function copyBundledYomitan() {
+  const sourcePath = path.join(repoRoot, 'third_party', 'yomitan');
+  await copyIntoPackage(sourcePath, 'scripts/sentenceminer-overlay/Yomitan');
 }
 
 async function copyBundledFfmpeg() {

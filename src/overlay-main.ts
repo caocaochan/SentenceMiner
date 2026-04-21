@@ -22,6 +22,8 @@ const args = parseArgs(process.argv.slice(2));
 const userDataPath = resolveUserDataPath(args.mpvPid);
 const logPath = path.join(userDataPath, 'overlay.log');
 let overlayWindow: BrowserWindow | null = null;
+let yomitanSettingsWindow: BrowserWindow | null = null;
+let yomitanExtensionId: string | null = null;
 let boundsWatcher: ChildProcessWithoutNullStreams | null = null;
 let lastBoundsKey = '';
 let receivedBounds = false;
@@ -70,6 +72,10 @@ ipcMain.on('overlay:set-interactive', (_event, interactive: boolean) => {
   overlayWindow.setIgnoreMouseEvents(!interactive, {
     forward: true,
   });
+});
+
+ipcMain.on('overlay:open-yomitan-settings', () => {
+  openYomitanSettingsWindow();
 });
 
 function createOverlayWindow(helperUrl: string): BrowserWindow {
@@ -134,18 +140,65 @@ async function loadYomitanExtension(extensionPath: string): Promise<void> {
   try {
     const extensions = (session.defaultSession as any).extensions;
     if (extensions?.loadExtension) {
-      await extensions.loadExtension(normalizedPath, {
+      const extension = await extensions.loadExtension(normalizedPath, {
         allowFileAccess: true,
       });
+      yomitanExtensionId = extension?.id ?? null;
+      appendLog(`loaded Yomitan extension id=${yomitanExtensionId ?? 'unknown'} path=${normalizedPath}`);
       return;
     }
 
-    await session.defaultSession.loadExtension(normalizedPath, {
+    const extension = await session.defaultSession.loadExtension(normalizedPath, {
       allowFileAccess: true,
     });
+    yomitanExtensionId = extension?.id ?? null;
+    appendLog(`loaded Yomitan extension id=${yomitanExtensionId ?? 'unknown'} path=${normalizedPath}`);
   } catch (error) {
+    appendLog(`could not load Yomitan extension: ${error instanceof Error ? error.message : String(error)}`);
     console.warn(`SentenceMiner overlay: could not load Yomitan extension: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function openYomitanSettingsWindow(): void {
+  if (!yomitanExtensionId) {
+    appendLog('cannot open Yomitan settings because the extension is not loaded');
+    return;
+  }
+
+  const url = `chrome-extension://${yomitanExtensionId}/settings.html`;
+  if (yomitanSettingsWindow && !yomitanSettingsWindow.isDestroyed()) {
+    yomitanSettingsWindow.show();
+    yomitanSettingsWindow.focus();
+    yomitanSettingsWindow.loadURL(url).catch((error) => {
+      appendLog(`failed to reload Yomitan settings: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    return;
+  }
+
+  yomitanSettingsWindow = new BrowserWindow({
+    width: 1200,
+    height: 820,
+    minWidth: 900,
+    minHeight: 640,
+    title: 'Yomitan Settings',
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  yomitanSettingsWindow.setMenuBarVisibility(false);
+  yomitanSettingsWindow.once('ready-to-show', () => {
+    yomitanSettingsWindow?.show();
+    yomitanSettingsWindow?.focus();
+  });
+  yomitanSettingsWindow.on('closed', () => {
+    yomitanSettingsWindow = null;
+  });
+  yomitanSettingsWindow.loadURL(url).catch((error) => {
+    appendLog(`failed to open Yomitan settings: ${error instanceof Error ? error.message : String(error)}`);
+  });
 }
 
 function resolveUserDataPath(mpvPid: number | null): string {

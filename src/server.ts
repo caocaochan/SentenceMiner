@@ -309,6 +309,18 @@ export async function routeRequest(
     return;
   }
 
+  if (method === 'POST' && url.pathname === '/api/overlay/yomitan-settings') {
+    context.sockets.broadcastJson({
+      type: 'overlay:open-yomitan-settings',
+      payload: {},
+    });
+    respondJson(response, 200, {
+      success: true,
+      message: 'Yomitan settings open request sent to the overlay.',
+    });
+    return;
+  }
+
   if (method === 'POST' && url.pathname === '/api/history/go-to') {
     const payload = await readJsonBody<SubtitleEventPayload>(request);
     assertActiveSession(context.transcriptStore, payload.sessionId);

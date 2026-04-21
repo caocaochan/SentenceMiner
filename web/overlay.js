@@ -81,6 +81,11 @@ function connectWebSocket() {
     if (message.type === 'state') {
       state.app = message.payload;
       render();
+      return;
+    }
+
+    if (message.type === 'overlay:open-yomitan-settings') {
+      window.sentenceMinerOverlay?.openYomitanSettings?.();
     }
   });
 
