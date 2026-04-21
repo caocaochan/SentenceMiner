@@ -51,6 +51,7 @@ local EMPTY_SUBTITLE_PLAYBACK_BUCKET_MS = 250
 local state = {
     enabled = false,
     open_browser_when_ready = false,
+    browser_opened_this_mpv_session = false,
     session_id = nil,
     session_generation = 0,
     last_subtitle_key = nil,
@@ -889,6 +890,7 @@ local function start_session()
                 msg.warn("could not open helper site: " .. tostring(open_err))
             else
                 state.open_browser_when_ready = false
+                state.browser_opened_this_mpv_session = true
             end
         end
     end)
@@ -1180,7 +1182,7 @@ local function set_sentence_miner_enabled(enabled)
     state.enabled = enabled
 
     if enabled then
-        state.open_browser_when_ready = true
+        state.open_browser_when_ready = not state.browser_opened_this_mpv_session
         mp.osd_message("SentenceMiner: enabled", 2)
         if mp.get_property("path", "") ~= "" then
             start_session()

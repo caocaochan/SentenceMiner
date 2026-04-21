@@ -50,7 +50,7 @@ Node.js and `ffmpeg` are not required for the packaged Windows release.
 2. Extract it directly into your `mpv` folder so the zip's `scripts/` and `script-opts/` folders merge into `mpv/scripts/` and `mpv/script-opts/`.
 3. Edit `mpv/script-opts/sentenceminer.conf` with your Anki deck, note type, field mappings, and any script options you want to customize.
 4. Play a video in `mpv`.
-5. Press `Ctrl+Shift+m` once to enable SentenceMiner for the current `mpv` session. That will start the helper flow and open the local transcript site, and then you can use `Ctrl+m` to mine the current subtitle.
+5. Press `Ctrl+Shift+m` once to enable SentenceMiner for the current `mpv` session. That will start the helper flow and open the local transcript site the first time it is enabled in that `mpv` process; later toggles reuse the existing tab if you left it open. You can then use `Ctrl+m` to mine the current subtitle.
 
 The helper starts automatically on first playback. You should not need to run `SentenceMinerHelper.exe` yourself unless you are debugging. The packaged release already includes `script-opts/sentenceminer.conf` with a relative helper path and a default `Ctrl+m` mining hotkey.
 
