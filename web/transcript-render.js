@@ -22,13 +22,59 @@ export function shouldRebuildTranscriptList(previousSignature, entries) {
   return previousSignature !== buildTranscriptStructureSignature(entries);
 }
 
-export function computeTranscriptItemUiState(entries, selectedKeys, pendingActions, currentCueId, entry) {
+export function buildTranscriptBookmarkKey(entry) {
+  return [
+    entry.filePath ?? '',
+    entry.orderIndex ?? '',
+    entry.startMs ?? 'nil',
+    entry.endMs ?? 'nil',
+    normalizeBookmarkText(entry.text),
+  ].join('::');
+}
+
+export function filterTranscriptEntriesForBookmarkView(entries, bookmarkedKeys, showBookmarkedOnly) {
+  if (!showBookmarkedOnly) {
+    return entries;
+  }
+
+  return entries.filter((entry) => bookmarkedKeys.has(buildTranscriptBookmarkKey(entry)));
+}
+
+export function shouldHandleTranscriptBookmarkShortcut({
+  key,
+  ctrlKey = false,
+  altKey = false,
+  metaKey = false,
+  isComposing = false,
+  settingsModalOpen = false,
+  targetTagName = '',
+  targetIsContentEditable = false,
+}) {
+  if (settingsModalOpen || isComposing || ctrlKey || altKey || metaKey || key?.toLowerCase() !== 'b') {
+    return false;
+  }
+
+  const tagName = targetTagName.toUpperCase();
+  return !targetIsContentEditable && !['INPUT', 'SELECT', 'TEXTAREA'].includes(tagName);
+}
+
+export function computeTranscriptItemUiState(
+  entries,
+  selectedKeys,
+  pendingActions,
+  currentCueId,
+  entry,
+  bookmarkedKeys = new Set(),
+) {
   const entryKey = buildHistoryEntryKey(entry);
+  const bookmarkKey = buildTranscriptBookmarkKey(entry);
 
   return {
     entryKey,
+    bookmarkKey,
     active: currentCueId === entry.id,
     selected: selectedKeys.has(entryKey),
+    bookmarked: bookmarkedKeys.has(bookmarkKey),
     goToDisabled: pendingActions.has(`go-to:${entryKey}`),
     mineDisabled: pendingActions.has(`mine:${entryKey}`),
     checkboxDisabled: !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, !selectedKeys.has(entryKey)),
@@ -66,4 +112,8 @@ export function computeTranscriptFollowScrollTarget({
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeBookmarkText(text) {
+  return String(text ?? '').replace(/\s+/g, ' ').trim();
 }

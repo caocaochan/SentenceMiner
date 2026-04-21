@@ -284,6 +284,16 @@ h3 {
   background: transparent;
 }
 
+.button-toggle[aria-pressed="true"] {
+  border-color: rgba(var(--amber-rgb), 0.58);
+  background: rgba(var(--amber-rgb), 0.16);
+  color: var(--text);
+}
+
+.button-toggle[aria-pressed="true"] .lucide-icon {
+  fill: currentColor;
+}
+
 .button:disabled,
 .icon-button:disabled,
 .history-button:disabled {
@@ -391,6 +401,22 @@ h3 {
   background: color-mix(in srgb, var(--surface) 84%, var(--accent));
 }
 
+.history-item-bookmarked {
+  border-color: rgba(var(--amber-rgb), 0.64);
+  background: color-mix(in srgb, var(--surface) 86%, var(--amber));
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+
+.history-item-active.history-item-bookmarked {
+  border-color: rgba(var(--green-rgb), 0.58);
+  background: color-mix(in srgb, var(--surface) 78%, var(--green) 12%, var(--amber));
+  box-shadow: inset 3px 0 0 var(--green), inset -3px 0 0 var(--amber);
+}
+
+.history-item-selected.history-item-bookmarked {
+  background: color-mix(in srgb, var(--surface) 74%, var(--accent) 13%, var(--amber));
+}
+
 .history-item-head {
   display: contents;
 }
@@ -434,6 +460,16 @@ h3 {
 .history-button-primary {
   border-color: rgba(var(--accent-rgb), 0.5);
   color: var(--accent-strong);
+}
+
+.history-bookmark-button-active {
+  border-color: rgba(var(--amber-rgb), 0.62);
+  background: rgba(var(--amber-rgb), 0.16);
+  color: var(--amber);
+}
+
+.history-bookmark-button-active .lucide-icon {
+  fill: currentColor;
 }
 
 .history-select {
@@ -845,7 +881,8 @@ h3 {
     justify-content: flex-end;
   }
 
-  #history-mine-selected span {
+  #history-mine-selected span,
+  #history-bookmark-filter span {
     display: none;
   }
 

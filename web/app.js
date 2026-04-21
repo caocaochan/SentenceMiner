@@ -5,9 +5,12 @@ import {
   toggleSelectedHistoryKeys,
 } from './history-selection.js';
 import {
+  buildTranscriptBookmarkKey,
   buildTranscriptStructureSignature,
   computeTranscriptFollowScrollTarget,
   computeTranscriptItemUiState,
+  filterTranscriptEntriesForBookmarkView,
+  shouldHandleTranscriptBookmarkShortcut,
   shouldRebuildTranscriptList,
 } from './transcript-render.js';
 import {
@@ -28,6 +31,8 @@ const state = {
   app: null,
   pendingActions: new Set(),
   selectedHistoryKeys: new Set(),
+  bookmarkedTranscriptKeys: new Set(),
+  showBookmarkedOnly: false,
   toasts: [],
   settingsModalOpen: false,
   settingsOptions: {
@@ -57,6 +62,7 @@ const AUTO_SCROLL_TIME_CONSTANT_S = 0.25;
 const AUTO_SCROLL_CONVERGENCE_PX = 0.5;
 const AUTO_SCROLL_MAX_FRAME_DT_S = 0.1;
 const STATE_POLL_INTERVAL_MS = 2000;
+const TRANSCRIPT_BOOKMARKS_STORAGE_KEY = 'sentenceminer:transcript-bookmarks';
 const SETTINGS_FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
   'input:not([disabled])',
@@ -78,6 +84,7 @@ const elements = {
   historySelectionCount: document.getElementById('history-selection-count'),
   historyList: document.getElementById('history-list'),
   historyMineSelected: document.getElementById('history-mine-selected'),
+  historyBookmarkFilter: document.getElementById('history-bookmark-filter'),
   toastRegion: document.getElementById('toast-region'),
   themeToggle: document.getElementById('theme-toggle'),
   settingsButton: document.getElementById('settings-button'),
@@ -134,6 +141,11 @@ elements.settingsButton.addEventListener('click', () => {
 elements.historyMineSelected.addEventListener('click', () => {
   void runMineSelectedAction();
 });
+elements.historyBookmarkFilter.addEventListener('click', () => {
+  state.showBookmarkedOnly = !state.showBookmarkedOnly;
+  state.renderedTranscriptSignature = null;
+  render();
+});
 elements.settingsClose.addEventListener('click', closeSettingsModal);
 elements.settingsCancel.addEventListener('click', closeSettingsModal);
 elements.settingsBackdrop.addEventListener('click', closeSettingsModal);
@@ -158,6 +170,7 @@ elements.settingsTabsContainer?.addEventListener('click', (event) => {
 document.addEventListener('keydown', handleDocumentKeydown);
 
 initTheme();
+initTranscriptBookmarks();
 bootstrap();
 
 function initTheme() {
@@ -166,6 +179,10 @@ function initTheme() {
     window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false,
   );
   document.documentElement.setAttribute('data-theme', preferredTheme);
+}
+
+function initTranscriptBookmarks() {
+  state.bookmarkedTranscriptKeys = loadTranscriptBookmarks();
 }
 
 async function bootstrap() {
@@ -236,6 +253,11 @@ function connectWebSocket() {
 
     if (message.type === 'toast') {
       showToast(message.payload?.message, message.payload?.kind);
+      return;
+    }
+
+    if (message.type === 'bookmark-current') {
+      toggleTranscriptBookmarkForCueId(message.payload?.currentCueId, message.payload?.sessionId);
     }
   });
 
@@ -312,6 +334,14 @@ function renderTranscript() {
   const transcriptEntries = transcriptState.transcript ?? transcriptState.history ?? [];
   state.selectedHistoryKeys = reconcileSelectedHistoryKeys(state.selectedHistoryKeys, transcriptEntries);
   const selectedEntries = transcriptEntries.filter((entry) => state.selectedHistoryKeys.has(buildHistoryEntryKey(entry)));
+  const bookmarkedEntries = transcriptEntries.filter((entry) =>
+    state.bookmarkedTranscriptKeys.has(buildTranscriptBookmarkKey(entry)),
+  );
+  const visibleTranscriptEntries = filterTranscriptEntriesForBookmarkView(
+    transcriptEntries,
+    state.bookmarkedTranscriptKeys,
+    state.showBookmarkedOnly,
+  );
 
   elements.connectionPill.textContent =
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
@@ -326,22 +356,35 @@ function renderTranscript() {
   elements.historySelectionCount.textContent = `${selectedEntries.length} selected`;
   elements.historyMineSelected.disabled =
     selectedEntries.length === 0 || isAnyBatchHistoryActionPending('mine-selected');
+  elements.historyBookmarkFilter.disabled = transcriptEntries.length === 0;
+  elements.historyBookmarkFilter.setAttribute('aria-pressed', String(state.showBookmarkedOnly));
+  elements.historyBookmarkFilter.title = state.showBookmarkedOnly ? 'Show all transcript lines' : 'Show bookmarked lines only';
+  elements.historyBookmarkFilter.querySelector('span').textContent =
+    bookmarkedEntries.length === 1 ? '1 bookmark' : `${bookmarkedEntries.length} bookmarks`;
 
   if (transcriptEntries.length === 0) {
-    state.renderedTranscriptSignature = buildTranscriptStructureSignature(transcriptEntries);
+    state.renderedTranscriptSignature = buildTranscriptStructureSignature(visibleTranscriptEntries);
     state.renderedCueElements = new Map();
     state.lastScrolledCueId = null;
     renderEmptyTranscriptState(transcriptState);
     return;
   }
 
-  if (shouldRebuildTranscriptList(state.renderedTranscriptSignature, transcriptEntries)) {
-    rebuildTranscriptList(transcriptEntries);
-    state.renderedTranscriptSignature = buildTranscriptStructureSignature(transcriptEntries);
+  if (visibleTranscriptEntries.length === 0) {
+    state.renderedTranscriptSignature = buildTranscriptStructureSignature(visibleTranscriptEntries);
+    state.renderedCueElements = new Map();
+    state.lastScrolledCueId = null;
+    renderBookmarkedTranscriptEmptyState();
+    return;
+  }
+
+  if (shouldRebuildTranscriptList(state.renderedTranscriptSignature, visibleTranscriptEntries)) {
+    rebuildTranscriptList(visibleTranscriptEntries);
+    state.renderedTranscriptSignature = buildTranscriptStructureSignature(visibleTranscriptEntries);
     state.lastScrolledCueId = null;
   }
 
-  updateTranscriptItemUi(transcriptEntries, transcriptState.currentCueId);
+  updateTranscriptItemUi(visibleTranscriptEntries, transcriptState.currentCueId, transcriptEntries);
   if (transcriptState.currentCueId !== state.lastScrolledCueId) {
     state.lastScrolledCueId = transcriptState.currentCueId;
     syncCurrentCueScroll(transcriptState.currentCueId);
@@ -398,6 +441,17 @@ function buildHistoryActionButton(label, action, entry, iconName) {
   button.disabled = isHistoryActionPending(action, entry);
   button.addEventListener('click', () => {
     void runHistoryAction(action, entry);
+  });
+  return button;
+}
+
+function buildTranscriptBookmarkButton(entry) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'history-button history-bookmark-button';
+  button.append(buildIcon('bookmark'));
+  button.addEventListener('click', () => {
+    toggleTranscriptBookmark(entry);
   });
   return button;
 }
@@ -499,6 +553,69 @@ function applyHistorySelectionToggle(entries, entry, checked) {
   render();
 }
 
+function toggleCurrentTranscriptBookmark() {
+  const transcriptEntries = state.app?.state?.transcript ?? state.app?.state?.history ?? [];
+  const currentCueId = state.app?.state?.currentCueId ?? null;
+  const entry = transcriptEntries.find((candidate) => candidate.id === currentCueId);
+  if (!entry) {
+    showToast('No current transcript line to bookmark.');
+    return;
+  }
+
+  toggleTranscriptBookmark(entry);
+}
+
+function toggleTranscriptBookmarkForCueId(cueId, sessionId = null) {
+  if (sessionId && state.app?.state?.session?.sessionId !== sessionId) {
+    return;
+  }
+
+  const transcriptEntries = state.app?.state?.transcript ?? state.app?.state?.history ?? [];
+  const entry = transcriptEntries.find((candidate) => candidate.id === cueId);
+  if (!entry) {
+    showToast('No current transcript line to bookmark.');
+    return;
+  }
+
+  toggleTranscriptBookmark(entry);
+}
+
+function toggleTranscriptBookmark(entry) {
+  const bookmarkKey = buildTranscriptBookmarkKey(entry);
+  const nextBookmarkedKeys = new Set(state.bookmarkedTranscriptKeys);
+  if (nextBookmarkedKeys.has(bookmarkKey)) {
+    nextBookmarkedKeys.delete(bookmarkKey);
+  } else {
+    nextBookmarkedKeys.add(bookmarkKey);
+  }
+
+  state.bookmarkedTranscriptKeys = nextBookmarkedKeys;
+  saveTranscriptBookmarks(state.bookmarkedTranscriptKeys);
+  render();
+}
+
+function loadTranscriptBookmarks() {
+  try {
+    const raw = localStorage.getItem(TRANSCRIPT_BOOKMARKS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+
+    return new Set(parsed.filter((value) => typeof value === 'string' && value));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveTranscriptBookmarks(bookmarkedKeys) {
+  try {
+    localStorage.setItem(TRANSCRIPT_BOOKMARKS_STORAGE_KEY, JSON.stringify([...bookmarkedKeys]));
+  } catch {
+    showToast('Bookmarks could not be saved in this browser.', 'error');
+  }
+}
+
 function renderToasts() {
   elements.toastRegion.innerHTML = '';
 
@@ -580,6 +697,22 @@ function closeSettingsModal() {
 }
 
 function handleDocumentKeydown(event) {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (shouldHandleTranscriptBookmarkShortcut({
+    key: event.key,
+    ctrlKey: event.ctrlKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+    isComposing: event.isComposing,
+    settingsModalOpen: state.settingsModalOpen,
+    targetTagName: target?.tagName,
+    targetIsContentEditable: Boolean(target?.isContentEditable),
+  })) {
+    event.preventDefault();
+    toggleCurrentTranscriptBookmark();
+    return;
+  }
+
   if (!state.settingsModalOpen) {
     return;
   }
@@ -1158,6 +1291,26 @@ function renderEmptyTranscriptState(transcriptState) {
   elements.historyList.append(item);
 }
 
+function renderBookmarkedTranscriptEmptyState() {
+  state.renderedCueElements = new Map();
+  elements.historyList.innerHTML = '';
+
+  const item = document.createElement('article');
+  item.className = 'history-empty-state';
+  item.dataset.transcriptStatus = 'bookmarks-empty';
+
+  const title = document.createElement('h2');
+  title.className = 'history-empty-title';
+  title.textContent = 'No bookmarked lines';
+
+  const copy = document.createElement('p');
+  copy.className = 'history-empty-copy';
+  copy.textContent = 'Bookmark transcript lines to show them here.';
+
+  item.append(title, copy);
+  elements.historyList.append(item);
+}
+
 function rebuildTranscriptList(entries) {
   state.renderedCueElements = new Map();
   elements.historyList.innerHTML = '';
@@ -1204,35 +1357,52 @@ function rebuildTranscriptList(entries) {
     const actions = document.createElement('div');
     actions.className = 'history-actions';
 
+    const bookmarkButton = buildTranscriptBookmarkButton(entry);
     const goToButton = buildHistoryActionButton('Go to', 'go-to', entry, 'play');
     const mineButton = buildHistoryActionButton('Mine', 'mine', entry, 'pickaxe');
 
-    actions.append(goToButton, mineButton);
+    actions.append(bookmarkButton, goToButton, mineButton);
     item.append(head, content, actions);
     elements.historyList.append(item);
     state.renderedCueElements.set(entry.id, {
       item,
       checkbox,
+      bookmarkButton,
       goToButton,
       mineButton,
     });
   });
 }
 
-function updateTranscriptItemUi(entries, currentCueId) {
-  entries.forEach((entry) => {
+function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = renderedEntries) {
+  renderedEntries.forEach((entry) => {
     const controls = state.renderedCueElements.get(entry.id);
     if (!controls) {
       return;
     }
 
-    const uiState = computeTranscriptItemUiState(entries, state.selectedHistoryKeys, state.pendingActions, currentCueId, entry);
+    const uiState = computeTranscriptItemUiState(
+      allEntries,
+      state.selectedHistoryKeys,
+      state.pendingActions,
+      currentCueId,
+      entry,
+      state.bookmarkedTranscriptKeys,
+    );
     controls.item.classList.toggle('history-item-active', uiState.active);
     controls.item.classList.toggle('history-item-selected', uiState.selected);
+    controls.item.classList.toggle('history-item-bookmarked', uiState.bookmarked);
     controls.item.setAttribute('aria-current', uiState.active ? 'true' : 'false');
     controls.checkbox.checked = uiState.selected;
     controls.checkbox.disabled = uiState.checkboxDisabled;
     controls.checkbox.parentElement?.classList.toggle('history-select-disabled', uiState.checkboxDisabled);
+    controls.bookmarkButton.classList.toggle('history-bookmark-button-active', uiState.bookmarked);
+    controls.bookmarkButton.setAttribute('aria-pressed', String(uiState.bookmarked));
+    controls.bookmarkButton.setAttribute(
+      'aria-label',
+      `${uiState.bookmarked ? 'Remove bookmark' : 'Bookmark'}: ${entry.text}`,
+    );
+    controls.bookmarkButton.title = uiState.bookmarked ? 'Remove bookmark' : 'Bookmark';
     controls.goToButton.disabled = uiState.goToDisabled;
     controls.mineButton.disabled = uiState.mineDisabled;
   });
