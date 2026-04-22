@@ -171,7 +171,13 @@ export interface TranscriptCue extends SubtitleEventPayload {
 
 export interface TranscriptCueLearning {
   unknownWords: string[];
+  unknownWordRanges: TranscriptTextRange[];
   iPlusOne: boolean;
+}
+
+export interface TranscriptTextRange {
+  start: number;
+  end: number;
 }
 
 export interface TranscriptState {

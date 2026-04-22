@@ -1377,7 +1377,8 @@ function rebuildTranscriptList(entries) {
     const text = document.createElement('div');
     text.className = 'history-text';
     const unknownWords = entry.learning?.iPlusOne ? (entry.learning?.unknownWords ?? []) : [];
-    appendTranscriptText(text, entry.text, unknownWords);
+    const unknownWordRanges = entry.learning?.iPlusOne ? (entry.learning?.unknownWordRanges ?? []) : [];
+    appendTranscriptText(text, entry.text, unknownWords, unknownWordRanges);
     textRow.append(text);
 
     if (entry.learning?.iPlusOne && unknownWords.length === 1) {
@@ -1410,8 +1411,8 @@ function rebuildTranscriptList(entries) {
   });
 }
 
-function appendTranscriptText(container, text, unknownWords) {
-  for (const part of buildHighlightedTranscriptParts(text, unknownWords)) {
+function appendTranscriptText(container, text, unknownWords, unknownWordRanges) {
+  for (const part of buildHighlightedTranscriptParts(text, unknownWords, unknownWordRanges)) {
     if (!part.unknown) {
       container.append(document.createTextNode(part.text));
       continue;

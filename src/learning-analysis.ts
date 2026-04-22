@@ -2,7 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-import type { AnkiConfig, LearningConfig, TranscriptCue, TranscriptCueLearning } from './types.ts';
+import type {
+  AnkiConfig,
+  LearningConfig,
+  TranscriptCue,
+  TranscriptCueLearning,
+  TranscriptTextRange,
+} from './types.ts';
 import { resolveAppRoot } from './config.ts';
 import { buildSearchQuery, normalizeSubtitleForMatching } from './utils.ts';
 
@@ -17,7 +23,16 @@ interface NoteInfo {
 }
 
 interface LearningTokenizer {
-  tokenizeBatch(texts: string[]): Promise<string[][]>;
+  tokenizeBatch(texts: string[]): Promise<LearningTokenization[]>;
+}
+
+interface LearningTokenization {
+  tokens: string[];
+  ranges: LearningTokenRange[];
+}
+
+interface LearningTokenRange extends TranscriptTextRange {
+  token: string;
 }
 
 interface JiebaConstructor {
@@ -64,20 +79,25 @@ export async function analyzeTranscriptLearning(
 
   const knownWordValues = await loadKnownWordValues(anki, learning.knownWordField);
   const tokenizer = createLearningTokenizer(learning);
-  const knownWordTokenLists = await tokenizer.tokenizeBatch(knownWordValues);
-  const knownWords = buildKnownWords(knownWordValues, knownWordTokenLists);
+  const knownWordTokenizations = await tokenizer.tokenizeBatch(knownWordValues);
+  const knownWords = buildKnownWords(knownWordTokenizations);
   if (knownWords.size === 0) {
     throw new Error(`No known words were found in field "${learning.knownWordField}".`);
   }
 
-  const cueTokenLists = await tokenizer.tokenizeBatch(cues.map((cue) => cue.text));
+  const cueTokenizations = await tokenizer.tokenizeBatch(cues.map((cue) => cue.text));
   const annotations = new Map<string, TranscriptCueLearning>();
   let iPlusOneCount = 0;
 
   for (const [index, cue] of cues.entries()) {
-    const unknownWords = cueTokenLists[index].filter((token) => !knownWords.has(token));
+    const tokenization = cueTokenizations[index] ?? { tokens: [], ranges: [] };
+    const unknownWords = tokenization.tokens.filter((token) => !knownWords.has(token));
+    const unknownWordSet = new Set(unknownWords);
     const learningState = {
       unknownWords,
+      unknownWordRanges: tokenization.ranges
+        .filter((range) => unknownWordSet.has(range.token))
+        .map(({ start, end }) => ({ start, end })),
       iPlusOne: unknownWords.length === 1,
     };
     if (learningState.iPlusOne) {
@@ -132,10 +152,10 @@ async function loadKnownWordValues(anki: AnkiConfig, knownWordField: string): Pr
   return values;
 }
 
-function buildKnownWords(values: string[], tokenLists: string[][]): Set<string> {
+function buildKnownWords(tokenizations: LearningTokenization[]): Set<string> {
   const knownWords = new Set<string>();
-  for (const index of values.keys()) {
-    for (const token of tokenLists[index] ?? []) {
+  for (const tokenization of tokenizations) {
+    for (const token of tokenization.tokens) {
       knownWords.add(token);
     }
   }
@@ -152,46 +172,80 @@ function createLearningTokenizer(learning: LearningConfig): LearningTokenizer {
 }
 
 class IntlLearningTokenizer implements LearningTokenizer {
-  async tokenizeBatch(texts: string[]): Promise<string[][]> {
-    return texts.map(uniqueIntlTokens);
+  async tokenizeBatch(texts: string[]): Promise<LearningTokenization[]> {
+    return texts.map(tokenizeIntlText);
   }
 }
 
 class JiebaLearningTokenizer implements LearningTokenizer {
   readonly #jieba = loadJieba();
 
-  async tokenizeBatch(texts: string[]): Promise<string[][]> {
-    return texts.map((text) => uniqueNormalizedTokens(this.#jieba.cut(text, true)));
+  async tokenizeBatch(texts: string[]): Promise<LearningTokenization[]> {
+    return texts.map((text) => tokenizeJiebaText(text, this.#jieba.cut(text, true)));
   }
 }
 
 function uniqueIntlTokens(text: string): string[] {
+  return tokenizeIntlText(text).tokens;
+}
+
+function tokenizeIntlText(text: string): LearningTokenization {
   const tokens = new Set<string>();
+  const ranges: LearningTokenRange[] = [];
   for (const segment of SEGMENTER.segment(text)) {
     if (!segment.isWordLike) {
       continue;
     }
 
-    addNormalizedToken(tokens, segment.segment);
+    const token = normalizeLearningToken(segment.segment);
+    if (!token) {
+      continue;
+    }
+
+    tokens.add(token);
+    ranges.push({
+      token,
+      start: segment.index,
+      end: segment.index + segment.segment.length,
+    });
   }
 
-  return [...tokens];
+  return {
+    tokens: [...tokens],
+    ranges,
+  };
 }
 
-function uniqueNormalizedTokens(values: string[]): string[] {
+function tokenizeJiebaText(text: string, segments: string[]): LearningTokenization {
   const tokens = new Set<string>();
-  for (const value of values) {
-    addNormalizedToken(tokens, value);
+  const ranges: LearningTokenRange[] = [];
+  let cursor = 0;
+
+  for (const segment of segments) {
+    const index = segment ? text.indexOf(segment, cursor) : -1;
+    if (index !== -1) {
+      cursor = index + segment.length;
+    }
+
+    const token = normalizeLearningToken(segment);
+    if (!token) {
+      continue;
+    }
+
+    tokens.add(token);
+    if (index !== -1 && segment.length > 0) {
+      ranges.push({
+        token,
+        start: index,
+        end: index + segment.length,
+      });
+    }
   }
 
-  return [...tokens];
-}
-
-function addNormalizedToken(tokens: Set<string>, value: string): void {
-  const normalized = normalizeLearningToken(value);
-  if (normalized) {
-    tokens.add(normalized);
-  }
+  return {
+    tokens: [...tokens],
+    ranges,
+  };
 }
 
 function loadJieba(): JiebaInstance {

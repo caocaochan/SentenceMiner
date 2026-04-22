@@ -18,6 +18,9 @@ export function buildTranscriptStructureSignature(entries) {
         entry.endMs ?? 'nil',
         entry.learning?.iPlusOne ? 'i+1' : '',
         (entry.learning?.unknownWords ?? []).join(','),
+        (entry.learning?.unknownWordRanges ?? [])
+          .map((range) => `${range.start}-${range.end}`)
+          .join(','),
       ].join('::'),
     )
     .join('|');
@@ -63,11 +66,16 @@ export function shouldHandleTranscriptBookmarkShortcut({
   return !targetIsContentEditable && !['INPUT', 'SELECT', 'TEXTAREA'].includes(tagName);
 }
 
-export function buildHighlightedTranscriptParts(text, unknownWords = []) {
+export function buildHighlightedTranscriptParts(text, unknownWords = [], unknownWordRanges = []) {
   const unknownWordSet = new Set(unknownWords.map(normalizeLearningToken).filter(Boolean));
   const transcriptText = String(text ?? '');
   if (unknownWordSet.size === 0) {
     return [{ text: transcriptText, unknown: false }];
+  }
+
+  const tokenizerRanges = normalizeUnknownRanges(transcriptText, unknownWordRanges);
+  if (tokenizerRanges.length > 0) {
+    return buildPartsFromUnknownRanges(transcriptText, tokenizerRanges);
   }
 
   return buildPartsFromUnknownRanges(transcriptText, findUnknownWordRanges(transcriptText, unknownWords, unknownWordSet));
@@ -195,6 +203,15 @@ function mergeUnknownRanges(ranges) {
   }
 
   return merged;
+}
+
+function normalizeUnknownRanges(text, ranges) {
+  return mergeUnknownRanges(
+    (Array.isArray(ranges) ? ranges : []).map((range) => ({
+      start: Number.isInteger(range?.start) ? Math.max(0, Math.min(range.start, text.length)) : 0,
+      end: Number.isInteger(range?.end) ? Math.max(0, Math.min(range.end, text.length)) : 0,
+    })),
+  );
 }
 
 function buildPartsFromUnknownRanges(text, ranges) {

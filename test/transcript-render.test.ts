@@ -74,6 +74,15 @@ test('buildHighlightedTranscriptParts marks Jieba words split by browser segment
   ]);
 });
 
+test('buildHighlightedTranscriptParts prefers tokenizer ranges when provided', () => {
+  const parts = buildHighlightedTranscriptParts('我喜欢中国人', ['中国'], [{ start: 3, end: 6 }]);
+
+  assert.deepEqual(parts, [
+    { text: '我喜欢', unknown: false },
+    { text: '中国人', unknown: true },
+  ]);
+});
+
 test('buildHighlightedTranscriptParts normalizes ASCII unknown words', () => {
   const parts = buildHighlightedTranscriptParts('我喜欢 JavaScript!', ['javascript']);
 

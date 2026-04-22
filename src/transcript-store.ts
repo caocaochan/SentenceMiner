@@ -179,6 +179,9 @@ export class TranscriptStore {
         ...cue,
         learning: {
           unknownWords: learning ? [...learning.unknownWords] : [],
+          unknownWordRanges: learning
+            ? (learning.unknownWordRanges ?? []).map((range) => ({ ...range }))
+            : [],
           iPlusOne: learning?.iPlusOne ?? false,
         },
       };
@@ -301,6 +304,7 @@ function cloneCue(cue: TranscriptCue): TranscriptCue {
     learning: cue.learning
       ? {
           unknownWords: [...cue.learning.unknownWords],
+          unknownWordRanges: (cue.learning.unknownWordRanges ?? []).map((range) => ({ ...range })),
           iPlusOne: cue.learning.iPlusOne,
         }
       : undefined,

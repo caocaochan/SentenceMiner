@@ -47,6 +47,7 @@ test('analyzeTranscriptLearning marks only exactly one unique unknown word as i+
   assert.deepEqual(result.annotations.get('known')?.unknownWords, []);
   assert.equal(result.annotations.get('one-unknown')?.iPlusOne, true);
   assert.deepEqual(result.annotations.get('one-unknown')?.unknownWords, ['中文']);
+  assert.deepEqual(result.annotations.get('one-unknown')?.unknownWordRanges, [{ start: 3, end: 5 }]);
   assert.equal(result.annotations.get('two-unknown')?.iPlusOne, false);
   assert.deepEqual(result.annotations.get('two-unknown')?.unknownWords, ['读', '中文']);
   assert.equal(result.annotations.get('duplicate-unknown')?.iPlusOne, true);
@@ -106,8 +107,13 @@ test('analyzeTranscriptLearning can use bundled Jieba tokenization', async (t) =
   assert.deepEqual(result.annotations.get('known')?.unknownWords, []);
   assert.equal(result.annotations.get('one-unknown')?.iPlusOne, true);
   assert.deepEqual(result.annotations.get('one-unknown')?.unknownWords, ['中文']);
+  assert.deepEqual(result.annotations.get('one-unknown')?.unknownWordRanges, [{ start: 3, end: 5 }]);
   assert.equal(result.annotations.get('two-unknown')?.iPlusOne, false);
   assert.deepEqual(result.annotations.get('two-unknown')?.unknownWords, ['看', '中文']);
+  assert.deepEqual(result.annotations.get('two-unknown')?.unknownWordRanges, [
+    { start: 1, end: 2 },
+    { start: 2, end: 4 },
+  ]);
 });
 
 test('analyzeTranscriptLearning reports missing explicit Jieba assets', async (t) => {
