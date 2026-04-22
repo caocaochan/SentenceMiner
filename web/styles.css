@@ -79,7 +79,8 @@ body.modal-open {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -417,6 +418,14 @@ h3 {
   background: color-mix(in srgb, var(--surface) 74%, var(--accent) 13%, var(--amber));
 }
 
+.history-item-mined {
+  border-color: rgba(var(--green-rgb), 0.42);
+}
+
+.history-item-failed {
+  border-color: rgba(var(--red-rgb), 0.5);
+}
+
 .history-item-head {
   display: contents;
 }
@@ -473,6 +482,35 @@ h3 {
   text-decoration-color: rgba(var(--amber-rgb), 0.9);
   text-decoration-thickness: 2px;
   text-underline-offset: 0.16em;
+}
+
+.mine-status-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.mine-status-badge[hidden] {
+  display: none;
+}
+
+.mine-status-badge-mined {
+  border-color: rgba(var(--green-rgb), 0.52);
+  background: rgba(var(--green-rgb), 0.14);
+  color: var(--green);
+}
+
+.mine-status-badge-failed {
+  border-color: rgba(var(--red-rgb), 0.58);
+  background: rgba(var(--red-rgb), 0.12);
+  color: var(--red);
 }
 
 .history-actions {
@@ -660,6 +698,31 @@ h3 {
   overflow: hidden;
 }
 
+.mine-panel {
+  width: min(720px, 100%);
+  height: auto;
+  max-height: min(92vh, 720px);
+}
+
+.mine-form {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.mine-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.mine-summary {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
 .settings-tabs {
   display: flex;
   gap: 6px;
@@ -733,7 +796,8 @@ h3 {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   min-height: 42px;
   padding: 9px 10px;
@@ -744,8 +808,15 @@ h3 {
 }
 
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: none;
+}
+
+.field textarea {
+  min-height: 180px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .switch-field {

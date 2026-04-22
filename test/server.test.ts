@@ -8,6 +8,7 @@ import path from 'node:path';
 import { DEFAULT_CONFIG, getEditableSettings } from '../src/config.ts';
 import { PlayerCommandStore } from '../src/player-command-store.ts';
 import { createRequestHandler, listenForAppServer, probeRunningHelper } from '../src/server.ts';
+import { TranscriptSessionPersistence } from '../src/session-persistence.ts';
 import type { SubtitleTranscriptResult } from '../src/subtitle-transcript.ts';
 import { TranscriptStore } from '../src/transcript-store.ts';
 import type { AppConfig, SubtitleTrackPayload } from '../src/types.ts';
@@ -592,6 +593,39 @@ test('POST /api/bookmark/current accepts the active current cue', async (t) => {
   assert.equal(response.status, 200);
   assert.equal(payload.success, true);
   assert.equal(payload.message, 'Bookmark toggle sent to the transcript page.');
+  assert.equal(payload.state.transcript[0].bookmarked, true);
+});
+
+test('POST /api/history/bookmark toggles a row bookmark and restores it for the same track', async (t) => {
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: async (_config, track) => ({
+      status: 'ready',
+      transcript: [buildCue('remember me', 1000, track.sessionId)],
+      message: null,
+    }),
+  });
+
+  await postSession(harness.baseUrl, 'session-1');
+  await flushPromises();
+
+  const firstEntry = harness.transcriptStore.getState().transcript[0];
+  const response = await fetch(`${harness.baseUrl}/api/history/bookmark`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(firstEntry),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.equal(payload.state.transcript[0].bookmarked, true);
+
+  await postSession(harness.baseUrl, 'session-2');
+  await waitForFirstCueBookmark(harness.transcriptStore, true);
+
+  assert.equal(harness.transcriptStore.getState().transcript[0]?.bookmarked, true);
 });
 
 test('POST /api/bookmark/current rejects when there is no current cue', async (t) => {
@@ -675,6 +709,73 @@ test('POST /api/history/mine accepts batch selections and updates Anki once', as
   assert.ok(updateRequest);
   assert.equal(updateRequest?.params.note.fields.Sentence, 'earlier later');
   assert.equal(updateRequest?.params.note.fields.Time, '00:01.000 - 00:02.400');
+  assert.deepEqual(
+    harness.transcriptStore.getState().transcript.map((entry) => entry.mineStatus),
+    ['mined', 'mined'],
+  );
+});
+
+test('POST /api/history/mine sends edited text while matching original subtitle candidates', async (t) => {
+  const harness = await createServerHarness(t);
+  harness.config.runtime.captureAudio = false;
+  harness.config.runtime.captureImage = false;
+  harness.ankiNotes[0].fields.Sentence.value = 'earlier later';
+  harness.transcriptStore.startSession({ action: 'start', sessionId: 'session-1', filePath: 'C:\\Videos\\episode.mkv' });
+  seedTranscriptHistory(harness.transcriptStore, [
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'earlier',
+      startMs: 1000,
+      endMs: 1400,
+      playbackTimeMs: 1200,
+    },
+    {
+      sessionId: 'session-1',
+      filePath: 'C:\\Videos\\episode.mkv',
+      text: 'later',
+      startMs: 2000,
+      endMs: 2400,
+      playbackTimeMs: 2200,
+    },
+  ]);
+
+  const response = await fetch(`${harness.baseUrl}/api/history/mine`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      editedText: 'edited sentence',
+      entries: [
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'earlier',
+          startMs: 1000,
+          endMs: 1400,
+          playbackTimeMs: 1200,
+        },
+        {
+          sessionId: 'session-1',
+          filePath: 'C:\\Videos\\episode.mkv',
+          text: 'later',
+          startMs: 2000,
+          endMs: 2400,
+          playbackTimeMs: 2200,
+        },
+      ],
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.success, true);
+  assert.equal(harness.ankiNotes[0].fields.Sentence.value, 'edited sentence');
+  assert.deepEqual(
+    harness.transcriptStore.getState().transcript.map((entry) => entry.mineStatus),
+    ['mined', 'mined'],
+  );
 });
 
 test('POST /api/history/mine updates the sentence to the combined batch text when one selected subtitle line matches', async (t) => {
@@ -796,6 +897,14 @@ test('POST /api/history/mine returns 404 when no selected subtitle sentence matc
   assert.equal(response.status, 404);
   assert.equal(payload.success, false);
   assert.equal(payload.message, 'No matching card exists.');
+  assert.deepEqual(
+    harness.transcriptStore.getState().transcript.map((entry) => entry.mineStatus),
+    ['failed', 'failed'],
+  );
+  assert.deepEqual(
+    harness.transcriptStore.getState().transcript.map((entry) => entry.message),
+    ['No matching card exists.', 'No matching card exists.'],
+  );
 
   const addRequest = harness.ankiRequests.find((request) => request.action === 'addNote');
   assert.equal(addRequest, undefined);
@@ -1206,6 +1315,7 @@ async function createServerHarness(
       transcriptStore,
       playerCommandStore: new PlayerCommandStore(),
       sockets: new WebSocketHub(),
+      sessionPersistence: new TranscriptSessionPersistence(path.join(tempRoot, 'sessions.json')),
       listInstalledFonts: async () => {
         fontRequests += 1;
         return installedFonts;
@@ -1224,10 +1334,11 @@ async function createServerHarness(
   }
 
   t.after(async () => {
+    await flushPromises();
     await Promise.all([
       closeServer(appServer),
       closeServer(ankiServer),
-      fs.rm(tempRoot, { recursive: true, force: true }),
+      fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 }),
     ]);
   });
 
@@ -1272,6 +1383,19 @@ async function waitForLearningStatus(
   }
 
   assert.equal(transcriptStore.getState().learningStatus, status);
+}
+
+async function waitForFirstCueBookmark(transcriptStore: TranscriptStore, bookmarked: boolean): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 1000) {
+    if (transcriptStore.getState().transcript[0]?.bookmarked === bookmarked) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  assert.equal(transcriptStore.getState().transcript[0]?.bookmarked, bookmarked);
 }
 
 function buildExternalTrack(sessionId: string, trackId = 1): SubtitleTrackPayload {

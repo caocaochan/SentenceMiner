@@ -32,8 +32,8 @@ function buildPayload(): SubtitleEventPayload {
   };
 }
 
-function buildBatchRequest(entries: SubtitleEventPayload[]): HistoryMineRequest {
-  return { entries };
+function buildBatchRequest(entries: SubtitleEventPayload[], editedText?: string): HistoryMineRequest {
+  return editedText == null ? { entries } : { entries, editedText };
 }
 
 test('mineHistoryEntry captures media, mines the entry, and cleans up temp files', async () => {
@@ -110,6 +110,33 @@ test('normalizeHistoryMineRequest combines selected entries chronologically into
     normalized.entries.map((entry) => entry.text),
     ['first', 'second', 'third'],
   );
+});
+
+test('normalizeHistoryMineRequest uses edited text while preserving original match candidates', () => {
+  const normalized = normalizeHistoryMineRequest(
+    buildBatchRequest([
+      {
+        ...buildPayload(),
+        text: 'original first',
+        startMs: 1_000,
+        endMs: 1_500,
+      },
+      {
+        ...buildPayload(),
+        text: 'original second',
+        startMs: 2_000,
+        endMs: 2_500,
+      },
+    ], 'edited sentence'),
+  );
+
+  assert.equal(normalized.payload.text, 'edited sentence');
+  assert.deepEqual(normalized.payload.sentenceMatchCandidates, [
+    'edited sentence',
+    'original first original second',
+    'original first',
+    'original second',
+  ]);
 });
 
 test('mineHistoryEntry captures one combined clip and one screenshot for batch requests', async () => {

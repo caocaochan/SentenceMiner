@@ -25,6 +25,11 @@ import { listInstalledFonts } from './fonts.ts';
 import { analyzeTranscriptLearning } from './learning-analysis.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { PlayerCommandStore } from './player-command-store.ts';
+import {
+  TranscriptSessionPersistence,
+  buildMineSuccessProgress,
+  type CueProgressPatch,
+} from './session-persistence.ts';
 import { loadSubtitleTranscript, type SubtitleTranscriptResult } from './subtitle-transcript.ts';
 import { TranscriptStore } from './transcript-store.ts';
 import type {
@@ -39,6 +44,7 @@ import type {
   StatePayload,
   SubtitleEventPayload,
   SubtitleTrackPayload,
+  TranscriptCue,
 } from './types.ts';
 import { payloadKey } from './utils.ts';
 import { WebSocketHub } from './ws.ts';
@@ -53,6 +59,7 @@ export interface ServerContext {
   playerCommandStore: PlayerCommandStore;
   sockets: WebSocketHub;
   settingsOptionsCache?: SettingsOptionsCache;
+  sessionPersistence?: TranscriptSessionPersistence;
   listInstalledFonts?: () => Promise<string[]>;
   loadSubtitleTranscript?: (config: AppConfig, track: SubtitleTrackPayload) => Promise<SubtitleTranscriptResult>;
   requestShutdown?: (reason: string) => void;
@@ -74,6 +81,7 @@ export async function main(): Promise<void> {
     playerCommandStore,
     sockets,
     settingsOptionsCache: new SettingsOptionsCache(),
+    sessionPersistence: new TranscriptSessionPersistence(),
   };
 
   const server = http.createServer(createRequestHandler(context));
@@ -319,6 +327,7 @@ export async function routeRequest(
   if (method === 'POST' && url.pathname === '/api/mine') {
     const payload = await readJsonBody<MinePayload>(request);
     const result = await mapMineErrorToHttp(() => mineToAnki(context.config.anki, payload));
+    await markMatchingCues(context, payload, buildMineSuccessProgress(result));
     broadcastToast(context.sockets, {
       kind: 'success',
       message: result.message,
@@ -345,13 +354,33 @@ export async function routeRequest(
       throw new HttpError(409, 'No current transcript line is available to bookmark.');
     }
 
-    broadcastBookmarkCurrent(context.sockets, {
-      sessionId,
-      currentCueId: currentCueState.currentCueId,
-    });
+    context.transcriptStore.toggleCueBookmark(currentCueState.currentCueId);
+    await saveActiveTranscriptProgress(context);
+    broadcastState(context.config, context.transcriptStore, context.sockets);
     respondJson(response, 200, {
       success: true,
       message: 'Bookmark toggle sent to the transcript page.',
+      state: context.transcriptStore.getState(),
+    });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/api/history/bookmark') {
+    const payload = parseSubtitleEventPayload(await readJsonBody<unknown>(request), 'bookmark payload');
+    assertActiveSession(context.transcriptStore, payload.sessionId);
+    const cueIds = findMatchingCueIds(context.transcriptStore.getState().transcript, payload);
+    if (cueIds.size === 0) {
+      throw new HttpError(409, 'The requested transcript line is no longer available.');
+    }
+
+    const [cueId] = cueIds;
+    context.transcriptStore.toggleCueBookmark(cueId);
+    await saveActiveTranscriptProgress(context);
+    broadcastState(context.config, context.transcriptStore, context.sockets);
+    respondJson(response, 200, {
+      success: true,
+      message: 'Bookmark toggled.',
+      state: context.transcriptStore.getState(),
     });
     return;
   }
@@ -380,7 +409,15 @@ export async function routeRequest(
   if (method === 'POST' && url.pathname === '/api/history/mine') {
     const payload = parseHistoryMineRequestPayload(await readJsonBody<unknown>(request));
     assertActiveHistoryMineRequest(context.transcriptStore, payload);
-    const result = await mapMineErrorToHttp(() => mineHistoryEntry(context.config, payload));
+    let result;
+    try {
+      result = await mapMineErrorToHttp(() => mineHistoryEntry(context.config, payload));
+    } catch (error) {
+      await markHistoryMineFailure(context, payload, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+
+    await markHistoryMineSuccess(context, payload, result);
     broadcastToast(context.sockets, {
       kind: 'success',
       message: result.message,
@@ -610,6 +647,12 @@ async function syncTranscriptTrack(context: ServerContext, track: SubtitleTrackP
 
   if (result.status === 'ready') {
     context.transcriptStore.setTranscript(track, result.transcript);
+    const hydrated = await getSessionPersistence(context).hydrateTranscript(track, context.transcriptStore.getState().transcript);
+    if (!isActiveSubtitleTrack(context.transcriptStore, track)) {
+      return;
+    }
+    context.transcriptStore.setTranscript(track, hydrated);
+    await saveActiveTranscriptProgress(context);
   } else if (result.status === 'unavailable') {
     context.transcriptStore.setTranscriptUnavailable(track, result.message ?? 'The active subtitle track is unavailable.');
   } else {
@@ -712,6 +755,102 @@ function buildLearningAnalysisKey(context: ServerContext): string | null {
   ].join('::');
 }
 
+function getSessionPersistence(context: ServerContext): TranscriptSessionPersistence {
+  context.sessionPersistence ??= new TranscriptSessionPersistence();
+  return context.sessionPersistence;
+}
+
+async function saveActiveTranscriptProgress(context: ServerContext): Promise<void> {
+  const state = context.transcriptStore.getState();
+  const track = state.session?.subtitleTrack;
+  if (!track || state.transcript.length === 0) {
+    return;
+  }
+
+  await getSessionPersistence(context).saveTranscript(track, state.transcript);
+}
+
+async function markMatchingCues(
+  context: ServerContext,
+  payload: SubtitleEventPayload,
+  patch: CueProgressPatch,
+): Promise<void> {
+  const state = context.transcriptStore.getState();
+  const cueIds = findMatchingCueIds(state.transcript, payload);
+  if (cueIds.size === 0 && state.currentCueId) {
+    cueIds.add(state.currentCueId);
+  }
+
+  if (cueIds.size === 0) {
+    return;
+  }
+
+  context.transcriptStore.applyCueProgress(cueIds, patch);
+  await saveActiveTranscriptProgress(context);
+  broadcastState(context.config, context.transcriptStore, context.sockets);
+}
+
+async function markHistoryMineSuccess(
+  context: ServerContext,
+  payload: HistoryMineRequest,
+  result: { noteId?: number; message: string },
+): Promise<void> {
+  const cueIds = findHistoryMineCueIds(context.transcriptStore.getState().transcript, payload);
+  if (cueIds.size === 0) {
+    return;
+  }
+
+  context.transcriptStore.applyCueProgress(cueIds, {
+    mineStatus: 'mined',
+    noteId: result.noteId ?? null,
+    message: result.message,
+  });
+  await saveActiveTranscriptProgress(context);
+  broadcastState(context.config, context.transcriptStore, context.sockets);
+}
+
+async function markHistoryMineFailure(
+  context: ServerContext,
+  payload: HistoryMineRequest,
+  message: string,
+): Promise<void> {
+  const cueIds = findHistoryMineCueIds(context.transcriptStore.getState().transcript, payload);
+  if (cueIds.size === 0) {
+    return;
+  }
+
+  context.transcriptStore.applyCueProgress(cueIds, {
+    mineStatus: 'failed',
+    noteId: null,
+    message,
+  });
+  await saveActiveTranscriptProgress(context);
+  broadcastState(context.config, context.transcriptStore, context.sockets);
+}
+
+function findHistoryMineCueIds(transcript: TranscriptCue[], payload: HistoryMineRequest): Set<string> {
+  if ('entries' in payload) {
+    const cueIds = new Set<string>();
+    for (const entry of payload.entries) {
+      for (const cueId of findMatchingCueIds(transcript, entry)) {
+        cueIds.add(cueId);
+      }
+    }
+    return cueIds;
+  }
+
+  return findMatchingCueIds(transcript, payload);
+}
+
+function findMatchingCueIds(transcript: TranscriptCue[], payload: SubtitleEventPayload): Set<string> {
+  const key = payloadKey(payload);
+  return new Set(
+    transcript
+      .filter((entry) => payloadKey(entry) === key)
+      .map((entry) => entry.id),
+  );
+}
+
 class HttpError extends Error {
   readonly statusCode: number;
 
@@ -763,19 +902,6 @@ function broadcastToast(
 ): void {
   sockets.broadcastJson({
     type: 'toast',
-    payload,
-  });
-}
-
-function broadcastBookmarkCurrent(
-  sockets: WebSocketHub,
-  payload: {
-    sessionId: string;
-    currentCueId: string;
-  },
-): void {
-  sockets.broadcastJson({
-    type: 'bookmark-current',
     payload,
   });
 }
@@ -942,8 +1068,13 @@ function parseHistoryMineRequestPayload(payload: unknown): HistoryMineRequest {
       throw new HttpError(400, 'entries must be an array.');
     }
 
+    const editedText = root.editedText == null
+      ? undefined
+      : getString(root.editedText, 'editedText', { allowEmpty: false });
+
     return {
       entries: root.entries.map((entry, index) => parseSubtitleEventPayload(entry, `entries[${index}]`)),
+      editedText,
     } satisfies HistoryMineBatchPayload;
   }
 

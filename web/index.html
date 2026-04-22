@@ -57,6 +57,43 @@
 
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 
+    <div id="mine-modal" class="modal-shell" hidden>
+      <div id="mine-backdrop" class="modal-backdrop"></div>
+      <section
+        id="mine-panel"
+        class="modal-panel mine-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mine-title"
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Mine</p>
+            <h2 id="mine-title">Edit Subtitle</h2>
+          </div>
+          <button id="mine-close" class="icon-button icon-button-subtle" type="button" aria-label="Close mining dialog" title="Close">
+            <svg class="lucide-icon" aria-hidden="true"><use href="/icons.svg#x"></use></svg>
+          </button>
+        </div>
+
+        <form id="mine-form" class="mine-form">
+          <div class="mine-body">
+            <p id="mine-summary" class="mine-summary muted"></p>
+            <label class="field field-full">
+              <span>Subtitle text</span>
+              <textarea id="mine-text" name="editedText" rows="7" required></textarea>
+            </label>
+            <p id="mine-error" class="settings-status settings-status-error" aria-live="assertive" hidden></p>
+          </div>
+          <div class="modal-footer">
+            <button id="mine-cancel" class="button button-secondary" type="button">Cancel</button>
+            <button id="mine-confirm" class="button button-primary" type="submit">Mine</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <div id="settings-modal" class="modal-shell" hidden>
       <div id="settings-backdrop" class="modal-backdrop"></div>
       <section

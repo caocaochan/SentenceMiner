@@ -51,6 +51,11 @@ const state = {
   settingsSaveError: '',
   settingsActiveTab: 'anki',
   settingsModalReturnFocusEl: null,
+  mineModalOpen: false,
+  mineModalEntries: [],
+  mineModalPending: false,
+  mineModalError: '',
+  mineModalReturnFocusEl: null,
   settingsRequestId: 0,
   renderedTranscriptSignature: null,
   renderedCueElements: new Map(),
@@ -67,7 +72,6 @@ const AUTO_SCROLL_TIME_CONSTANT_S = 0.25;
 const AUTO_SCROLL_CONVERGENCE_PX = 0.5;
 const AUTO_SCROLL_MAX_FRAME_DT_S = 0.1;
 const STATE_POLL_INTERVAL_MS = 2000;
-const TRANSCRIPT_BOOKMARKS_STORAGE_KEY = 'sentenceminer:transcript-bookmarks';
 const SETTINGS_FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
   'input:not([disabled])',
@@ -134,6 +138,16 @@ const elements = {
   settingsAppearanceSubtitleCardFontFamilyCustomField: document.getElementById('settings-appearance-subtitle-card-font-family-custom-field'),
   settingsAppearanceSubtitleCardFontFamilyCustom: document.getElementById('settings-appearance-subtitle-card-font-family-custom'),
   settingsAppearanceSubtitleCardFontSizePx: document.getElementById('settings-appearance-subtitle-card-font-size-px'),
+  mineModal: document.getElementById('mine-modal'),
+  minePanel: document.getElementById('mine-panel'),
+  mineBackdrop: document.getElementById('mine-backdrop'),
+  mineClose: document.getElementById('mine-close'),
+  mineCancel: document.getElementById('mine-cancel'),
+  mineConfirm: document.getElementById('mine-confirm'),
+  mineForm: document.getElementById('mine-form'),
+  mineText: document.getElementById('mine-text'),
+  mineSummary: document.getElementById('mine-summary'),
+  mineError: document.getElementById('mine-error'),
 };
 
 elements.themeToggle.addEventListener('click', () => {
@@ -160,6 +174,13 @@ elements.settingsForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void saveSettings();
 });
+elements.mineClose.addEventListener('click', closeMineModal);
+elements.mineCancel.addEventListener('click', closeMineModal);
+elements.mineBackdrop.addEventListener('click', closeMineModal);
+elements.mineForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void confirmMineModal();
+});
 elements.settingsAnkiNoteType.addEventListener('change', () => {
   void refreshSettingsOptions(elements.settingsAnkiNoteType.value, elements.settingsAnkiDeck.value);
 });
@@ -177,7 +198,6 @@ elements.settingsTabsContainer?.addEventListener('click', (event) => {
 document.addEventListener('keydown', handleDocumentKeydown);
 
 initTheme();
-initTranscriptBookmarks();
 bootstrap();
 
 function initTheme() {
@@ -186,10 +206,6 @@ function initTheme() {
     window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false,
   );
   document.documentElement.setAttribute('data-theme', preferredTheme);
-}
-
-function initTranscriptBookmarks() {
-  state.bookmarkedTranscriptKeys = loadTranscriptBookmarks();
 }
 
 async function bootstrap() {
@@ -325,6 +341,7 @@ function render() {
   applyAppearanceSettings();
   renderTranscript();
   renderSettingsUi();
+  renderMineModal();
   renderToasts();
   syncStickyLayout();
 }
@@ -339,6 +356,11 @@ function renderTranscript() {
     transcriptMessage: '',
   };
   const transcriptEntries = transcriptState.transcript ?? transcriptState.history ?? [];
+  state.bookmarkedTranscriptKeys = new Set(
+    transcriptEntries
+      .filter((entry) => entry.bookmarked)
+      .map((entry) => buildTranscriptBookmarkKey(entry)),
+  );
   const transcriptActionsEnabled = Boolean(transcriptState.session && state.connection === 'live');
   state.selectedHistoryKeys = reconcileSelectedHistoryKeys(state.selectedHistoryKeys, transcriptEntries);
   const selectedEntries = transcriptEntries.filter((entry) => state.selectedHistoryKeys.has(buildHistoryEntryKey(entry)));
@@ -407,7 +429,7 @@ function renderTranscript() {
 function renderSettingsUi() {
   elements.settingsModal.hidden = !state.settingsModalOpen;
   elements.settingsButton.setAttribute('aria-expanded', String(state.settingsModalOpen));
-  document.body.classList.toggle('modal-open', state.settingsModalOpen);
+  document.body.classList.toggle('modal-open', state.settingsModalOpen || state.mineModalOpen);
   renderSettingsTabs();
 
   const optionsStatus = state.settingsOptionsLoading
@@ -470,6 +492,11 @@ function buildTranscriptBookmarkButton(entry) {
 }
 
 async function runHistoryAction(action, entry) {
+  if (action === 'mine') {
+    openMineModal([entry]);
+    return;
+  }
+
   const pendingKey = buildHistoryActionKey(action, entry);
   if (state.pendingActions.has(pendingKey)) {
     return;
@@ -504,12 +531,22 @@ async function runHistoryAction(action, entry) {
 async function runMineSelectedAction() {
   const transcriptEntries = state.app?.state?.transcript ?? state.app?.state?.history ?? [];
   const request = buildBatchHistoryMineRequest(transcriptEntries, state.selectedHistoryKeys);
-  const pendingKey = buildBatchHistoryActionKey('mine-selected', request.entries);
-  if (request.entries.length === 0 || state.pendingActions.has(pendingKey)) {
+  if (request.entries.length === 0 || isBatchHistoryActionPending('mine-selected', request.entries)) {
+    return;
+  }
+
+  openMineModal(request.entries);
+}
+
+async function submitHistoryMineRequest(entries, editedText) {
+  const pendingKey = buildBatchHistoryActionKey('mine-selected', entries);
+  if (entries.length === 0 || state.pendingActions.has(pendingKey)) {
     return;
   }
 
   state.pendingActions.add(pendingKey);
+  state.mineModalPending = true;
+  state.mineModalError = '';
   render();
 
   try {
@@ -518,7 +555,10 @@ async function runMineSelectedAction() {
       headers: {
         'content-type': 'application/json',
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        entries,
+        editedText,
+      }),
     });
 
     const payload = await response.json();
@@ -527,11 +567,15 @@ async function runMineSelectedAction() {
     }
 
     state.selectedHistoryKeys.clear();
+    state.mineModalPending = false;
+    closeMineModal({ restoreFocus: false });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    state.mineModalError = message;
     showToast(message, 'error');
   } finally {
     state.pendingActions.delete(pendingKey);
+    state.mineModalPending = false;
     render();
   }
 }
@@ -559,6 +603,104 @@ function isBatchHistoryActionPending(action, entries) {
 function isAnyBatchHistoryActionPending(action) {
   const prefix = `${action}:`;
   return [...state.pendingActions].some((pendingKey) => pendingKey.startsWith(prefix));
+}
+
+function openMineModal(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return;
+  }
+
+  state.mineModalOpen = true;
+  state.mineModalEntries = [...entries];
+  state.mineModalError = '';
+  state.mineModalReturnFocusEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  elements.mineText.value = buildMineModalInitialText(entries);
+  render();
+  focusMineModal();
+}
+
+function closeMineModal(options = {}) {
+  if (state.mineModalPending) {
+    return;
+  }
+
+  const { restoreFocus = true } = options;
+  state.mineModalOpen = false;
+  state.mineModalEntries = [];
+  state.mineModalError = '';
+  elements.mineText.value = '';
+  render();
+
+  if (!restoreFocus) {
+    state.mineModalReturnFocusEl = null;
+    return;
+  }
+
+  const returnTarget = state.mineModalReturnFocusEl instanceof HTMLElement ? state.mineModalReturnFocusEl : elements.historyMineSelected;
+  state.mineModalReturnFocusEl = null;
+  window.requestAnimationFrame(() => {
+    returnTarget?.focus();
+  });
+}
+
+async function confirmMineModal() {
+  if (!state.mineModalOpen || state.mineModalPending) {
+    return;
+  }
+
+  const editedText = elements.mineText.value.trim();
+  if (!editedText) {
+    state.mineModalError = 'Subtitle text cannot be empty.';
+    renderMineModal();
+    elements.mineText.focus();
+    return;
+  }
+
+  await submitHistoryMineRequest(state.mineModalEntries, editedText);
+}
+
+function buildMineModalInitialText(entries) {
+  return entries
+    .map((entry) => entry.text.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
+
+function renderMineModal() {
+  elements.mineModal.hidden = !state.mineModalOpen;
+  document.body.classList.toggle('modal-open', state.settingsModalOpen || state.mineModalOpen);
+  elements.mineConfirm.disabled = state.mineModalPending;
+  elements.mineText.disabled = state.mineModalPending;
+  elements.mineConfirm.textContent = state.mineModalPending ? 'Mining...' : 'Mine';
+  elements.mineSummary.textContent = buildMineModalSummary(state.mineModalEntries);
+  elements.mineError.textContent = state.mineModalError;
+  elements.mineError.hidden = !state.mineModalError;
+}
+
+function buildMineModalSummary(entries) {
+  const count = entries.length;
+  if (count === 0) {
+    return '';
+  }
+
+  const startValues = entries.map((entry) => entry.startMs).filter((value) => value != null);
+  const endValues = entries.map((entry) => entry.endMs).filter((value) => value != null);
+  const range = startValues.length > 0 || endValues.length > 0
+    ? `, ${formatRange(startValues.length > 0 ? Math.min(...startValues) : null, endValues.length > 0 ? Math.max(...endValues) : null)}`
+    : '';
+  return `${count} ${count === 1 ? 'line' : 'lines'}${range}`;
+}
+
+function focusMineModal() {
+  window.requestAnimationFrame(() => {
+    if (!state.mineModalOpen) {
+      return;
+    }
+
+    elements.mineText.focus();
+    elements.mineText.select();
+  });
 }
 
 function applyHistorySelectionToggle(entries, entry, checked) {
@@ -593,39 +735,38 @@ function toggleTranscriptBookmarkForCueId(cueId, sessionId = null) {
   toggleTranscriptBookmark(entry);
 }
 
-function toggleTranscriptBookmark(entry) {
-  const bookmarkKey = buildTranscriptBookmarkKey(entry);
-  const nextBookmarkedKeys = new Set(state.bookmarkedTranscriptKeys);
-  if (nextBookmarkedKeys.has(bookmarkKey)) {
-    nextBookmarkedKeys.delete(bookmarkKey);
-  } else {
-    nextBookmarkedKeys.add(bookmarkKey);
+async function toggleTranscriptBookmark(entry) {
+  const pendingKey = buildHistoryActionKey('bookmark', entry);
+  if (state.pendingActions.has(pendingKey)) {
+    return;
   }
 
-  state.bookmarkedTranscriptKeys = nextBookmarkedKeys;
-  saveTranscriptBookmarks(state.bookmarkedTranscriptKeys);
+  state.pendingActions.add(pendingKey);
   render();
-}
-
-function loadTranscriptBookmarks() {
   try {
-    const raw = localStorage.getItem(TRANSCRIPT_BOOKMARKS_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) {
-      return new Set();
+    const response = await fetch('/api/history/bookmark', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(entry),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message ?? `Request failed with status ${response.status}.`);
     }
-
-    return new Set(parsed.filter((value) => typeof value === 'string' && value));
-  } catch {
-    return new Set();
-  }
-}
-
-function saveTranscriptBookmarks(bookmarkedKeys) {
-  try {
-    localStorage.setItem(TRANSCRIPT_BOOKMARKS_STORAGE_KEY, JSON.stringify([...bookmarkedKeys]));
-  } catch {
-    showToast('Bookmarks could not be saved in this browser.', 'error');
+    if (payload?.state) {
+      state.app = {
+        ...state.app,
+        state: payload.state,
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showToast(message, 'error');
+  } finally {
+    state.pendingActions.delete(pendingKey);
+    render();
   }
 }
 
@@ -717,7 +858,7 @@ function handleDocumentKeydown(event) {
     altKey: event.altKey,
     metaKey: event.metaKey,
     isComposing: event.isComposing,
-    settingsModalOpen: state.settingsModalOpen,
+    settingsModalOpen: state.settingsModalOpen || state.mineModalOpen,
     targetTagName: target?.tagName,
     targetIsContentEditable: Boolean(target?.isContentEditable),
   })) {
@@ -727,6 +868,10 @@ function handleDocumentKeydown(event) {
   }
 
   if (!state.settingsModalOpen) {
+    if (state.mineModalOpen && event.key === 'Escape' && !state.mineModalPending) {
+      event.preventDefault();
+      closeMineModal();
+    }
     return;
   }
 
@@ -1408,6 +1553,10 @@ function rebuildTranscriptList(entries) {
       textRow.append(badge);
     }
 
+    const mineStatusBadge = document.createElement('span');
+    mineStatusBadge.className = 'mine-status-badge';
+    textRow.append(mineStatusBadge);
+
     content.append(textRow, meta);
 
     const actions = document.createElement('div');
@@ -1426,6 +1575,7 @@ function rebuildTranscriptList(entries) {
       bookmarkButton,
       goToButton,
       mineButton,
+      mineStatusBadge,
     });
   });
 }
@@ -1464,6 +1614,8 @@ function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = rend
     controls.item.classList.toggle('history-item-active', uiState.active);
     controls.item.classList.toggle('history-item-selected', uiState.selected);
     controls.item.classList.toggle('history-item-bookmarked', uiState.bookmarked);
+    controls.item.classList.toggle('history-item-mined', uiState.mineStatus === 'mined');
+    controls.item.classList.toggle('history-item-failed', uiState.mineStatus === 'failed');
     controls.item.setAttribute('aria-current', uiState.active ? 'true' : 'false');
     controls.checkbox.checked = uiState.selected;
     controls.checkbox.disabled = uiState.checkboxDisabled;
@@ -1475,8 +1627,13 @@ function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = rend
       `${uiState.bookmarked ? 'Remove bookmark' : 'Bookmark'}: ${entry.text}`,
     );
     controls.bookmarkButton.title = uiState.bookmarked ? 'Remove bookmark' : 'Bookmark';
+    controls.bookmarkButton.disabled = uiState.bookmarkDisabled;
     controls.goToButton.disabled = uiState.goToDisabled;
     controls.mineButton.disabled = uiState.mineDisabled;
+    controls.mineStatusBadge.hidden = uiState.mineStatus === 'unmined';
+    controls.mineStatusBadge.textContent = uiState.mineStatus === 'mined' ? 'Mined' : 'Failed';
+    controls.mineStatusBadge.className = `mine-status-badge mine-status-badge-${uiState.mineStatus}`;
+    controls.mineStatusBadge.title = uiState.progressMessage || controls.mineStatusBadge.textContent;
   });
 }
 

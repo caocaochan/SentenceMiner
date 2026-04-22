@@ -2,6 +2,7 @@ export type SessionAction = 'start' | 'stop';
 export type TranscriptStatus = 'loading' | 'ready' | 'unavailable' | 'error';
 export type LearningStatus = 'disabled' | 'loading' | 'ready' | 'error';
 export type SubtitleTrackKind = 'external' | 'embedded' | 'none';
+export type MineStatus = 'unmined' | 'mined' | 'failed';
 
 export interface SubtitleTrackPayload {
   sessionId: string;
@@ -41,6 +42,7 @@ export interface MinePayload extends SubtitleEventPayload {
 
 export interface HistoryMineBatchPayload {
   entries: SubtitleEventPayload[];
+  editedText?: string;
 }
 
 export type HistoryMineRequest = SubtitleEventPayload | HistoryMineBatchPayload;
@@ -167,6 +169,11 @@ export interface TranscriptCue extends SubtitleEventPayload {
   id: string;
   orderIndex: number;
   learning?: TranscriptCueLearning;
+  bookmarked?: boolean;
+  mineStatus?: MineStatus;
+  noteId?: number;
+  message?: string;
+  updatedAt?: string;
 }
 
 export interface TranscriptCueLearning {

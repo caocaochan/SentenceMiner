@@ -17,6 +17,10 @@ export function buildTranscriptStructureSignature(entries) {
         entry.startMs ?? 'nil',
         entry.endMs ?? 'nil',
         entry.learning?.iPlusOne ? 'i+1' : '',
+        entry.bookmarked ? 'bookmarked' : '',
+        entry.mineStatus ?? 'unmined',
+        entry.noteId ?? '',
+        entry.message ?? '',
         (entry.learning?.unknownWords ?? []).join(','),
         (entry.learning?.unknownWordRanges ?? [])
           .map((range) => `${range.start}-${range.end}`)
@@ -92,15 +96,19 @@ export function computeTranscriptItemUiState(
 ) {
   const entryKey = buildHistoryEntryKey(entry);
   const bookmarkKey = buildTranscriptBookmarkKey(entry);
+  const bookmarked = entry.bookmarked ?? bookmarkedKeys.has(bookmarkKey);
 
   return {
     entryKey,
     bookmarkKey,
     active: currentCueId === entry.id,
     selected: selectedKeys.has(entryKey),
-    bookmarked: bookmarkedKeys.has(bookmarkKey),
+    bookmarked,
+    mineStatus: entry.mineStatus ?? 'unmined',
+    progressMessage: entry.message ?? '',
     goToDisabled: !actionsEnabled || pendingActions.has(`go-to:${entryKey}`),
     mineDisabled: !actionsEnabled || pendingActions.has(`mine:${entryKey}`),
+    bookmarkDisabled: !actionsEnabled || pendingActions.has(`bookmark:${entryKey}`),
     checkboxDisabled:
       !actionsEnabled || !isHistorySelectionToggleAllowed(entries, selectedKeys, entry, !selectedKeys.has(entryKey)),
   };

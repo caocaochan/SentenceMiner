@@ -164,6 +164,21 @@ test('transcript item UI state includes bookmarked state', () => {
   assert.equal(secondUi.bookmarked, true);
 });
 
+test('transcript item UI state prefers server progress fields', () => {
+  const entry = {
+    ...buildCue('cue-1', 'one', 100),
+    bookmarked: true,
+    mineStatus: 'failed',
+    message: 'No matching card exists.',
+  };
+
+  const ui = computeTranscriptItemUiState([entry], new Set(), new Set(), 'cue-1', entry);
+
+  assert.equal(ui.bookmarked, true);
+  assert.equal(ui.mineStatus, 'failed');
+  assert.equal(ui.progressMessage, 'No matching card exists.');
+});
+
 test('transcript bookmark shortcut is active for plain B outside editable controls', () => {
   assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'b', targetTagName: 'BODY' }), true);
   assert.equal(shouldHandleTranscriptBookmarkShortcut({ key: 'B', targetTagName: 'DIV' }), true);

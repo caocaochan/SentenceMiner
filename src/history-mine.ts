@@ -110,6 +110,10 @@ export function normalizeHistoryMineRequest(request: HistoryMineRequest): Normal
     .filter(Boolean)
     .join(' ')
     .trim();
+  const editedText = 'entries' in request && typeof request.editedText === 'string'
+    ? request.editedText.trim()
+    : '';
+  const finalText = editedText || text;
   const startMsValues = sortedEntries
     .map((entry) => entry.startMs)
     .filter((value): value is number => value != null);
@@ -120,8 +124,8 @@ export function normalizeHistoryMineRequest(request: HistoryMineRequest): Normal
   return {
     payload: {
       ...firstEntry,
-      text,
-      sentenceMatchCandidates: buildSentenceMatchCandidates(text, sortedEntries),
+      text: finalText,
+      sentenceMatchCandidates: buildSentenceMatchCandidates(finalText, text, sortedEntries),
       startMs: startMsValues.length > 0 ? Math.min(...startMsValues) : null,
       endMs: endMsValues.length > 0 ? Math.max(...endMsValues) : null,
       playbackTimeMs: firstEntry.playbackTimeMs ?? null,
@@ -309,9 +313,9 @@ function compareHistoryMineEntries(
   return a.index - b.index;
 }
 
-function buildSentenceMatchCandidates(text: string, entries: SubtitleEventPayload[]): string[] {
+function buildSentenceMatchCandidates(text: string, combinedOriginalText: string, entries: SubtitleEventPayload[]): string[] {
   const seen = new Set<string>();
-  const candidates = [text, ...entries.map((entry) => entry.text)];
+  const candidates = [text, combinedOriginalText, ...entries.map((entry) => entry.text)];
 
   return candidates
     .map((candidate) => candidate.trim())

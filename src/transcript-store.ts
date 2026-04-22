@@ -7,6 +7,7 @@ import type {
   TranscriptState,
   TranscriptStatus,
 } from './types.ts';
+import { applyProgressToCues, type CueProgressPatch, withDefaultProgress } from './session-persistence.ts';
 
 export class TranscriptStore {
   #state: TranscriptState = {
@@ -127,7 +128,7 @@ export class TranscriptStore {
       filePath: track.filePath,
       subtitleTrack: { ...track },
     };
-    this.#state.transcript = transcript.map(cloneCueWithoutLearning);
+    this.#state.transcript = transcript.map((cue) => withDefaultProgress(cloneCueWithoutLearning(cue)));
     this.#state.history = this.#state.transcript.map(cloneCue);
     this.#transcriptByStart = [...this.#state.transcript].sort((left, right) =>
       left.startMs === right.startMs ? left.endMs - right.endMs : left.startMs - right.startMs,
@@ -175,7 +176,7 @@ export class TranscriptStore {
   setLearningReady(annotations: Map<string, TranscriptCueLearning>, message: string | null = null): TranscriptState {
     const applyAnnotation = (cue: TranscriptCue): TranscriptCue => {
       const learning = annotations.get(cue.id);
-      return {
+      return withDefaultProgress({
         ...cue,
         learning: {
           unknownWords: learning ? [...learning.unknownWords] : [],
@@ -184,7 +185,7 @@ export class TranscriptStore {
             : [],
           iPlusOne: learning?.iPlusOne ?? false,
         },
-      };
+      });
     };
 
     this.#state.transcript = this.#state.transcript.map(applyAnnotation);
@@ -200,6 +201,30 @@ export class TranscriptStore {
     this.#state.learningStatus = 'error';
     this.#state.learningMessage = message;
     return this.getState();
+  }
+
+  applyCueProgress(cueIds: Set<string>, patch: CueProgressPatch): TranscriptState {
+    if (cueIds.size === 0) {
+      return this.getState();
+    }
+
+    this.#state.transcript = applyProgressToCues(this.#state.transcript, cueIds, patch);
+    this.#state.history = applyProgressToCues(this.#state.history, cueIds, patch);
+    this.#transcriptByStart = applyProgressToCues(this.#transcriptByStart, cueIds, patch);
+    return this.getState();
+  }
+
+  toggleCueBookmark(cueId: string): TranscriptState {
+    const current = this.#state.transcript.find((cue) => cue.id === cueId)
+      ?? this.#state.history.find((cue) => cue.id === cueId);
+    if (!current) {
+      return this.getState();
+    }
+
+    return this.applyCueProgress(new Set([cueId]), {
+      bookmarked: !current.bookmarked,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   setTranscriptUnavailable(track: SubtitleTrackPayload, message: string): TranscriptState {
@@ -299,7 +324,7 @@ export class TranscriptStore {
 }
 
 function cloneCue(cue: TranscriptCue): TranscriptCue {
-  return {
+  return withDefaultProgress({
     ...cue,
     learning: cue.learning
       ? {
@@ -308,12 +333,12 @@ function cloneCue(cue: TranscriptCue): TranscriptCue {
           iPlusOne: cue.learning.iPlusOne,
         }
       : undefined,
-  };
+  });
 }
 
 function cloneCueWithoutLearning(cue: TranscriptCue): TranscriptCue {
   const { learning: _learning, ...rest } = cue;
-  return { ...rest };
+  return withDefaultProgress({ ...rest });
 }
 
 function buildMissingTrackPayload(payload: SessionPayload): SubtitleTrackPayload {
