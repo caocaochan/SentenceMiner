@@ -29,7 +29,6 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.appearance.subtitleCardFontSizePx, 0);
   assert.equal(payload.config.settings.learning.iPlusOneEnabled, true);
   assert.equal(payload.config.settings.learning.knownWordField, '');
-  assert.equal(payload.config.settings.learning.tokenizer, 'jieba');
 });
 
 test('GET /api/health returns a lightweight readiness payload', async (t) => {
@@ -138,7 +137,6 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   payload.appearance.subtitleCardFontSizePx = 20;
   payload.learning.iPlusOneEnabled = true;
   payload.learning.knownWordField = 'Expression';
-  payload.learning.tokenizer = 'lac';
 
   const response = await fetch(`${harness.baseUrl}/api/settings`, {
     method: 'POST',
@@ -157,7 +155,6 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.equal(harness.config.appearance.subtitleCardFontFamily, 'Noto Sans JP');
   assert.equal(harness.config.appearance.subtitleCardFontSizePx, 20);
   assert.equal(harness.config.learning.knownWordField, 'Expression');
-  assert.equal(harness.config.learning.tokenizer, 'lac');
 
   const configFile = await fs.readFile(harness.configPath, 'utf8');
   assert.match(configFile, /anki_deck=Mining/);
@@ -166,26 +163,6 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.match(configFile, /subtitle_card_font_family=Noto Sans JP/);
   assert.match(configFile, /subtitle_card_font_size_px=20/);
   assert.match(configFile, /i_plus_one_known_word_field=Expression/);
-  assert.match(configFile, /i_plus_one_tokenizer=lac/);
-});
-
-test('POST /api/settings rejects invalid i+1 tokenizer values with a 400', async (t) => {
-  const harness = await createServerHarness(t);
-  const payload = getEditableSettings(harness.config) as Record<string, any>;
-  payload.learning.tokenizer = 'hanlp';
-
-  const response = await fetch(`${harness.baseUrl}/api/settings`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-  const body = await response.json();
-
-  assert.equal(response.status, 400);
-  assert.equal(body.success, false);
-  assert.match(body.message, /learning\.tokenizer/);
 });
 
 test('POST /api/settings rejects invalid note field mappings with a 400', async (t) => {

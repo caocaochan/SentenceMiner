@@ -54,7 +54,7 @@ export interface FieldMapping {
   filename?: string;
 }
 
-export type LearningTokenizerProvider = 'jieba' | 'intl' | 'lac';
+export type LearningTokenizerProvider = 'jieba' | 'intl';
 
 export interface LearningConfig {
   iPlusOneEnabled: boolean;
@@ -128,7 +128,6 @@ export interface EditableRuntimeSettings {
 export interface EditableLearningSettings {
   iPlusOneEnabled: boolean;
   knownWordField: string;
-  tokenizer: LearningTokenizerProvider;
 }
 
 export interface EditableSettings {

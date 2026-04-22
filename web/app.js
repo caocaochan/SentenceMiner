@@ -108,7 +108,6 @@ const elements = {
   settingsAnkiExtraQuery: document.getElementById('settings-anki-extra-query'),
   settingsFieldSubtitle: document.getElementById('settings-field-subtitle'),
   settingsKnownWordField: document.getElementById('settings-known-word-field'),
-  settingsTokenizer: document.getElementById('settings-tokenizer'),
   settingsFieldAudio: document.getElementById('settings-field-audio'),
   settingsFieldImage: document.getElementById('settings-field-image'),
   settingsFieldSource: document.getElementById('settings-field-source'),
@@ -821,7 +820,6 @@ function hydrateSettingsForm() {
   elements.settingsCaptureImageMaxHeight.value = String(settings.capture.imageMaxHeight ?? 0);
   elements.settingsCaptureImageIncludeSubtitles.checked = Boolean(settings.capture.imageIncludeSubtitles);
   elements.settingsIPlusOneEnabled.checked = Boolean(settings.learning?.iPlusOneEnabled);
-  populateTokenizerSelect(settings.learning?.tokenizer ?? 'jieba');
   syncSubtitleCardFontPicker(settings.appearance.subtitleCardFontFamily ?? '');
   elements.settingsAppearanceSubtitleCardFontSizePx.value = settings.appearance.subtitleCardFontSizePx
     ? String(settings.appearance.subtitleCardFontSizePx)
@@ -966,7 +964,6 @@ function collectSettingsPayload() {
     learning: {
       iPlusOneEnabled: elements.settingsIPlusOneEnabled.checked,
       knownWordField: elements.settingsKnownWordField.value.trim(),
-      tokenizer: elements.settingsTokenizer.value,
     },
     capture: {
       audioPrePaddingMs: parseRequiredInteger(elements.settingsCaptureAudioPrePaddingMs, 'Audio pre-padding'),
@@ -1187,27 +1184,6 @@ function populateFieldSelects(noteFields, currentFields, currentKnownWordField =
     blankLabel: 'Not set',
     preserveUnknown,
   });
-}
-
-function populateTokenizerSelect(currentValue) {
-  populateSelect(elements.settingsTokenizer, ['jieba', 'lac', 'intl'], currentValue, {
-    allowBlank: false,
-    preserveUnknown: false,
-    extraOptions: [
-      { value: 'jieba', label: 'Jieba' },
-      { value: 'lac', label: 'Baidu LAC' },
-      { value: 'intl', label: 'Intl.Segmenter' },
-    ],
-  });
-  for (const option of elements.settingsTokenizer.options) {
-    if (option.value === 'jieba') {
-      option.textContent = 'Jieba';
-    } else if (option.value === 'lac') {
-      option.textContent = 'Baidu LAC';
-    } else if (option.value === 'intl') {
-      option.textContent = 'Intl.Segmenter';
-    }
-  }
 }
 
 function syncSubtitleCardFontPicker(currentValue) {

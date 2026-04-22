@@ -28,7 +28,6 @@ await copyIntoPackage(
 );
 await copyBundledFfmpeg();
 await copyBundledJieba();
-await copyIntoPackage('scripts/lac-worker.py', 'scripts/sentenceminer-helper/lac-worker.py');
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
 await writePackagedHelperEntryPoint();

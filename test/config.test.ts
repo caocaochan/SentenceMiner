@@ -201,36 +201,7 @@ test('loadConfig rejects invalid i+1 tokenizer values', async (t) => {
   await assert.rejects(() => loadConfig([]), /Invalid tokenizer value for i_plus_one_tokenizer/);
 });
 
-test('loadConfig accepts Baidu LAC as an i+1 tokenizer', async (t) => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-config-lac-tokenizer-'));
-  const configPath = path.join(tempRoot, 'sentenceminer.conf');
-  const originalConfig = process.env.SENTENCEMINER_CONFIG;
-
-  t.after(async () => {
-    if (originalConfig === undefined) {
-      delete process.env.SENTENCEMINER_CONFIG;
-    } else {
-      process.env.SENTENCEMINER_CONFIG = originalConfig;
-    }
-
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  });
-
-  await fs.writeFile(configPath, 'i_plus_one_tokenizer=lac\n', 'utf8');
-  process.env.SENTENCEMINER_CONFIG = configPath;
-
-  const config = await loadConfig([]);
-
-  assert.equal(config.learning.tokenizer, 'lac');
-});
-
 test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates managed keys', () => {
-  const settings = getEditableSettings(DEFAULT_CONFIG);
-  settings.anki.deck = 'Mining';
-  settings.anki.noteType = 'Target';
-  settings.runtime.captureAudio = false;
-  settings.learning.tokenizer = 'lac';
-
   const merged = mergeEditableSettingsIntoConfig(
     [
       '# mpv script options',
@@ -241,13 +212,24 @@ test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates mana
       '; keep me',
       'capture_audio=yes',
     ].join('\n'),
-    settings,
+    {
+      ...getEditableSettings(DEFAULT_CONFIG),
+      anki: {
+        ...getEditableSettings(DEFAULT_CONFIG).anki,
+        deck: 'Mining',
+        noteType: 'Target',
+      },
+      runtime: {
+        captureAudio: false,
+        captureImage: true,
+      },
+    },
   );
 
   assert.match(merged, /helper_url=http:\/\/127\.0\.0\.1:8766/);
   assert.match(merged, /anki_deck=Mining/);
   assert.match(merged, /anki_note_type=Target/);
-  assert.match(merged, /i_plus_one_tokenizer=lac/);
+  assert.match(merged, /i_plus_one_tokenizer=intl/);
   assert.match(merged, /; keep me/);
   assert.match(merged, /capture_audio=no/);
 });
@@ -266,7 +248,7 @@ test('mergeEditableSettingsIntoConfig appends missing managed keys using stable 
   assert.match(merged, /subtitle_card_font_size_px=0/);
   assert.match(merged, /i_plus_one_enabled=yes/);
   assert.match(merged, /i_plus_one_known_word_field=/);
-  assert.match(merged, /i_plus_one_tokenizer=jieba/);
+  assert.doesNotMatch(merged, /i_plus_one_tokenizer=/);
   assert.match(merged, /capture_image_max_width=1600/);
 });
 
@@ -292,7 +274,6 @@ test('saveEditableSettings writes updated settings to sentenceminer.conf', async
   settings.appearance.subtitleCardFontSizePx = 18;
   settings.learning.iPlusOneEnabled = true;
   settings.learning.knownWordField = 'Word';
-  settings.learning.tokenizer = 'lac';
 
   await saveEditableSettings(configPath, settings);
 
@@ -304,5 +285,4 @@ test('saveEditableSettings writes updated settings to sentenceminer.conf', async
   assert.match(written, /subtitle_card_font_size_px=18/);
   assert.match(written, /i_plus_one_enabled=yes/);
   assert.match(written, /i_plus_one_known_word_field=Word/);
-  assert.match(written, /i_plus_one_tokenizer=lac/);
 });
