@@ -51,7 +51,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   learning: {
     iPlusOneEnabled: true,
     knownWordField: '',
-    tokenizer: 'jieba',
+    tokenizer: 'pkuseg',
   },
 };
 
@@ -550,11 +550,11 @@ function parseBoolean(key: string, value: string): boolean {
 
 function parseLearningTokenizer(key: string, value: string): LearningTokenizerProvider {
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'jieba' || normalized === 'intl') {
+  if (normalized === 'pkuseg' || normalized === 'intl') {
     return normalized;
   }
 
-  throw new Error(`Invalid tokenizer value for ${key}: ${value}`);
+  throw new Error(`Invalid tokenizer value for ${key}: ${value}. Use pkuseg or intl.`);
 }
 
 function isDefaultFfmpegCommand(value: string): boolean {

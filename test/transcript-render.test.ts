@@ -65,7 +65,7 @@ test('buildHighlightedTranscriptParts marks unknown Chinese words while preservi
   assert.equal(parts.map((part) => part.text).join(''), '我喜欢中文。中文很好。');
 });
 
-test('buildHighlightedTranscriptParts marks Jieba words split by browser segmentation', () => {
+test('buildHighlightedTranscriptParts marks tokenizer words split by browser segmentation', () => {
   const parts = buildHighlightedTranscriptParts('我果然到了京师', ['京师']);
 
   assert.deepEqual(parts, [

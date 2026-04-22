@@ -8,10 +8,12 @@ import path from 'node:path';
 import {
   analyzeTranscriptLearning,
   normalizeLearningToken,
+  resetLearningTokenizerForTests,
   tokenizeText,
 } from '../src/learning-analysis.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import type { TranscriptCue } from '../src/types.ts';
+import { useMockPkuseg } from './pkuseg-mock.ts';
 
 test('tokenizeText normalizes Chinese punctuation, duplicates, whitespace, and ASCII case', () => {
   assert.deepEqual(tokenizeText('我  喜欢，喜欢 JavaScript!'), ['我', '喜欢', 'javascript']);
@@ -79,7 +81,8 @@ test('analyzeTranscriptLearning tokenizes sentence values from the known word fi
   assert.deepEqual(result.annotations.get('one-unknown')?.unknownWords, ['中文']);
 });
 
-test('analyzeTranscriptLearning can use bundled Jieba tokenization', async (t) => {
+test('analyzeTranscriptLearning can use bundled Pkuseg tokenization', async (t) => {
+  await useMockPkuseg(t);
   const notes = [
     createAnkiNote(1, '我'),
     createAnkiNote(2, '喜欢'),
@@ -95,7 +98,7 @@ test('analyzeTranscriptLearning can use bundled Jieba tokenization', async (t) =
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${address.port}`;
   config.learning.knownWordField = 'Word';
-  config.learning.tokenizer = 'jieba';
+  config.learning.tokenizer = 'pkuseg';
 
   const result = await analyzeTranscriptLearning(config.anki, config.learning, [
     buildCue('known', '我喜欢学习'),
@@ -116,25 +119,18 @@ test('analyzeTranscriptLearning can use bundled Jieba tokenization', async (t) =
   ]);
 });
 
-test('analyzeTranscriptLearning reports missing explicit Jieba assets', async (t) => {
-  const notes = [createAnkiNote(1, '我')];
+test('analyzeTranscriptLearning reuses the Pkuseg tokenizer process', async (t) => {
+  const { startLogPath } = await useMockPkuseg(t, { trackStarts: true });
+  assert.ok(startLogPath);
+
+  const notes = [
+    createAnkiNote(1, '我'),
+    createAnkiNote(2, '喜欢'),
+    createAnkiNote(3, '学习'),
+  ];
   const server = createFakeAnkiServer(notes);
   await listen(server);
-
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-jieba-missing-'));
-  const originalRoot = process.env.SENTENCEMINER_JIEBA_ROOT;
-
-  t.after(async () => {
-    await closeServer(server);
-    await fs.rm(tempRoot, { recursive: true, force: true });
-    if (originalRoot === undefined) {
-      delete process.env.SENTENCEMINER_JIEBA_ROOT;
-    } else {
-      process.env.SENTENCEMINER_JIEBA_ROOT = originalRoot;
-    }
-  });
-
-  process.env.SENTENCEMINER_JIEBA_ROOT = tempRoot;
+  t.after(() => closeServer(server));
 
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
@@ -142,11 +138,48 @@ test('analyzeTranscriptLearning reports missing explicit Jieba assets', async (t
   const config = structuredClone(DEFAULT_CONFIG);
   config.anki.url = `http://127.0.0.1:${address.port}`;
   config.learning.knownWordField = 'Word';
-  config.learning.tokenizer = 'jieba';
+  config.learning.tokenizer = 'pkuseg';
+
+  await analyzeTranscriptLearning(config.anki, config.learning, [buildCue('one-unknown', '我喜欢中文')]);
+  await analyzeTranscriptLearning(config.anki, config.learning, [buildCue('another-unknown', '我看中文')]);
+
+  const starts = await fs.readFile(startLogPath, 'utf8');
+  assert.equal(starts.trim().split(/\r?\n/).length, 1);
+});
+
+test('analyzeTranscriptLearning reports missing explicit Pkuseg sidecar', async (t) => {
+  const notes = [createAnkiNote(1, '我')];
+  const server = createFakeAnkiServer(notes);
+  await listen(server);
+
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-pkuseg-missing-'));
+  const originalTokenizer = process.env.SENTENCEMINER_PKUSEG_TOKENIZER;
+
+  t.after(async () => {
+    await closeServer(server);
+    await fs.rm(tempRoot, { recursive: true, force: true });
+    if (originalTokenizer === undefined) {
+      delete process.env.SENTENCEMINER_PKUSEG_TOKENIZER;
+    } else {
+      process.env.SENTENCEMINER_PKUSEG_TOKENIZER = originalTokenizer;
+    }
+    resetLearningTokenizerForTests();
+  });
+
+  process.env.SENTENCEMINER_PKUSEG_TOKENIZER = path.join(tempRoot, 'missing-tokenizer.exe');
+  resetLearningTokenizerForTests();
+
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.anki.url = `http://127.0.0.1:${address.port}`;
+  config.learning.knownWordField = 'Word';
+  config.learning.tokenizer = 'pkuseg';
 
   await assert.rejects(
     () => analyzeTranscriptLearning(config.anki, config.learning, [buildCue('one-unknown', '我喜欢中文')]),
-    /Unable to find Jieba tokenizer dictionary/,
+    /Unable to find Pkuseg tokenizer/,
   );
 });
 

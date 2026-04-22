@@ -54,7 +54,7 @@ export interface FieldMapping {
   filename?: string;
 }
 
-export type LearningTokenizerProvider = 'jieba' | 'intl';
+export type LearningTokenizerProvider = 'pkuseg' | 'intl';
 
 export interface LearningConfig {
   iPlusOneEnabled: boolean;

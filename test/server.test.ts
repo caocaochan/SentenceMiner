@@ -12,6 +12,7 @@ import type { SubtitleTranscriptResult } from '../src/subtitle-transcript.ts';
 import { TranscriptStore } from '../src/transcript-store.ts';
 import type { AppConfig, SubtitleTrackPayload } from '../src/types.ts';
 import { WebSocketHub } from '../src/ws.ts';
+import { useMockPkuseg } from './pkuseg-mock.ts';
 
 test('GET /api/state exposes editable settings', async (t) => {
   const harness = await createServerHarness(t);
@@ -344,7 +345,8 @@ test('transcript load annotates i+1 lines from the configured known word field',
   );
 });
 
-test('transcript load can annotate i+1 lines with Jieba tokenization', async (t) => {
+test('transcript load can annotate i+1 lines with Pkuseg tokenization', async (t) => {
+  await useMockPkuseg(t);
   const harness = await createServerHarness(t, {
     loadSubtitleTranscript: async () => ({
       status: 'ready',
@@ -357,7 +359,7 @@ test('transcript load can annotate i+1 lines with Jieba tokenization', async (t)
     }),
   });
   harness.config.learning.knownWordField = 'Word';
-  harness.config.learning.tokenizer = 'jieba';
+  harness.config.learning.tokenizer = 'pkuseg';
   harness.ankiNotes.splice(
     0,
     harness.ankiNotes.length,
@@ -373,7 +375,7 @@ test('transcript load can annotate i+1 lines with Jieba tokenization', async (t)
       'anki_note_type=Sentence',
       'i_plus_one_enabled=yes',
       'i_plus_one_known_word_field=Word',
-      'i_plus_one_tokenizer=jieba',
+      'i_plus_one_tokenizer=pkuseg',
     ].join('\n'),
     'utf8',
   );

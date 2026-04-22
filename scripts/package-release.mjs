@@ -15,6 +15,7 @@ if (process.platform !== 'win32') {
 }
 
 run(process.execPath, [path.join(repoRoot, 'scripts', 'build-helper.mjs')], 'build the helper executable');
+run(process.execPath, [path.join(repoRoot, 'scripts', 'build-pkuseg-tokenizer.mjs')], 'build the Pkuseg tokenizer executable');
 
 await fs.rm(packageRoot, { recursive: true, force: true });
 await fs.mkdir(helperSourceRoot, { recursive: true });
@@ -27,7 +28,7 @@ await copyIntoPackage(
   'scripts/sentenceminer-helper/SentenceMinerHelper.exe',
 );
 await copyBundledFfmpeg();
-await copyBundledJieba();
+await copyBundledPkuseg();
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
 await writePackagedHelperEntryPoint();
@@ -79,16 +80,27 @@ async function copyBundledFfmpeg() {
   await copyIntoPackage(path.join(ffmpegDirectory, 'ffmpeg.exe.README'), 'scripts/sentenceminer-helper/ffmpeg.exe.README');
 }
 
-async function copyBundledJieba() {
-  const jiebaRoot = path.join(repoRoot, 'node_modules', '@node-rs', 'jieba');
-  const jiebaNativeRoot = path.join(repoRoot, 'node_modules', '@node-rs', 'jieba-win32-x64-msvc');
+async function copyBundledPkuseg() {
+  const pkusegBuildRoot = path.join(buildRoot, 'pkuseg', 'PkusegTokenizer');
+  await copyIntoPackage(pkusegBuildRoot, 'scripts/sentenceminer-helper/pkuseg');
+  await writePkusegAttribution();
+}
 
-  await copyIntoPackage(path.join(jiebaRoot, 'dict.txt'), 'scripts/sentenceminer-helper/jieba/dict.txt');
-  await copyIntoPackage(
-    path.join(jiebaNativeRoot, 'jieba.win32-x64-msvc.node'),
-    'scripts/sentenceminer-helper/jieba/jieba.win32-x64-msvc.node',
-  );
-  await copyIntoPackage(path.join(jiebaRoot, 'LICENSE'), 'scripts/sentenceminer-helper/jieba/LICENSE');
+async function writePkusegAttribution() {
+  const destinationPath = path.join(packageRoot, 'scripts', 'sentenceminer-helper', 'pkuseg', 'PKUSEG-ATTRIBUTION.txt');
+  const source = [
+    'Pkuseg tokenizer',
+    '',
+    'SentenceMiner bundles pkuseg-python for Chinese word segmentation.',
+    'Project: https://github.com/lancopku/pkuseg-python',
+    'PyPI: https://pypi.org/project/pkuseg/',
+    '',
+    'The bundled tokenizer executable is built from scripts/pkuseg-tokenizer.py with PyInstaller.',
+    'It includes the pkuseg default model and runtime dependencies so end users do not need Python, pip, NumPy, or pkuseg installed.',
+    '',
+  ].join('\n');
+
+  await fs.writeFile(destinationPath, source, 'utf8');
 }
 
 function run(command, args, step) {

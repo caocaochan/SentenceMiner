@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import readline from 'node:readline';
 
 import type {
   AnkiConfig,
@@ -35,19 +36,6 @@ interface LearningTokenRange extends TranscriptTextRange {
   token: string;
 }
 
-interface JiebaConstructor {
-  new(): JiebaInstance;
-  withDict?: (dict: Uint8Array) => JiebaInstance;
-}
-
-interface JiebaInstance {
-  cut(text: string, hmm?: boolean): string[];
-}
-
-interface JiebaNativeBinding {
-  Jieba: JiebaConstructor;
-}
-
 export interface LearningAnalysisResult {
   annotations: Map<string, TranscriptCueLearning>;
   iPlusOneCount: number;
@@ -55,10 +43,12 @@ export interface LearningAnalysisResult {
 }
 
 const NOTES_INFO_BATCH_SIZE = 100;
-const JIEBA_ASSET_DIR = 'jieba';
-const JIEBA_DICT_FILENAME = 'dict.txt';
+const PKUSEG_ASSET_DIR = 'pkuseg';
+const PKUSEG_TOKENIZER_FILENAME = 'PkusegTokenizer.exe';
+const PKUSEG_SOURCE_TOKENIZER_PATH = path.join(process.cwd(), 'scripts', 'pkuseg-tokenizer.py');
 const SEGMENTER = new Intl.Segmenter('zh', { granularity: 'word' });
-const REQUIRE = createRequire(path.join(process.cwd(), 'sentenceminer-loader.cjs'));
+
+let pkusegClient: PkusegProcessClient | null = null;
 
 export async function analyzeTranscriptLearning(
   anki: AnkiConfig,
@@ -168,7 +158,7 @@ function createLearningTokenizer(learning: LearningConfig): LearningTokenizer {
     return new IntlLearningTokenizer();
   }
 
-  return new JiebaLearningTokenizer();
+  return new PkusegLearningTokenizer();
 }
 
 class IntlLearningTokenizer implements LearningTokenizer {
@@ -177,11 +167,12 @@ class IntlLearningTokenizer implements LearningTokenizer {
   }
 }
 
-class JiebaLearningTokenizer implements LearningTokenizer {
-  readonly #jieba = loadJieba();
+class PkusegLearningTokenizer implements LearningTokenizer {
+  readonly #client = getPkusegClient();
 
   async tokenizeBatch(texts: string[]): Promise<LearningTokenization[]> {
-    return texts.map((text) => tokenizeJiebaText(text, this.#jieba.cut(text, true)));
+    const tokenizations = await this.#client.tokenizeBatch(texts);
+    return texts.map((text, index) => tokenizeSegmentedText(text, tokenizations[index] ?? []));
   }
 }
 
@@ -216,7 +207,7 @@ function tokenizeIntlText(text: string): LearningTokenization {
   };
 }
 
-function tokenizeJiebaText(text: string, segments: string[]): LearningTokenization {
+function tokenizeSegmentedText(text: string, segments: string[]): LearningTokenization {
   const tokens = new Set<string>();
   const ranges: LearningTokenRange[] = [];
   let cursor = 0;
@@ -248,99 +239,6 @@ function tokenizeJiebaText(text: string, segments: string[]): LearningTokenizati
   };
 }
 
-function loadJieba(): JiebaInstance {
-  const assetRoot = resolveJiebaAssetRoot();
-  const dictPath = path.join(assetRoot, JIEBA_DICT_FILENAME);
-  const bindingPath = resolveJiebaNativeBindingPath(assetRoot);
-  const dict = fs.readFileSync(dictPath);
-  const binding = REQUIRE(bindingPath) as JiebaNativeBinding;
-
-  if (!binding.Jieba) {
-    throw new Error(`Jieba native binding at ${bindingPath} did not export Jieba.`);
-  }
-
-  return typeof binding.Jieba.withDict === 'function'
-    ? binding.Jieba.withDict(dict)
-    : new binding.Jieba();
-}
-
-function resolveJiebaAssetRoot(): string {
-  if (process.env.SENTENCEMINER_JIEBA_ROOT) {
-    const explicitRoot = process.env.SENTENCEMINER_JIEBA_ROOT;
-    assertJiebaAssetRoot(explicitRoot);
-    return explicitRoot;
-  }
-
-  const candidates = [
-    path.join(resolveAppRoot(), JIEBA_ASSET_DIR),
-    path.join(process.cwd(), 'node_modules', '@node-rs', 'jieba'),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, JIEBA_DICT_FILENAME))) {
-      return candidate;
-    }
-  }
-
-  throw new Error(`Unable to find Jieba tokenizer dictionary ${JIEBA_DICT_FILENAME}.`);
-}
-
-function assertJiebaAssetRoot(assetRoot: string): void {
-  const dictPath = path.join(assetRoot, JIEBA_DICT_FILENAME);
-  const bindingPath = path.join(assetRoot, getJiebaNativeBindingFilename());
-  if (!fs.existsSync(dictPath)) {
-    throw new Error(`Unable to find Jieba tokenizer dictionary at ${dictPath}.`);
-  }
-
-  if (!fs.existsSync(bindingPath)) {
-    throw new Error(`Unable to find Jieba native binding at ${bindingPath}.`);
-  }
-}
-
-function resolveJiebaNativeBindingPath(assetRoot: string): string {
-  const localBindingPath = path.join(assetRoot, getJiebaNativeBindingFilename());
-  if (fs.existsSync(localBindingPath)) {
-    return localBindingPath;
-  }
-
-  const packageName = getJiebaNativePackageName();
-  if (packageName) {
-    return REQUIRE.resolve(packageName);
-  }
-
-  throw new Error(`Unsupported Jieba tokenizer platform: ${process.platform} ${process.arch}.`);
-}
-
-function getJiebaNativeBindingFilename(): string {
-  const platformSuffix = getJiebaPlatformSuffix();
-  if (!platformSuffix) {
-    throw new Error(`Unsupported Jieba tokenizer platform: ${process.platform} ${process.arch}.`);
-  }
-
-  return `jieba.${platformSuffix}.node`;
-}
-
-function getJiebaNativePackageName(): string | null {
-  const platformSuffix = getJiebaPlatformSuffix();
-  return platformSuffix ? `@node-rs/jieba-${platformSuffix}` : null;
-}
-
-function getJiebaPlatformSuffix(): string | null {
-  if (process.platform === 'win32') {
-    if (process.arch === 'x64') {
-      return 'win32-x64-msvc';
-    }
-    if (process.arch === 'ia32') {
-      return 'win32-ia32-msvc';
-    }
-    if (process.arch === 'arm64') {
-      return 'win32-arm64-msvc';
-    }
-  }
-
-  return null;
-}
-
 function batchNoteIds(noteIds: number[], batchSize: number): number[][] {
   const batches: number[][] = [];
   for (let index = 0; index < noteIds.length; index += batchSize) {
@@ -348,6 +246,206 @@ function batchNoteIds(noteIds: number[], batchSize: number): number[][] {
   }
 
   return batches;
+}
+
+interface PkusegTokenizerCommand {
+  command: string;
+  args: string[];
+}
+
+interface PkusegTokenizerResponse {
+  tokenizations?: Array<{
+    segments?: unknown;
+  }>;
+  error?: unknown;
+}
+
+function getPkusegClient(): PkusegProcessClient {
+  if (!pkusegClient) {
+    pkusegClient = new PkusegProcessClient(resolvePkusegTokenizerCommand());
+  }
+
+  return pkusegClient;
+}
+
+export function resetLearningTokenizerForTests(): void {
+  pkusegClient?.close();
+  pkusegClient = null;
+}
+
+class PkusegProcessClient {
+  readonly #command: PkusegTokenizerCommand;
+  #child: ChildProcessWithoutNullStreams | null = null;
+  #stderr = '';
+  #pending: {
+    resolve: (segments: string[][]) => void;
+    reject: (error: Error) => void;
+  } | null = null;
+  #requestChain: Promise<void> = Promise.resolve();
+
+  constructor(command: PkusegTokenizerCommand) {
+    this.#command = command;
+  }
+
+  async tokenizeBatch(texts: string[]): Promise<string[][]> {
+    const request = this.#requestChain
+      .catch(() => {})
+      .then(() => this.#send(texts));
+    this.#requestChain = request.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return request;
+  }
+
+  close(): void {
+    this.#pending?.reject(new Error('Pkuseg tokenizer process was closed.'));
+    this.#pending = null;
+    this.#child?.kill();
+    this.#child = null;
+    this.#stderr = '';
+  }
+
+  #send(texts: string[]): Promise<string[][]> {
+    this.#ensureStarted();
+    const child = this.#child;
+    if (!child || !child.stdin.writable) {
+      throw new Error('Pkuseg tokenizer process is not writable.');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.#pending = { resolve, reject };
+      child.stdin.write(`${JSON.stringify({ texts })}\n`, (error) => {
+        if (error && this.#pending?.reject === reject) {
+          this.#pending = null;
+          reject(new Error(`Failed to send text to Pkuseg tokenizer: ${error.message}`));
+        }
+      });
+    });
+  }
+
+  #ensureStarted(): void {
+    if (this.#child) {
+      return;
+    }
+
+    const child = spawn(this.#command.command, this.#command.args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    this.#child = child;
+    this.#stderr = '';
+
+    const lines = readline.createInterface({ input: child.stdout });
+    lines.on('line', (line) => this.#handleLine(line));
+    child.stderr.on('data', (chunk) => {
+      this.#stderr = `${this.#stderr}${String(chunk)}`.slice(-4000);
+    });
+    child.once('error', (error) => this.#failPending(new Error(`Failed to start Pkuseg tokenizer: ${error.message}`)));
+    child.once('exit', (code, signal) => {
+      this.#child = null;
+      const detail = this.#stderr.trim();
+      const suffix = detail ? ` ${detail}` : '';
+      this.#failPending(new Error(`Pkuseg tokenizer exited with code ${code ?? 'null'} signal ${signal ?? 'null'}.${suffix}`));
+    });
+  }
+
+  #handleLine(line: string): void {
+    const pending = this.#pending;
+    if (!pending) {
+      return;
+    }
+
+    this.#pending = null;
+    try {
+      const payload = JSON.parse(line) as PkusegTokenizerResponse;
+      if (payload.error) {
+        pending.reject(new Error(`Pkuseg tokenizer error: ${String(payload.error)}`));
+        return;
+      }
+
+      if (!Array.isArray(payload.tokenizations)) {
+        pending.reject(new Error('Pkuseg tokenizer returned an invalid response.'));
+        return;
+      }
+
+      pending.resolve(payload.tokenizations.map((tokenization) => {
+        if (!Array.isArray(tokenization.segments)) {
+          return [];
+        }
+
+        return tokenization.segments.filter((segment): segment is string => typeof segment === 'string');
+      }));
+    } catch (error) {
+      pending.reject(new Error(`Pkuseg tokenizer returned invalid JSON: ${String(error)}`));
+    }
+  }
+
+  #failPending(error: Error): void {
+    if (!this.#pending) {
+      return;
+    }
+
+    const pending = this.#pending;
+    this.#pending = null;
+    pending.reject(error);
+  }
+}
+
+function resolvePkusegTokenizerCommand(): PkusegTokenizerCommand {
+  const explicitTokenizer = process.env.SENTENCEMINER_PKUSEG_TOKENIZER?.trim();
+  if (explicitTokenizer) {
+    assertPkusegTokenizerPath(explicitTokenizer);
+    return commandForTokenizerPath(explicitTokenizer);
+  }
+
+  const packagedTokenizer = path.join(resolveAppRoot(), PKUSEG_ASSET_DIR, PKUSEG_TOKENIZER_FILENAME);
+  if (fs.existsSync(packagedTokenizer)) {
+    return commandForTokenizerPath(packagedTokenizer);
+  }
+
+  const builtTokenizer = path.join(process.cwd(), 'dist', 'build', PKUSEG_ASSET_DIR, 'PkusegTokenizer', PKUSEG_TOKENIZER_FILENAME);
+  if (fs.existsSync(builtTokenizer)) {
+    return commandForTokenizerPath(builtTokenizer);
+  }
+
+  if (fs.existsSync(PKUSEG_SOURCE_TOKENIZER_PATH)) {
+    return {
+      command: process.env.PYTHON || 'python',
+      args: [PKUSEG_SOURCE_TOKENIZER_PATH],
+    };
+  }
+
+  throw new Error(`Unable to find bundled Pkuseg tokenizer executable ${PKUSEG_TOKENIZER_FILENAME}.`);
+}
+
+function assertPkusegTokenizerPath(tokenizerPath: string): void {
+  if (!fs.existsSync(tokenizerPath)) {
+    throw new Error(`Unable to find Pkuseg tokenizer at ${tokenizerPath}.`);
+  }
+}
+
+function commandForTokenizerPath(tokenizerPath: string): PkusegTokenizerCommand {
+  const extension = path.extname(tokenizerPath).toLowerCase();
+  if (extension === '.py') {
+    return {
+      command: process.env.PYTHON || 'python',
+      args: [tokenizerPath],
+    };
+  }
+
+  if (extension === '.js' || extension === '.mjs' || extension === '.cjs') {
+    return {
+      command: process.execPath,
+      args: [tokenizerPath],
+    };
+  }
+
+  return {
+    command: tokenizerPath,
+    args: [],
+  };
 }
 
 async function ankiRequest<T>(config: AnkiConfig, action: string, params?: Record<string, unknown>): Promise<T> {

@@ -75,7 +75,7 @@ The helper starts automatically on first playback. You should not need to run `S
 - `subtitle_card_font_size_px`
 - `i_plus_one_enabled`
 - `i_plus_one_known_word_field`
-- `i_plus_one_tokenizer` (`jieba` or `intl`)
+- `i_plus_one_tokenizer` (`pkuseg` or `intl`)
 - `helper_url`
 - `helper_timeout_ms`
 - `helper_auto_start`
@@ -96,13 +96,15 @@ In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-he
 
 ## Developer Workflow
 
-For source development you still need Node.js 24 or newer. You also need `ffmpeg` on `PATH` or a custom `ffmpeg_path` in `script-opts/sentenceminer.conf`.
+For source development you still need Node.js 24 or newer. You also need `ffmpeg` on `PATH` or a custom `ffmpeg_path` in `script-opts/sentenceminer.conf`. To build the packaged release, install the Python tokenizer build requirements first.
 
 ```powershell
 npm install
+python -m pip install -r scripts/pkuseg-tokenizer-requirements.txt
 node --experimental-strip-types src/main.ts
 node --experimental-strip-types --test test/*.test.ts
 node scripts/build-helper.mjs
+node scripts/build-pkuseg-tokenizer.mjs
 node scripts/package-release.mjs
 ```
 
@@ -113,10 +115,10 @@ node scripts/package-release.mjs
 - The helper defaults to port `8766` so it does not collide with AnkiConnect on `8765`.
 - If another process is already using the helper port, `mpv` will show a startup error instead of silently failing.
 - The packaged helper resolves `web/` assets relative to `SentenceMinerHelper.exe` and loads config from `mpv/script-opts/sentenceminer.conf`.
-- The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, `ffmpeg.exe.README`, and Jieba tokenizer assets inside `mpv/scripts/sentenceminer-helper/`.
+- The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, `ffmpeg.exe.README`, and Pkuseg tokenizer assets inside `mpv/scripts/sentenceminer-helper/`.
 - v1 keeps the active transcript in memory only.
 - v1 only tracks the primary active subtitle.
-- i+1 analysis uses the configured Anki deck and note type, reads known words from `i_plus_one_known_word_field`, and uses bundled Jieba word segmentation by default. Set `i_plus_one_tokenizer=intl` to use Node's Chinese `Intl.Segmenter` instead.
+- i+1 analysis uses the configured Anki deck and note type, reads known words from `i_plus_one_known_word_field`, and uses bundled Pkuseg word segmentation by default. The packaged Windows release includes the Pkuseg tokenizer, model, Python runtime pieces, and NumPy dependency, so users do not need Python, pip, NumPy, or Pkuseg installed. Set `i_plus_one_tokenizer=intl` to use Node's Chinese `Intl.Segmenter` instead.
 - SentenceMiner first looks for matching notes returned by the configured deck, note type, and extra query.
 - Mining is blocked unless the configured deck, note type, and mapped fields currently exist in Anki.
 - SentenceMiner only inspects the newest note returned by the configured deck, note type, and extra query.
