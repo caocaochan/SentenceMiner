@@ -48,6 +48,10 @@ export const DEFAULT_CONFIG: AppConfig = {
     subtitleCardFontFamily: '',
     subtitleCardFontSizePx: 0,
   },
+  learning: {
+    iPlusOneEnabled: true,
+    knownWordField: '',
+  },
 };
 
 export async function loadConfig(argv: string[] = process.argv.slice(2)): Promise<AppConfig> {
@@ -105,6 +109,10 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
       subtitleCardFontFamily: config.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: config.appearance.subtitleCardFontSizePx,
     },
+    learning: {
+      iPlusOneEnabled: config.learning.iPlusOneEnabled,
+      knownWordField: config.learning.knownWordField,
+    },
   };
 }
 
@@ -133,6 +141,11 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
       ...config.appearance,
       subtitleCardFontFamily: settings.appearance.subtitleCardFontFamily,
       subtitleCardFontSizePx: settings.appearance.subtitleCardFontSizePx,
+    },
+    learning: {
+      ...config.learning,
+      iPlusOneEnabled: settings.learning.iPlusOneEnabled,
+      knownWordField: settings.learning.knownWordField,
     },
   });
 }
@@ -447,6 +460,18 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         subtitleCardFontSizePx: parseNumber(key, value),
       };
       return;
+    case 'i_plus_one_enabled':
+      config.learning = {
+        ...config.learning,
+        iPlusOneEnabled: parseBoolean(key, value),
+      };
+      return;
+    case 'i_plus_one_known_word_field':
+      config.learning = {
+        ...config.learning,
+        knownWordField: value,
+      };
+      return;
     case 'ffmpeg_path':
       config.runtime = {
         ...config.runtime,
@@ -555,6 +580,10 @@ function mergeConfig(base: AppConfig, overrides: Partial<AppConfig>): AppConfig 
       ...base.appearance,
       ...overrides.appearance,
     },
+    learning: {
+      ...base.learning,
+      ...overrides.learning,
+    },
   };
 }
 
@@ -588,6 +617,8 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'capture_image_include_subtitles', value: (settings) => serializeBoolean(settings.capture.imageIncludeSubtitles) },
   { key: 'subtitle_card_font_family', value: (settings) => settings.appearance.subtitleCardFontFamily },
   { key: 'subtitle_card_font_size_px', value: (settings) => String(settings.appearance.subtitleCardFontSizePx) },
+  { key: 'i_plus_one_enabled', value: (settings) => serializeBoolean(settings.learning.iPlusOneEnabled) },
+  { key: 'i_plus_one_known_word_field', value: (settings) => settings.learning.knownWordField },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {

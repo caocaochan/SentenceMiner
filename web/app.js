@@ -6,6 +6,7 @@ import {
 } from './history-selection.js';
 import {
   buildTranscriptBookmarkKey,
+  buildHighlightedTranscriptParts,
   buildTranscriptStructureSignature,
   computeTranscriptFollowScrollTarget,
   computeTranscriptItemUiState,
@@ -105,6 +106,7 @@ const elements = {
   settingsAnkiNoteType: document.getElementById('settings-anki-note-type'),
   settingsAnkiExtraQuery: document.getElementById('settings-anki-extra-query'),
   settingsFieldSubtitle: document.getElementById('settings-field-subtitle'),
+  settingsKnownWordField: document.getElementById('settings-known-word-field'),
   settingsFieldAudio: document.getElementById('settings-field-audio'),
   settingsFieldImage: document.getElementById('settings-field-image'),
   settingsFieldSource: document.getElementById('settings-field-source'),
@@ -124,6 +126,7 @@ const elements = {
   settingsCaptureImageMaxHeight: document.getElementById('settings-capture-image-max-height'),
   settingsCaptureImageIncludeSubtitles: document.getElementById('settings-capture-image-include-subtitles'),
   settingsCaptureAdvanced: document.getElementById('settings-capture-advanced'),
+  settingsIPlusOneEnabled: document.getElementById('settings-i-plus-one-enabled'),
   settingsAppearanceSubtitleCardFontFamilySelect: document.getElementById('settings-appearance-subtitle-card-font-family-select'),
   settingsAppearanceSubtitleCardFontFamilyCustomField: document.getElementById('settings-appearance-subtitle-card-font-family-custom-field'),
   settingsAppearanceSubtitleCardFontFamilyCustom: document.getElementById('settings-appearance-subtitle-card-font-family-custom'),
@@ -799,7 +802,7 @@ function hydrateSettingsForm() {
 
   populateSelect(elements.settingsAnkiDeck, [], settings.anki.deck, { allowBlank: false });
   populateSelect(elements.settingsAnkiNoteType, [], settings.anki.noteType, { allowBlank: false });
-  populateFieldSelects([], settings.anki.fields);
+  populateFieldSelects([], settings.anki.fields, settings.learning?.knownWordField ?? '');
 
   elements.settingsAnkiExtraQuery.value = settings.anki.extraQuery ?? '';
   elements.settingsAnkiFilenameTemplate.value = settings.anki.filenameTemplate ?? '';
@@ -815,6 +818,7 @@ function hydrateSettingsForm() {
   elements.settingsCaptureImageMaxWidth.value = String(settings.capture.imageMaxWidth ?? 0);
   elements.settingsCaptureImageMaxHeight.value = String(settings.capture.imageMaxHeight ?? 0);
   elements.settingsCaptureImageIncludeSubtitles.checked = Boolean(settings.capture.imageIncludeSubtitles);
+  elements.settingsIPlusOneEnabled.checked = Boolean(settings.learning?.iPlusOneEnabled);
   syncSubtitleCardFontPicker(settings.appearance.subtitleCardFontFamily ?? '');
   elements.settingsAppearanceSubtitleCardFontSizePx.value = settings.appearance.subtitleCardFontSizePx
     ? String(settings.appearance.subtitleCardFontSizePx)
@@ -877,6 +881,7 @@ async function refreshSettingsOptions(noteType, deck) {
     );
     populateFieldSelects(state.settingsOptions.noteFields, {
       subtitle: elements.settingsFieldSubtitle.value,
+      knownWord: elements.settingsKnownWordField.value,
       audio: elements.settingsFieldAudio.value,
       image: elements.settingsFieldImage.value,
       source: elements.settingsFieldSource.value,
@@ -954,6 +959,10 @@ function collectSettingsPayload() {
         filename: elements.settingsFieldFilename.value.trim(),
       },
       filenameTemplate: elements.settingsAnkiFilenameTemplate.value.trim(),
+    },
+    learning: {
+      iPlusOneEnabled: elements.settingsIPlusOneEnabled.checked,
+      knownWordField: elements.settingsKnownWordField.value.trim(),
     },
     capture: {
       audioPrePaddingMs: parseRequiredInteger(elements.settingsCaptureAudioPrePaddingMs, 'Audio pre-padding'),
@@ -1137,11 +1146,16 @@ function parseRequiredInteger(input, label) {
   return value;
 }
 
-function populateFieldSelects(noteFields, currentFields) {
+function populateFieldSelects(noteFields, currentFields, currentKnownWordField = currentFields?.knownWord ?? '') {
   const preserveUnknown = noteFields.length === 0;
 
   populateSelect(elements.settingsFieldSubtitle, noteFields, currentFields.subtitle ?? '', {
     allowBlank: false,
+    preserveUnknown,
+  });
+  populateSelect(elements.settingsKnownWordField, noteFields, currentKnownWordField ?? '', {
+    allowBlank: true,
+    blankLabel: 'Choose field',
     preserveUnknown,
   });
   populateSelect(elements.settingsFieldAudio, noteFields, currentFields.audio ?? '', {
@@ -1356,10 +1370,24 @@ function rebuildTranscriptList(entries) {
 
     const content = document.createElement('div');
     content.className = 'history-content';
+
+    const textRow = document.createElement('div');
+    textRow.className = 'history-text-row';
     const text = document.createElement('div');
     text.className = 'history-text';
-    text.textContent = entry.text;
-    content.append(text, meta);
+    const unknownWords = entry.learning?.iPlusOne ? (entry.learning?.unknownWords ?? []) : [];
+    appendTranscriptText(text, entry.text, unknownWords);
+    textRow.append(text);
+
+    if (entry.learning?.iPlusOne && unknownWords.length === 1) {
+      const badge = document.createElement('span');
+      badge.className = 'i-plus-one-badge';
+      badge.textContent = 'i+1';
+      badge.title = `Unknown word: ${unknownWords[0]}`;
+      textRow.append(badge);
+    }
+
+    content.append(textRow, meta);
 
     const actions = document.createElement('div');
     actions.className = 'history-actions';
@@ -1379,6 +1407,21 @@ function rebuildTranscriptList(entries) {
       mineButton,
     });
   });
+}
+
+function appendTranscriptText(container, text, unknownWords) {
+  for (const part of buildHighlightedTranscriptParts(text, unknownWords)) {
+    if (!part.unknown) {
+      container.append(document.createTextNode(part.text));
+      continue;
+    }
+
+    const mark = document.createElement('mark');
+    mark.className = 'unknown-word-highlight';
+    mark.textContent = part.text;
+    mark.title = 'Unknown word';
+    container.append(mark);
+  }
 }
 
 function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = renderedEntries, actionsEnabled = true) {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildTranscriptBookmarkKey,
+  buildHighlightedTranscriptParts,
   buildTranscriptStructureSignature,
   computeTranscriptFollowScrollTarget,
   computeTranscriptItemUiState,
@@ -37,6 +38,41 @@ test('active cue changes do not rebuild the transcript list', () => {
   const signature = buildTranscriptStructureSignature(entries);
 
   assert.equal(shouldRebuildTranscriptList(signature, entries), false);
+});
+
+test('i+1 annotation changes rebuild the transcript list so badges render', () => {
+  const entries = [buildCue('cue-1', 'one', 100), buildCue('cue-2', 'two', 200)];
+  const signature = buildTranscriptStructureSignature(entries);
+  const annotated = structuredClone(entries);
+  annotated[1].learning = {
+    unknownWords: ['two'],
+    iPlusOne: true,
+  };
+
+  assert.equal(shouldRebuildTranscriptList(signature, annotated), true);
+});
+
+test('buildHighlightedTranscriptParts marks unknown Chinese words while preserving text', () => {
+  const parts = buildHighlightedTranscriptParts('我喜欢中文。中文很好。', ['中文']);
+
+  assert.deepEqual(parts, [
+    { text: '我喜欢', unknown: false },
+    { text: '中文', unknown: true },
+    { text: '。', unknown: false },
+    { text: '中文', unknown: true },
+    { text: '很好。', unknown: false },
+  ]);
+  assert.equal(parts.map((part) => part.text).join(''), '我喜欢中文。中文很好。');
+});
+
+test('buildHighlightedTranscriptParts normalizes ASCII unknown words', () => {
+  const parts = buildHighlightedTranscriptParts('我喜欢 JavaScript!', ['javascript']);
+
+  assert.deepEqual(parts, [
+    { text: '我喜欢 ', unknown: false },
+    { text: 'JavaScript', unknown: true },
+    { text: '!', unknown: false },
+  ]);
 });
 
 test('pending actions only disable the relevant transcript buttons', () => {

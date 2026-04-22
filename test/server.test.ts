@@ -27,6 +27,8 @@ test('GET /api/state exposes editable settings', async (t) => {
   assert.equal(payload.config.settings.runtime.captureAudio, true);
   assert.equal(payload.config.settings.appearance.subtitleCardFontFamily, '');
   assert.equal(payload.config.settings.appearance.subtitleCardFontSizePx, 0);
+  assert.equal(payload.config.settings.learning.iPlusOneEnabled, true);
+  assert.equal(payload.config.settings.learning.knownWordField, '');
 });
 
 test('GET /api/health returns a lightweight readiness payload', async (t) => {
@@ -82,7 +84,7 @@ test('GET /api/settings/options returns live Anki deck and note type options', a
   assert.equal(response.status, 200);
   assert.deepEqual(payload.options.decks, ['Anime', 'Mining']);
   assert.deepEqual(payload.options.noteTypes, ['Sentence', 'Vocab']);
-  assert.deepEqual(payload.options.noteFields, ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
+  assert.deepEqual(payload.options.noteFields, ['Sentence', 'Word', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
   assert.deepEqual(payload.options.fonts, ['Arial', 'Noto Sans JP']);
   assert.equal(payload.options.selectedDeck, 'Anime');
   assert.equal(payload.options.selectedNoteType, 'Sentence');
@@ -113,7 +115,7 @@ test('GET /api/settings/options falls back to live Anki defaults when configured
   assert.equal(response.status, 200);
   assert.deepEqual(payload.options.decks, ['Anime', 'Mining']);
   assert.deepEqual(payload.options.noteTypes, ['Sentence', 'Vocab']);
-  assert.deepEqual(payload.options.noteFields, ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
+  assert.deepEqual(payload.options.noteFields, ['Sentence', 'Word', 'Audio', 'Picture', 'Source', 'Time', 'Filename']);
   assert.deepEqual(payload.options.fonts, ['Arial', 'Noto Sans JP']);
   assert.equal(payload.options.selectedDeck, 'Anime');
   assert.equal(payload.options.selectedNoteType, 'Sentence');
@@ -133,6 +135,8 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   payload.runtime.captureAudio = false;
   payload.appearance.subtitleCardFontFamily = 'Noto Sans JP';
   payload.appearance.subtitleCardFontSizePx = 20;
+  payload.learning.iPlusOneEnabled = true;
+  payload.learning.knownWordField = 'Expression';
 
   const response = await fetch(`${harness.baseUrl}/api/settings`, {
     method: 'POST',
@@ -150,6 +154,7 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.equal(harness.config.runtime.captureAudio, false);
   assert.equal(harness.config.appearance.subtitleCardFontFamily, 'Noto Sans JP');
   assert.equal(harness.config.appearance.subtitleCardFontSizePx, 20);
+  assert.equal(harness.config.learning.knownWordField, 'Expression');
 
   const configFile = await fs.readFile(harness.configPath, 'utf8');
   assert.match(configFile, /anki_deck=Mining/);
@@ -157,6 +162,7 @@ test('POST /api/settings persists settings and updates in-memory config', async 
   assert.match(configFile, /capture_audio=no/);
   assert.match(configFile, /subtitle_card_font_family=Noto Sans JP/);
   assert.match(configFile, /subtitle_card_font_size_px=20/);
+  assert.match(configFile, /i_plus_one_known_word_field=Expression/);
 });
 
 test('POST /api/settings rejects invalid note field mappings with a 400', async (t) => {
@@ -282,6 +288,90 @@ test('POST /api/session stop preserves the last transcript in state', async (t) 
   const statePayload = await stateResponse.json();
   assert.equal(statePayload.state.session, null);
   assert.equal(statePayload.state.transcript[0]?.text, 'kept after stop');
+});
+
+test('transcript load annotates i+1 lines from the configured known word field', async (t) => {
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: async () => ({
+      status: 'ready',
+      transcript: [
+        buildCue('我喜欢学习', 1000),
+        buildCue('我喜欢中文', 2000),
+        buildCue('我读中文', 3000),
+      ],
+      message: null,
+    }),
+  });
+  harness.config.learning.knownWordField = 'Word';
+  harness.ankiNotes.splice(
+    0,
+    harness.ankiNotes.length,
+    createAnkiNote(1, '', '我'),
+    createAnkiNote(2, '', '喜欢'),
+    createAnkiNote(3, '', '学习'),
+  );
+  await fs.writeFile(
+    harness.configPath,
+    [
+      `anki_url=${harness.config.anki.url}`,
+      'anki_deck=Anime',
+      'anki_note_type=Sentence',
+      'i_plus_one_enabled=yes',
+      'i_plus_one_known_word_field=Word',
+    ].join('\n'),
+    'utf8',
+  );
+
+  await postSession(harness.baseUrl, 'session-1');
+  await waitForLearningStatus(harness.transcriptStore, 'ready');
+
+  const response = await fetch(`${harness.baseUrl}/api/state`);
+  const payload = await response.json();
+
+  assert.equal(payload.state.learningStatus, 'ready');
+  assert.equal(payload.state.transcript[0].learning.iPlusOne, false);
+  assert.deepEqual(payload.state.transcript[0].learning.unknownWords, []);
+  assert.equal(payload.state.transcript[1].learning.iPlusOne, true);
+  assert.deepEqual(payload.state.transcript[1].learning.unknownWords, ['中文']);
+  assert.equal(payload.state.transcript[2].learning.iPlusOne, false);
+  assert.deepEqual(
+    harness.ankiRequests
+      .map((request) => request.action)
+      .filter((action) => ['findNotes', 'notesInfo'].includes(action)),
+    ['findNotes', 'notesInfo'],
+  );
+});
+
+test('Anki failures produce a non-blocking learning error', async (t) => {
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: async () => ({
+      status: 'ready',
+      transcript: [buildCue('我喜欢中文', 1000)],
+      message: null,
+    }),
+  });
+  harness.config.learning.knownWordField = 'Word';
+  harness.config.anki.url = 'http://127.0.0.1:1';
+  await fs.writeFile(
+    harness.configPath,
+    [
+      'anki_url=http://127.0.0.1:1',
+      'anki_deck=Anime',
+      'anki_note_type=Sentence',
+      'i_plus_one_enabled=yes',
+      'i_plus_one_known_word_field=Word',
+    ].join('\n'),
+    'utf8',
+  );
+
+  await postSession(harness.baseUrl, 'session-1');
+  await waitForLearningStatus(harness.transcriptStore, 'error');
+
+  const state = harness.transcriptStore.getState();
+  assert.equal(state.transcriptStatus, 'ready');
+  assert.equal(state.learningStatus, 'error');
+  assert.match(state.learningMessage ?? '', /fetch failed|ECONNREFUSED|bad port/i);
+  assert.equal(state.transcript[0]?.text, '我喜欢中文');
 });
 
 test('delayed transcript results cannot overwrite a newer session', async (t) => {
@@ -1016,7 +1106,7 @@ async function createServerHarness(
       result =
         payload.params?.modelName === 'Vocab'
           ? ['Expression', 'Meaning', 'Audio']
-          : ['Sentence', 'Audio', 'Picture', 'Source', 'Time', 'Filename'];
+          : ['Sentence', 'Word', 'Audio', 'Picture', 'Source', 'Time', 'Filename'];
     } else if (action === 'findNotes') {
       result = ankiNotes.map((note) => note.noteId);
     } else if (action === 'notesInfo') {
@@ -1118,6 +1208,22 @@ function flushPromises(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+async function waitForLearningStatus(
+  transcriptStore: TranscriptStore,
+  status: 'disabled' | 'loading' | 'ready' | 'error',
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 1000) {
+    if (transcriptStore.getState().learningStatus === status) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  assert.equal(transcriptStore.getState().learningStatus, status);
+}
+
 function buildExternalTrack(sessionId: string, trackId = 1): SubtitleTrackPayload {
   return {
     sessionId,
@@ -1164,11 +1270,12 @@ async function postSession(baseUrl: string, sessionId: string, subtitleTrack = b
   assert.equal(response.status, 200);
 }
 
-function createAnkiNote(noteId: number, sentence: string) {
+function createAnkiNote(noteId: number, sentence: string, word = '') {
   return {
     noteId,
     fields: {
       Sentence: { value: sentence },
+      Word: { value: word },
       Audio: { value: '' },
       Picture: { value: '' },
       Source: { value: '' },

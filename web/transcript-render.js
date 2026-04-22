@@ -3,6 +3,9 @@ import { buildHistoryEntryKey, isHistorySelectionToggleAllowed } from './history
 const DEFAULT_TRANSCRIPT_SCROLL_TOP_PADDING_PX = 16;
 const DEFAULT_TRANSCRIPT_SCROLL_BOTTOM_PADDING_MIN_PX = 120;
 const DEFAULT_TRANSCRIPT_SCROLL_BOTTOM_PADDING_MAX_PX = 240;
+const WORD_SEGMENTER = typeof Intl?.Segmenter === 'function'
+  ? new Intl.Segmenter('zh', { granularity: 'word' })
+  : null;
 
 export function buildTranscriptStructureSignature(entries) {
   return entries
@@ -13,6 +16,8 @@ export function buildTranscriptStructureSignature(entries) {
         entry.text,
         entry.startMs ?? 'nil',
         entry.endMs ?? 'nil',
+        entry.learning?.iPlusOne ? 'i+1' : '',
+        (entry.learning?.unknownWords ?? []).join(','),
       ].join('::'),
     )
     .join('|');
@@ -56,6 +61,24 @@ export function shouldHandleTranscriptBookmarkShortcut({
 
   const tagName = targetTagName.toUpperCase();
   return !targetIsContentEditable && !['INPUT', 'SELECT', 'TEXTAREA'].includes(tagName);
+}
+
+export function buildHighlightedTranscriptParts(text, unknownWords = []) {
+  const unknownWordSet = new Set(unknownWords.map(normalizeLearningToken).filter(Boolean));
+  if (unknownWordSet.size === 0 || !WORD_SEGMENTER) {
+    return [{ text: String(text ?? ''), unknown: false }];
+  }
+
+  const parts = [];
+  for (const segment of WORD_SEGMENTER.segment(String(text ?? ''))) {
+    const normalized = segment.isWordLike ? normalizeLearningToken(segment.segment) : '';
+    parts.push({
+      text: segment.segment,
+      unknown: Boolean(normalized && unknownWordSet.has(normalized)),
+    });
+  }
+
+  return mergeAdjacentTranscriptParts(parts);
 }
 
 export function computeTranscriptItemUiState(
@@ -118,4 +141,27 @@ function clamp(value, min, max) {
 
 function normalizeBookmarkText(text) {
   return String(text ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function mergeAdjacentTranscriptParts(parts) {
+  const merged = [];
+  for (const part of parts) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.unknown === part.unknown) {
+      previous.text += part.text;
+      continue;
+    }
+
+    merged.push({ ...part });
+  }
+
+  return merged;
+}
+
+function normalizeLearningToken(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/^[\p{P}\p{S}\s]+|[\p{P}\p{S}\s]+$/gu, '')
+    .replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }

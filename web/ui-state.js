@@ -17,9 +17,11 @@ export function shouldRefreshSettingsOptions(settingsModalOpen, settingsOptionsL
 export function buildTranscriptStatusLabel(transcriptState) {
   const status = transcriptState?.transcriptStatus ?? 'unavailable';
   const message = transcriptState?.transcriptMessage?.trim() ?? '';
+  const learningStatus = transcriptState?.learningStatus ?? 'disabled';
+  const learningMessage = transcriptState?.learningMessage?.trim() ?? '';
 
   if (status === 'ready') {
-    return message;
+    return learningStatus === 'disabled' ? message : (learningMessage || message);
   }
 
   if (status === 'loading') {

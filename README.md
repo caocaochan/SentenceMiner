@@ -23,6 +23,7 @@ The packaged zip is the recommended Windows download. It includes a self-contain
 - keeps the active transcript visible in a browser
 - auto-starts the helper on Windows when `mpv` loads a file
 - updates an existing Anki note only when its sentence matches the mined subtitle text
+- marks transcript lines as `i+1` when exactly one segmented word is not in the configured known-word field
 - returns an error when no existing sentence matches
 - replaces configured subtitle, audio, and image fields
 - supports configurable deck, note type, field names, image sizing, image format, and audio padding
@@ -72,6 +73,8 @@ The helper starts automatically on first playback. You should not need to run `S
 - `capture_image_include_subtitles`
 - `subtitle_card_font_family`
 - `subtitle_card_font_size_px`
+- `i_plus_one_enabled`
+- `i_plus_one_known_word_field`
 - `helper_url`
 - `helper_timeout_ms`
 - `helper_auto_start`
@@ -112,6 +115,7 @@ node scripts/package-release.mjs
 - The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, and `ffmpeg.exe.README` inside `mpv/scripts/sentenceminer-helper/`.
 - v1 keeps the active transcript in memory only.
 - v1 only tracks the primary active subtitle.
+- i+1 analysis uses the configured Anki deck and note type, reads known words from `i_plus_one_known_word_field`, and uses Node's Chinese `Intl.Segmenter` word segmentation.
 - SentenceMiner first looks for matching notes returned by the configured deck, note type, and extra query.
 - Mining is blocked unless the configured deck, note type, and mapped fields currently exist in Anki.
 - SentenceMiner only inspects the newest note returned by the configured deck, note type, and extra query.

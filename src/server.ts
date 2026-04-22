@@ -22,6 +22,7 @@ import {
   saveEditableSettings,
 } from './config.ts';
 import { listInstalledFonts } from './fonts.ts';
+import { analyzeTranscriptLearning } from './learning-analysis.ts';
 import { parseParentPidArg, startParentWatch } from './parent-watch.ts';
 import { PlayerCommandStore } from './player-command-store.ts';
 import { loadSubtitleTranscript, type SubtitleTranscriptResult } from './subtitle-transcript.ts';
@@ -259,6 +260,7 @@ export async function routeRequest(
     replaceConfig(context.config, applyEditableSettings(context.config, settings));
     context.settingsOptionsCache?.clear();
     broadcastState(context.config, context.transcriptStore, context.sockets);
+    scheduleLearningAnalysis(context);
 
     respondJson(response, 200, buildStatePayload(context.config, context.transcriptStore));
     return;
@@ -615,6 +617,9 @@ async function syncTranscriptTrack(context: ServerContext, track: SubtitleTrackP
   }
 
   broadcastState(context.config, context.transcriptStore, context.sockets);
+  if (result.status === 'ready') {
+    scheduleLearningAnalysis(context);
+  }
 }
 
 function isActiveSubtitleTrack(transcriptStore: TranscriptStore, track: SubtitleTrackPayload): boolean {
@@ -638,6 +643,71 @@ function subtitleTrackKey(track: SubtitleTrackPayload): string {
     track.codec ?? '',
     track.title ?? '',
     track.lang ?? '',
+  ].join('::');
+}
+
+function scheduleLearningAnalysis(context: ServerContext): void {
+  const state = context.transcriptStore.getState();
+  if (state.transcript.length === 0) {
+    return;
+  }
+
+  if (!context.config.learning.iPlusOneEnabled) {
+    context.transcriptStore.setLearningDisabled(null);
+    broadcastState(context.config, context.transcriptStore, context.sockets);
+    return;
+  }
+
+  const analysisKey = buildLearningAnalysisKey(context);
+  if (!analysisKey) {
+    return;
+  }
+
+  context.transcriptStore.setLearningLoading();
+  broadcastState(context.config, context.transcriptStore, context.sockets);
+
+  void runLearningAnalysis(context, analysisKey).catch((error) => {
+    if (buildLearningAnalysisKey(context) !== analysisKey) {
+      return;
+    }
+
+    context.transcriptStore.setLearningError(error instanceof Error ? error.message : String(error));
+    broadcastState(context.config, context.transcriptStore, context.sockets);
+  });
+}
+
+async function runLearningAnalysis(context: ServerContext, analysisKey: string): Promise<void> {
+  const transcript = context.transcriptStore.getState().transcript;
+  const result = await analyzeTranscriptLearning(context.config.anki, context.config.learning, transcript);
+  if (buildLearningAnalysisKey(context) !== analysisKey) {
+    return;
+  }
+
+  const message =
+    result.iPlusOneCount === 1
+      ? '1 i+1 line found.'
+      : `${result.iPlusOneCount} i+1 lines found.`;
+  context.transcriptStore.setLearningReady(result.annotations, message);
+  broadcastState(context.config, context.transcriptStore, context.sockets);
+}
+
+function buildLearningAnalysisKey(context: ServerContext): string | null {
+  const state = context.transcriptStore.getState();
+  if (state.transcript.length === 0) {
+    return null;
+  }
+
+  return [
+    state.session?.sessionId ?? '',
+    state.session?.subtitleTrack ? subtitleTrackKey(state.session.subtitleTrack) : '',
+    context.config.anki.url,
+    context.config.anki.apiKey ?? '',
+    context.config.anki.deck,
+    context.config.anki.noteType,
+    context.config.anki.extraQuery ?? '',
+    context.config.learning.iPlusOneEnabled ? 'enabled' : 'disabled',
+    context.config.learning.knownWordField,
+    state.transcript.map((cue) => [cue.id, cue.orderIndex, cue.startMs, cue.endMs, cue.text].join(':')).join('|'),
   ].join('::');
 }
 
@@ -720,6 +790,7 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
   const capture = getRecord(root.capture, 'capture');
   const runtime = getRecord(root.runtime, 'runtime');
   const appearance = getRecord(root.appearance, 'appearance');
+  const learning = root.learning == null ? {} : getRecord(root.learning, 'learning');
 
   return {
     anki: {
@@ -756,6 +827,16 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
       subtitleCardFontFamily: getString(appearance.subtitleCardFontFamily, 'appearance.subtitleCardFontFamily'),
       subtitleCardFontSizePx: getInteger(appearance.subtitleCardFontSizePx, 'appearance.subtitleCardFontSizePx'),
     },
+    learning: {
+      iPlusOneEnabled:
+        learning.iPlusOneEnabled == null
+          ? false
+          : getBoolean(learning.iPlusOneEnabled, 'learning.iPlusOneEnabled'),
+      knownWordField:
+        learning.knownWordField == null
+          ? ''
+          : getString(learning.knownWordField, 'learning.knownWordField'),
+    },
   };
 }
 
@@ -789,6 +870,7 @@ async function validateEditableSettings(config: AppConfig, settings: EditableSet
     ['source', settings.anki.fields.source ?? ''],
     ['time', settings.anki.fields.time ?? ''],
     ['filename', settings.anki.fields.filename ?? ''],
+    ['known word', settings.learning.knownWordField],
   ] as const;
 
   for (const [fieldKey, fieldName] of fieldEntries) {
@@ -811,6 +893,7 @@ function replaceConfig(target: AppConfig, next: AppConfig): void {
   target.capture = next.capture;
   target.runtime = next.runtime;
   target.appearance = next.appearance;
+  target.learning = next.learning;
 }
 
 async function refreshConfigFromDisk(context: ServerContext): Promise<void> {

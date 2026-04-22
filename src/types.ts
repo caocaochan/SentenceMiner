@@ -1,5 +1,6 @@
 export type SessionAction = 'start' | 'stop';
 export type TranscriptStatus = 'loading' | 'ready' | 'unavailable' | 'error';
+export type LearningStatus = 'disabled' | 'loading' | 'ready' | 'error';
 export type SubtitleTrackKind = 'external' | 'embedded' | 'none';
 
 export interface SubtitleTrackPayload {
@@ -53,6 +54,11 @@ export interface FieldMapping {
   filename?: string;
 }
 
+export interface LearningConfig {
+  iPlusOneEnabled: boolean;
+  knownWordField: string;
+}
+
 export interface AnkiConfig {
   url: string;
   apiKey?: string;
@@ -100,6 +106,7 @@ export interface AppConfig {
   capture: CaptureConfig;
   runtime: RuntimeConfig;
   appearance: AppearanceConfig;
+  learning: LearningConfig;
 }
 
 export interface EditableAnkiSettings {
@@ -120,6 +127,7 @@ export interface EditableSettings {
   capture: CaptureConfig;
   runtime: EditableRuntimeSettings;
   appearance: AppearanceConfig;
+  learning: LearningConfig;
 }
 
 export interface SettingsOptions {
@@ -150,6 +158,12 @@ export interface SettingsOptionsPayload {
 export interface TranscriptCue extends SubtitleEventPayload {
   id: string;
   orderIndex: number;
+  learning?: TranscriptCueLearning;
+}
+
+export interface TranscriptCueLearning {
+  unknownWords: string[];
+  iPlusOne: boolean;
 }
 
 export interface TranscriptState {
@@ -166,6 +180,8 @@ export interface TranscriptState {
   currentCueId: string | null;
   transcriptStatus: TranscriptStatus;
   transcriptMessage: string | null;
+  learningStatus: LearningStatus;
+  learningMessage: string | null;
 }
 
 export interface MineResult {

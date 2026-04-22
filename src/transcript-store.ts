@@ -3,6 +3,7 @@ import type {
   SubtitleEventPayload,
   SubtitleTrackPayload,
   TranscriptCue,
+  TranscriptCueLearning,
   TranscriptState,
   TranscriptStatus,
 } from './types.ts';
@@ -16,6 +17,8 @@ export class TranscriptStore {
     currentCueId: null,
     transcriptStatus: 'unavailable',
     transcriptMessage: 'No active subtitle track is selected.',
+    learningStatus: 'disabled',
+    learningMessage: null,
   };
   #transcriptByStart: TranscriptCue[] = [];
 
@@ -34,6 +37,8 @@ export class TranscriptStore {
       currentCueId: null,
       transcriptStatus: 'loading',
       transcriptMessage: 'Loading active subtitle track…',
+      learningStatus: 'disabled',
+      learningMessage: null,
     };
     this.#transcriptByStart = [];
 
@@ -69,6 +74,8 @@ export class TranscriptStore {
       currentCueId: null,
       transcriptStatus: 'unavailable',
       transcriptMessage: 'No active subtitle track is selected.',
+      learningStatus: 'disabled',
+      learningMessage: null,
     };
     this.#transcriptByStart = [];
 
@@ -105,6 +112,8 @@ export class TranscriptStore {
     this.#state.transcriptStatus = 'loading';
     this.#state.transcriptMessage =
       track.kind === 'none' ? 'No active subtitle track is selected.' : 'Loading active subtitle track…';
+    this.#state.learningStatus = 'disabled';
+    this.#state.learningMessage = null;
     return this.getState();
   }
 
@@ -118,13 +127,15 @@ export class TranscriptStore {
       filePath: track.filePath,
       subtitleTrack: { ...track },
     };
-    this.#state.transcript = transcript.map((cue) => ({ ...cue }));
-    this.#state.history = this.#state.transcript.map((cue) => ({ ...cue }));
+    this.#state.transcript = transcript.map(cloneCueWithoutLearning);
+    this.#state.history = this.#state.transcript.map(cloneCue);
     this.#transcriptByStart = [...this.#state.transcript].sort((left, right) =>
       left.startMs === right.startMs ? left.endMs - right.endMs : left.startMs - right.startMs,
     );
     this.#state.transcriptStatus = 'ready';
     this.#state.transcriptMessage = null;
+    this.#state.learningStatus = 'disabled';
+    this.#state.learningMessage = null;
     this.#state.currentCueId = matchTranscriptCueId(
       this.#transcriptByStart,
       this.#state.currentSubtitle,
@@ -140,6 +151,51 @@ export class TranscriptStore {
         },
       );
     }
+    return this.getState();
+  }
+
+  setLearningLoading(message = 'Analyzing transcript for i+1 lines…'): TranscriptState {
+    if (this.#state.transcript.length === 0) {
+      return this.getState();
+    }
+
+    this.#clearLearningAnnotations();
+    this.#state.learningStatus = 'loading';
+    this.#state.learningMessage = message;
+    return this.getState();
+  }
+
+  setLearningDisabled(message: string | null = null): TranscriptState {
+    this.#clearLearningAnnotations();
+    this.#state.learningStatus = 'disabled';
+    this.#state.learningMessage = message;
+    return this.getState();
+  }
+
+  setLearningReady(annotations: Map<string, TranscriptCueLearning>, message: string | null = null): TranscriptState {
+    const applyAnnotation = (cue: TranscriptCue): TranscriptCue => {
+      const learning = annotations.get(cue.id);
+      return {
+        ...cue,
+        learning: {
+          unknownWords: learning ? [...learning.unknownWords] : [],
+          iPlusOne: learning?.iPlusOne ?? false,
+        },
+      };
+    };
+
+    this.#state.transcript = this.#state.transcript.map(applyAnnotation);
+    this.#state.history = this.#state.history.map(applyAnnotation);
+    this.#transcriptByStart = this.#transcriptByStart.map(applyAnnotation);
+    this.#state.learningStatus = 'ready';
+    this.#state.learningMessage = message;
+    return this.getState();
+  }
+
+  setLearningError(message: string): TranscriptState {
+    this.#clearLearningAnnotations();
+    this.#state.learningStatus = 'error';
+    this.#state.learningMessage = message;
     return this.getState();
   }
 
@@ -188,11 +244,13 @@ export class TranscriptStore {
           }
         : null,
       currentSubtitle: this.#state.currentSubtitle ? { ...this.#state.currentSubtitle } : null,
-      transcript: this.#state.transcript.map((cue) => ({ ...cue })),
-      history: this.#state.history.map((cue) => ({ ...cue })),
+      transcript: this.#state.transcript.map(cloneCue),
+      history: this.#state.history.map(cloneCue),
       currentCueId: this.#state.currentCueId,
       transcriptStatus: this.#state.transcriptStatus,
       transcriptMessage: this.#state.transcriptMessage,
+      learningStatus: this.#state.learningStatus,
+      learningMessage: this.#state.learningMessage,
     };
   }
 
@@ -225,8 +283,33 @@ export class TranscriptStore {
     this.#state.currentCueId = null;
     this.#state.transcriptStatus = status;
     this.#state.transcriptMessage = message;
+    this.#state.learningStatus = 'disabled';
+    this.#state.learningMessage = null;
     return this.getState();
   }
+
+  #clearLearningAnnotations(): void {
+    this.#state.transcript = this.#state.transcript.map(cloneCueWithoutLearning);
+    this.#state.history = this.#state.history.map(cloneCueWithoutLearning);
+    this.#transcriptByStart = this.#transcriptByStart.map(cloneCueWithoutLearning);
+  }
+}
+
+function cloneCue(cue: TranscriptCue): TranscriptCue {
+  return {
+    ...cue,
+    learning: cue.learning
+      ? {
+          unknownWords: [...cue.learning.unknownWords],
+          iPlusOne: cue.learning.iPlusOne,
+        }
+      : undefined,
+  };
+}
+
+function cloneCueWithoutLearning(cue: TranscriptCue): TranscriptCue {
+  const { learning: _learning, ...rest } = cue;
+  return { ...rest };
 }
 
 function buildMissingTrackPayload(payload: SessionPayload): SubtitleTrackPayload {

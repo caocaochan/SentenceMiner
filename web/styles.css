@@ -434,13 +434,44 @@ h3 {
   gap: 6px;
 }
 
+.history-text-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .history-text {
+  min-width: 0;
   color: var(--text);
   font-family: var(--subtitle-card-font-family);
   font-size: var(--subtitle-card-font-size);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.i-plus-one-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(var(--green-rgb), 0.52);
+  border-radius: var(--radius);
+  background: rgba(var(--green-rgb), 0.14);
+  color: var(--green);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.unknown-word-highlight {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: rgba(var(--amber-rgb), 0.24);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 rgba(var(--amber-rgb), 0.72);
 }
 
 .history-actions {
