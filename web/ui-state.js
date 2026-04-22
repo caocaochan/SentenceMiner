@@ -75,3 +75,12 @@ export function resolveTranscriptFilePath(transcriptState) {
   const entries = transcriptState?.transcript ?? transcriptState?.history ?? [];
   return entries.find((entry) => entry?.filePath?.trim())?.filePath?.trim() ?? '';
 }
+
+export function resolveTranscriptFileName(filePath) {
+  const normalizedFilePath = filePath?.trim() ?? '';
+  if (!normalizedFilePath) {
+    return '';
+  }
+
+  return normalizedFilePath.split(/[\\/]/).filter(Boolean).at(-1) ?? normalizedFilePath;
+}

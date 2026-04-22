@@ -16,6 +16,7 @@ import {
 } from './transcript-render.js';
 import {
   buildTranscriptEmptyState,
+  resolveTranscriptFileName,
   buildTranscriptStatusLabel,
   resolveTranscriptFilePath,
   resolveThemePreference,
@@ -352,7 +353,7 @@ function renderTranscript() {
     state.connection === 'live' ? 'Live' : state.connection === 'offline' ? 'Reconnecting' : 'Connecting';
   elements.connectionPill.className = `status-pill ${state.connection === 'live' ? 'status-pill-success' : 'status-pill-muted'}`;
   const filePath = resolveTranscriptFilePath(transcriptState);
-  elements.fileName.textContent = filePath || 'No file loaded';
+  elements.fileName.textContent = resolveTranscriptFileName(filePath) || 'No file loaded';
   elements.fileName.title = filePath;
   elements.fileName.tabIndex = filePath ? 0 : -1;
   elements.historyCount.textContent = `${transcriptEntries.length} ${transcriptEntries.length === 1 ? 'line' : 'lines'}`;

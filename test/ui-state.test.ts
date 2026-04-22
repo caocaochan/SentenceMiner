@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildTranscriptEmptyState,
+  resolveTranscriptFileName,
   resolveTranscriptFilePath,
   resolveThemePreference,
   shouldRefreshSettingsOptions,
@@ -69,4 +70,10 @@ test('resolveTranscriptFilePath falls back to retained transcript entries', () =
     }),
     'episode.mkv',
   );
+});
+
+test('resolveTranscriptFileName shows only the file segment', () => {
+  assert.equal(resolveTranscriptFileName('I:\\Series\\Story.of.Kunning.Palace.S01.2023.1080p.mkv'), 'Story.of.Kunning.Palace.S01.2023.1080p.mkv');
+  assert.equal(resolveTranscriptFileName('/mnt/media/episode.ass'), 'episode.ass');
+  assert.equal(resolveTranscriptFileName('episode.mkv'), 'episode.mkv');
 });
