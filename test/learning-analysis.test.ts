@@ -8,6 +8,7 @@ import path from 'node:path';
 import {
   analyzeTranscriptLearning,
   normalizeLearningToken,
+  setLacSegmenterFactoryForTesting,
   tokenizeText,
 } from '../src/learning-analysis.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
@@ -114,6 +115,96 @@ test('analyzeTranscriptLearning can use bundled Jieba tokenization', async (t) =
     { start: 1, end: 2 },
     { start: 2, end: 4 },
   ]);
+});
+
+test('analyzeTranscriptLearning can use Baidu LAC tokenization', async (t) => {
+  const notes = [
+    createAnkiNote(1, '我'),
+    createAnkiNote(2, '喜欢'),
+    createAnkiNote(3, '学习'),
+  ];
+  const server = createFakeAnkiServer(notes);
+  await listen(server);
+  t.after(() => {
+    setLacSegmenterFactoryForTesting(null);
+    return closeServer(server);
+  });
+
+  setLacSegmenterFactoryForTesting(() => ({
+    async segmentBatch(texts: string[]) {
+      return texts.map((text) => {
+        if (text === '我喜欢学习') {
+          return ['我', '喜欢', '学习'];
+        }
+        if (text === '我喜欢中文') {
+          return ['我', '喜欢', '中文'];
+        }
+        if (text === '我看中文') {
+          return ['我', '看', '中文'];
+        }
+
+        return [text];
+      });
+    },
+    dispose() {},
+  }));
+
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.anki.url = `http://127.0.0.1:${address.port}`;
+  config.learning.knownWordField = 'Word';
+  config.learning.tokenizer = 'lac';
+
+  const result = await analyzeTranscriptLearning(config.anki, config.learning, [
+    buildCue('known', '我喜欢学习'),
+    buildCue('one-unknown', '我喜欢中文'),
+    buildCue('two-unknown', '我看中文'),
+  ]);
+
+  assert.equal(result.annotations.get('known')?.iPlusOne, false);
+  assert.deepEqual(result.annotations.get('known')?.unknownWords, []);
+  assert.equal(result.annotations.get('one-unknown')?.iPlusOne, true);
+  assert.deepEqual(result.annotations.get('one-unknown')?.unknownWords, ['中文']);
+  assert.deepEqual(result.annotations.get('one-unknown')?.unknownWordRanges, [{ start: 3, end: 5 }]);
+  assert.equal(result.annotations.get('two-unknown')?.iPlusOne, false);
+  assert.deepEqual(result.annotations.get('two-unknown')?.unknownWords, ['看', '中文']);
+  assert.deepEqual(result.annotations.get('two-unknown')?.unknownWordRanges, [
+    { start: 1, end: 2 },
+    { start: 2, end: 4 },
+  ]);
+});
+
+test('analyzeTranscriptLearning reports missing Baidu LAC Python setup', async (t) => {
+  const notes = [createAnkiNote(1, '我')];
+  const server = createFakeAnkiServer(notes);
+  await listen(server);
+  const originalPython = process.env.SENTENCEMINER_LAC_PYTHON;
+
+  t.after(async () => {
+    await closeServer(server);
+    if (originalPython === undefined) {
+      delete process.env.SENTENCEMINER_LAC_PYTHON;
+    } else {
+      process.env.SENTENCEMINER_LAC_PYTHON = originalPython;
+    }
+  });
+
+  process.env.SENTENCEMINER_LAC_PYTHON = 'sentenceminer-missing-python-for-lac-tests';
+
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.anki.url = `http://127.0.0.1:${address.port}`;
+  config.learning.knownWordField = 'Word';
+  config.learning.tokenizer = 'lac';
+
+  await assert.rejects(
+    () => analyzeTranscriptLearning(config.anki, config.learning, [buildCue('one-unknown', '我喜欢中文')]),
+    /Unable to start Baidu LAC tokenizer|Baidu LAC tokenizer process exited/,
+  );
 });
 
 test('analyzeTranscriptLearning reports missing explicit Jieba assets', async (t) => {

@@ -837,6 +837,10 @@ function parseEditableSettingsPayload(payload: unknown): EditableSettings {
         learning.knownWordField == null
           ? ''
           : getString(learning.knownWordField, 'learning.knownWordField'),
+      tokenizer:
+        learning.tokenizer == null
+          ? 'jieba'
+          : getLearningTokenizer(learning.tokenizer, 'learning.tokenizer'),
     },
   };
 }
@@ -1035,6 +1039,15 @@ function getBoolean(value: unknown, fieldName: string): boolean {
   }
 
   return value;
+}
+
+function getLearningTokenizer(value: unknown, fieldName: string): EditableSettings['learning']['tokenizer'] {
+  const tokenizer = getString(value, fieldName, { allowEmpty: false });
+  if (tokenizer === 'jieba' || tokenizer === 'intl' || tokenizer === 'lac') {
+    return tokenizer;
+  }
+
+  throw new HttpError(400, `${fieldName} must be "jieba", "intl", or "lac".`);
 }
 
 function getNullableInteger(value: unknown, fieldName: string): number | null {

@@ -113,6 +113,7 @@ export function getEditableSettings(config: AppConfig): EditableSettings {
     learning: {
       iPlusOneEnabled: config.learning.iPlusOneEnabled,
       knownWordField: config.learning.knownWordField,
+      tokenizer: config.learning.tokenizer,
     },
   };
 }
@@ -147,6 +148,7 @@ export function applyEditableSettings(config: AppConfig, settings: EditableSetti
       ...config.learning,
       iPlusOneEnabled: settings.learning.iPlusOneEnabled,
       knownWordField: settings.learning.knownWordField,
+      tokenizer: settings.learning.tokenizer,
     },
   });
 }
@@ -550,7 +552,7 @@ function parseBoolean(key: string, value: string): boolean {
 
 function parseLearningTokenizer(key: string, value: string): LearningTokenizerProvider {
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'jieba' || normalized === 'intl') {
+  if (normalized === 'jieba' || normalized === 'intl' || normalized === 'lac') {
     return normalized;
   }
 
@@ -635,6 +637,7 @@ const EDITABLE_CONFIG_ENTRIES: EditableConfigEntry[] = [
   { key: 'subtitle_card_font_size_px', value: (settings) => String(settings.appearance.subtitleCardFontSizePx) },
   { key: 'i_plus_one_enabled', value: (settings) => serializeBoolean(settings.learning.iPlusOneEnabled) },
   { key: 'i_plus_one_known_word_field', value: (settings) => settings.learning.knownWordField },
+  { key: 'i_plus_one_tokenizer', value: (settings) => settings.learning.tokenizer },
 ];
 
 export function mergeEditableSettingsIntoConfig(existingContent: string, settings: EditableSettings): string {
