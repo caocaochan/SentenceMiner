@@ -134,12 +134,7 @@ async function loadKnownWordValues(anki: AnkiConfig, knownWordField: string): Pr
 
 function buildKnownWords(values: string[], tokenLists: string[][]): Set<string> {
   const knownWords = new Set<string>();
-  for (const [index, value] of values.entries()) {
-    const normalizedValue = normalizeLearningToken(value);
-    if (normalizedValue) {
-      knownWords.add(normalizedValue);
-    }
-
+  for (const index of values.keys()) {
     for (const token of tokenLists[index] ?? []) {
       knownWords.add(token);
     }

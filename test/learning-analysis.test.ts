@@ -53,6 +53,31 @@ test('analyzeTranscriptLearning marks only exactly one unique unknown word as i+
   assert.deepEqual(result.annotations.get('duplicate-unknown')?.unknownWords, ['中文']);
 });
 
+test('analyzeTranscriptLearning tokenizes sentence values from the known word field', async (t) => {
+  const notes = [createAnkiNote(1, '我喜欢学习')];
+  const server = createFakeAnkiServer(notes);
+  await listen(server);
+  t.after(() => closeServer(server));
+
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.anki.url = `http://127.0.0.1:${address.port}`;
+  config.learning.knownWordField = 'Word';
+  config.learning.tokenizer = 'intl';
+
+  const result = await analyzeTranscriptLearning(config.anki, config.learning, [
+    buildCue('known', '我喜欢学习'),
+    buildCue('one-unknown', '我喜欢中文'),
+  ]);
+
+  assert.equal(result.annotations.get('known')?.iPlusOne, false);
+  assert.deepEqual(result.annotations.get('known')?.unknownWords, []);
+  assert.equal(result.annotations.get('one-unknown')?.iPlusOne, true);
+  assert.deepEqual(result.annotations.get('one-unknown')?.unknownWords, ['中文']);
+});
+
 test('analyzeTranscriptLearning can use bundled Jieba tokenization', async (t) => {
   const notes = [
     createAnkiNote(1, '我'),
