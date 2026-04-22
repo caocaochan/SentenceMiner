@@ -54,9 +54,12 @@ export interface FieldMapping {
   filename?: string;
 }
 
+export type LearningTokenizerProvider = 'jieba' | 'intl';
+
 export interface LearningConfig {
   iPlusOneEnabled: boolean;
   knownWordField: string;
+  tokenizer: LearningTokenizerProvider;
 }
 
 export interface AnkiConfig {
@@ -122,12 +125,17 @@ export interface EditableRuntimeSettings {
   captureImage: boolean;
 }
 
+export interface EditableLearningSettings {
+  iPlusOneEnabled: boolean;
+  knownWordField: string;
+}
+
 export interface EditableSettings {
   anki: EditableAnkiSettings;
   capture: CaptureConfig;
   runtime: EditableRuntimeSettings;
   appearance: AppearanceConfig;
-  learning: LearningConfig;
+  learning: EditableLearningSettings;
 }
 
 export interface SettingsOptions {

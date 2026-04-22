@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import type { AppConfig, EditableSettings } from './types.ts';
+import type { AppConfig, EditableSettings, LearningTokenizerProvider } from './types.ts';
 
 export const DEFAULT_CONFIG: AppConfig = {
   server: {
@@ -51,6 +51,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   learning: {
     iPlusOneEnabled: true,
     knownWordField: '',
+    tokenizer: 'jieba',
   },
 };
 
@@ -472,6 +473,12 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
         knownWordField: value,
       };
       return;
+    case 'i_plus_one_tokenizer':
+      config.learning = {
+        ...config.learning,
+        tokenizer: parseLearningTokenizer(key, value),
+      };
+      return;
     case 'ffmpeg_path':
       config.runtime = {
         ...config.runtime,
@@ -539,6 +546,15 @@ function parseBoolean(key: string, value: string): boolean {
   }
 
   throw new Error(`Invalid boolean value for ${key}: ${value}`);
+}
+
+function parseLearningTokenizer(key: string, value: string): LearningTokenizerProvider {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'jieba' || normalized === 'intl') {
+    return normalized;
+  }
+
+  throw new Error(`Invalid tokenizer value for ${key}: ${value}`);
 }
 
 function isDefaultFfmpegCommand(value: string): boolean {

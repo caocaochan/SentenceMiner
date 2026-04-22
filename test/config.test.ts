@@ -153,6 +153,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
       'subtitle_card_font_size_px=22',
       'i_plus_one_enabled=no',
       'i_plus_one_known_word_field=Word',
+      'i_plus_one_tokenizer=intl',
     ].join('\n'),
     'utf8',
   );
@@ -175,7 +176,29 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.appearance.subtitleCardFontSizePx, 22);
   assert.equal(config.learning.iPlusOneEnabled, false);
   assert.equal(config.learning.knownWordField, 'Word');
+  assert.equal(config.learning.tokenizer, 'intl');
   assert.equal(config.server.host, '127.0.0.1');
+});
+
+test('loadConfig rejects invalid i+1 tokenizer values', async (t) => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sentenceminer-config-tokenizer-'));
+  const configPath = path.join(tempRoot, 'sentenceminer.conf');
+  const originalConfig = process.env.SENTENCEMINER_CONFIG;
+
+  t.after(async () => {
+    if (originalConfig === undefined) {
+      delete process.env.SENTENCEMINER_CONFIG;
+    } else {
+      process.env.SENTENCEMINER_CONFIG = originalConfig;
+    }
+
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  await fs.writeFile(configPath, 'i_plus_one_tokenizer=hanlp\n', 'utf8');
+  process.env.SENTENCEMINER_CONFIG = configPath;
+
+  await assert.rejects(() => loadConfig([]), /Invalid tokenizer value for i_plus_one_tokenizer/);
 });
 
 test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates managed keys', () => {
@@ -185,6 +208,7 @@ test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates mana
       'helper_url=http://127.0.0.1:8766',
       'anki_deck=Anime',
       'anki_note_type=Sentence',
+      'i_plus_one_tokenizer=intl',
       '; keep me',
       'capture_audio=yes',
     ].join('\n'),
@@ -205,6 +229,7 @@ test('mergeEditableSettingsIntoConfig preserves unrelated lines and updates mana
   assert.match(merged, /helper_url=http:\/\/127\.0\.0\.1:8766/);
   assert.match(merged, /anki_deck=Mining/);
   assert.match(merged, /anki_note_type=Target/);
+  assert.match(merged, /i_plus_one_tokenizer=intl/);
   assert.match(merged, /; keep me/);
   assert.match(merged, /capture_audio=no/);
 });
@@ -223,6 +248,7 @@ test('mergeEditableSettingsIntoConfig appends missing managed keys using stable 
   assert.match(merged, /subtitle_card_font_size_px=0/);
   assert.match(merged, /i_plus_one_enabled=yes/);
   assert.match(merged, /i_plus_one_known_word_field=/);
+  assert.doesNotMatch(merged, /i_plus_one_tokenizer=/);
   assert.match(merged, /capture_image_max_width=1600/);
 });
 

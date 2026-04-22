@@ -75,6 +75,7 @@ The helper starts automatically on first playback. You should not need to run `S
 - `subtitle_card_font_size_px`
 - `i_plus_one_enabled`
 - `i_plus_one_known_word_field`
+- `i_plus_one_tokenizer` (`jieba` or `intl`)
 - `helper_url`
 - `helper_timeout_ms`
 - `helper_auto_start`
@@ -112,10 +113,10 @@ node scripts/package-release.mjs
 - The helper defaults to port `8766` so it does not collide with AnkiConnect on `8765`.
 - If another process is already using the helper port, `mpv` will show a startup error instead of silently failing.
 - The packaged helper resolves `web/` assets relative to `SentenceMinerHelper.exe` and loads config from `mpv/script-opts/sentenceminer.conf`.
-- The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, and `ffmpeg.exe.README` inside `mpv/scripts/sentenceminer-helper/`.
+- The packaged release bundles `ffmpeg.exe`, `ffmpeg.exe.LICENSE`, `ffmpeg.exe.README`, and Jieba tokenizer assets inside `mpv/scripts/sentenceminer-helper/`.
 - v1 keeps the active transcript in memory only.
 - v1 only tracks the primary active subtitle.
-- i+1 analysis uses the configured Anki deck and note type, reads known words from `i_plus_one_known_word_field`, and uses Node's Chinese `Intl.Segmenter` word segmentation.
+- i+1 analysis uses the configured Anki deck and note type, reads known words from `i_plus_one_known_word_field`, and uses bundled Jieba word segmentation by default. Set `i_plus_one_tokenizer=intl` to use Node's Chinese `Intl.Segmenter` instead.
 - SentenceMiner first looks for matching notes returned by the configured deck, note type, and extra query.
 - Mining is blocked unless the configured deck, note type, and mapped fields currently exist in Anki.
 - SentenceMiner only inspects the newest note returned by the configured deck, note type, and extra query.

@@ -303,6 +303,7 @@ test('transcript load annotates i+1 lines from the configured known word field',
     }),
   });
   harness.config.learning.knownWordField = 'Word';
+  harness.config.learning.tokenizer = 'intl';
   harness.ankiNotes.splice(
     0,
     harness.ankiNotes.length,
@@ -318,6 +319,7 @@ test('transcript load annotates i+1 lines from the configured known word field',
       'anki_note_type=Sentence',
       'i_plus_one_enabled=yes',
       'i_plus_one_known_word_field=Word',
+      'i_plus_one_tokenizer=intl',
     ].join('\n'),
     'utf8',
   );
@@ -340,6 +342,52 @@ test('transcript load annotates i+1 lines from the configured known word field',
       .filter((action) => ['findNotes', 'notesInfo'].includes(action)),
     ['findNotes', 'notesInfo'],
   );
+});
+
+test('transcript load can annotate i+1 lines with Jieba tokenization', async (t) => {
+  const harness = await createServerHarness(t, {
+    loadSubtitleTranscript: async () => ({
+      status: 'ready',
+      transcript: [
+        buildCue('我喜欢学习', 1000),
+        buildCue('我喜欢中文', 2000),
+        buildCue('我看中文', 3000),
+      ],
+      message: null,
+    }),
+  });
+  harness.config.learning.knownWordField = 'Word';
+  harness.config.learning.tokenizer = 'jieba';
+  harness.ankiNotes.splice(
+    0,
+    harness.ankiNotes.length,
+    createAnkiNote(1, '', '我'),
+    createAnkiNote(2, '', '喜欢'),
+    createAnkiNote(3, '', '学习'),
+  );
+  await fs.writeFile(
+    harness.configPath,
+    [
+      `anki_url=${harness.config.anki.url}`,
+      'anki_deck=Anime',
+      'anki_note_type=Sentence',
+      'i_plus_one_enabled=yes',
+      'i_plus_one_known_word_field=Word',
+      'i_plus_one_tokenizer=jieba',
+    ].join('\n'),
+    'utf8',
+  );
+
+  await postSession(harness.baseUrl, 'session-1');
+  await waitForLearningStatus(harness.transcriptStore, 'ready');
+
+  const response = await fetch(`${harness.baseUrl}/api/state`);
+  const payload = await response.json();
+
+  assert.equal(payload.state.learningStatus, 'ready');
+  assert.deepEqual(payload.state.transcript[0].learning.unknownWords, []);
+  assert.deepEqual(payload.state.transcript[1].learning.unknownWords, ['中文']);
+  assert.deepEqual(payload.state.transcript[2].learning.unknownWords, ['看', '中文']);
 });
 
 test('Anki failures produce a non-blocking learning error', async (t) => {

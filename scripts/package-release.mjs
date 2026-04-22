@@ -27,6 +27,7 @@ await copyIntoPackage(
   'scripts/sentenceminer-helper/SentenceMinerHelper.exe',
 );
 await copyBundledFfmpeg();
+await copyBundledJieba();
 await copyIntoPackage('web', 'scripts/sentenceminer-helper/web');
 await writePackagedMpvConfig();
 await writePackagedHelperEntryPoint();
@@ -76,6 +77,18 @@ async function copyBundledFfmpeg() {
   await copyIntoPackage(ffmpegStatic, 'scripts/sentenceminer-helper/ffmpeg.exe');
   await copyIntoPackage(path.join(ffmpegDirectory, 'ffmpeg.exe.LICENSE'), 'scripts/sentenceminer-helper/ffmpeg.exe.LICENSE');
   await copyIntoPackage(path.join(ffmpegDirectory, 'ffmpeg.exe.README'), 'scripts/sentenceminer-helper/ffmpeg.exe.README');
+}
+
+async function copyBundledJieba() {
+  const jiebaRoot = path.join(repoRoot, 'node_modules', '@node-rs', 'jieba');
+  const jiebaNativeRoot = path.join(repoRoot, 'node_modules', '@node-rs', 'jieba-win32-x64-msvc');
+
+  await copyIntoPackage(path.join(jiebaRoot, 'dict.txt'), 'scripts/sentenceminer-helper/jieba/dict.txt');
+  await copyIntoPackage(
+    path.join(jiebaNativeRoot, 'jieba.win32-x64-msvc.node'),
+    'scripts/sentenceminer-helper/jieba/jieba.win32-x64-msvc.node',
+  );
+  await copyIntoPackage(path.join(jiebaRoot, 'LICENSE'), 'scripts/sentenceminer-helper/jieba/LICENSE');
 }
 
 function run(command, args, step) {

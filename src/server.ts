@@ -707,6 +707,7 @@ function buildLearningAnalysisKey(context: ServerContext): string | null {
     context.config.anki.extraQuery ?? '',
     context.config.learning.iPlusOneEnabled ? 'enabled' : 'disabled',
     context.config.learning.knownWordField,
+    context.config.learning.tokenizer,
     state.transcript.map((cue) => [cue.id, cue.orderIndex, cue.startMs, cue.endMs, cue.text].join(':')).join('|'),
   ].join('::');
 }
