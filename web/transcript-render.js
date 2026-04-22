@@ -65,20 +65,12 @@ export function shouldHandleTranscriptBookmarkShortcut({
 
 export function buildHighlightedTranscriptParts(text, unknownWords = []) {
   const unknownWordSet = new Set(unknownWords.map(normalizeLearningToken).filter(Boolean));
-  if (unknownWordSet.size === 0 || !WORD_SEGMENTER) {
-    return [{ text: String(text ?? ''), unknown: false }];
+  const transcriptText = String(text ?? '');
+  if (unknownWordSet.size === 0) {
+    return [{ text: transcriptText, unknown: false }];
   }
 
-  const parts = [];
-  for (const segment of WORD_SEGMENTER.segment(String(text ?? ''))) {
-    const normalized = segment.isWordLike ? normalizeLearningToken(segment.segment) : '';
-    parts.push({
-      text: segment.segment,
-      unknown: Boolean(normalized && unknownWordSet.has(normalized)),
-    });
-  }
-
-  return mergeAdjacentTranscriptParts(parts);
+  return buildPartsFromUnknownRanges(transcriptText, findUnknownWordRanges(transcriptText, unknownWords, unknownWordSet));
 }
 
 export function computeTranscriptItemUiState(
@@ -156,6 +148,76 @@ function mergeAdjacentTranscriptParts(parts) {
   }
 
   return merged;
+}
+
+function findUnknownWordRanges(text, unknownWords, unknownWordSet) {
+  const ranges = [];
+  if (WORD_SEGMENTER) {
+    for (const segment of WORD_SEGMENTER.segment(text)) {
+      const normalized = segment.isWordLike ? normalizeLearningToken(segment.segment) : '';
+      if (normalized && unknownWordSet.has(normalized)) {
+        ranges.push({ start: segment.index, end: segment.index + segment.segment.length });
+      }
+    }
+  }
+
+  const lowerText = text.toLocaleLowerCase();
+  for (const word of unknownWords) {
+    const needle = String(word ?? '').trim();
+    if (!needle) {
+      continue;
+    }
+
+    const lowerNeedle = needle.toLocaleLowerCase();
+    let index = lowerText.indexOf(lowerNeedle);
+    while (index !== -1) {
+      ranges.push({ start: index, end: index + needle.length });
+      index = lowerText.indexOf(lowerNeedle, index + Math.max(needle.length, 1));
+    }
+  }
+
+  return mergeUnknownRanges(ranges);
+}
+
+function mergeUnknownRanges(ranges) {
+  const sorted = ranges
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start || right.end - left.end);
+  const merged = [];
+  for (const range of sorted) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+      continue;
+    }
+
+    merged.push({ ...range });
+  }
+
+  return merged;
+}
+
+function buildPartsFromUnknownRanges(text, ranges) {
+  if (ranges.length === 0) {
+    return [{ text, unknown: false }];
+  }
+
+  const parts = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      parts.push({ text: text.slice(cursor, range.start), unknown: false });
+    }
+
+    parts.push({ text: text.slice(range.start, range.end), unknown: true });
+    cursor = range.end;
+  }
+
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), unknown: false });
+  }
+
+  return mergeAdjacentTranscriptParts(parts);
 }
 
 function normalizeLearningToken(value) {

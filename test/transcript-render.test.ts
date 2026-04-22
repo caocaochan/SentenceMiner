@@ -65,6 +65,15 @@ test('buildHighlightedTranscriptParts marks unknown Chinese words while preservi
   assert.equal(parts.map((part) => part.text).join(''), '我喜欢中文。中文很好。');
 });
 
+test('buildHighlightedTranscriptParts marks Jieba words split by browser segmentation', () => {
+  const parts = buildHighlightedTranscriptParts('我果然到了京师', ['京师']);
+
+  assert.deepEqual(parts, [
+    { text: '我果然到了', unknown: false },
+    { text: '京师', unknown: true },
+  ]);
+});
+
 test('buildHighlightedTranscriptParts normalizes ASCII unknown words', () => {
   const parts = buildHighlightedTranscriptParts('我喜欢 JavaScript!', ['javascript']);
 
