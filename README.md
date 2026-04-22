@@ -100,7 +100,9 @@ For source development you still need Node.js 24 or newer. You also need `ffmpeg
 
 ```powershell
 npm install
-python -m pip install -r scripts/pkuseg-tokenizer-requirements.txt
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install "numpy>=2,<3" pyinstaller==6.19.0
+python -m pip install --no-build-isolation pkuseg==0.0.25
 node --experimental-strip-types src/main.ts
 node --experimental-strip-types --test test/*.test.ts
 node scripts/build-helper.mjs
