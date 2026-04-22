@@ -144,6 +144,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
       'anki_deck=Mining',
       'anki_field_subtitle=Expression',
       'ffmpeg_path=C:\\Tools\\ffmpeg.exe',
+      'yt_dlp_path=C:\\Tools\\yt-dlp.exe',
       'temp_dir=C:\\Temp\\SentenceMiner',
       'capture_audio=no',
       'capture_image=yes',
@@ -167,6 +168,7 @@ test('loadConfig reads helper and runtime settings from sentenceminer.conf', asy
   assert.equal(config.anki.deck, 'Mining');
   assert.equal(config.anki.fields.subtitle, 'Expression');
   assert.equal(config.runtime.ffmpegPath, 'C:\\Tools\\ffmpeg.exe');
+  assert.equal(config.runtime.ytDlpPath, 'C:\\Tools\\yt-dlp.exe');
   assert.equal(config.runtime.tempDir, 'C:\\Temp\\SentenceMiner');
   assert.equal(config.runtime.captureAudio, false);
   assert.equal(config.runtime.captureImage, true);

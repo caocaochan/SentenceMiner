@@ -190,14 +190,59 @@ test('mineHistoryEntry captures one combined clip and one screenshot for batch r
   assert.equal(minedPayload?.endMs, 3_000);
 });
 
-test('mineHistoryEntry rejects remote media when helper-side capture is enabled', async () => {
+test('mineHistoryEntry resolves remote media URLs before capture', async () => {
+  const config = buildConfig();
+  config.runtime.ytDlpPath = 'C:\\Tools\\yt-dlp.exe';
+  const payload: SubtitleEventPayload = {
+    ...buildPayload(),
+    filePath: 'https://www.youtube.com/watch?v=abc123',
+  };
+  const processCalls: Array<{ command: string; args: string[]; description: string }> = [];
+  const ytDlpCalls: Array<{ command: string; args: string[] }> = [];
+
+  const result = await mineHistoryEntry(config, payload, {
+    createTempPath: (_payload, kind, extension, tempDir) => `${tempDir}\\${kind}.${extension}`,
+    runYtDlp: async (command, args) => {
+      ytDlpCalls.push({ command, args });
+      return args.includes('bestaudio/best')
+        ? 'https://media.example/audio.webm\n'
+        : 'https://media.example/video.mp4\n';
+    },
+    runProcess: async (command, args, description) => {
+      processCalls.push({ command, args, description });
+    },
+    cleanupFile: async () => {},
+    mineToAnki: async () => ({
+      success: true,
+      message: 'ok',
+    }),
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(ytDlpCalls.length, 2);
+  assert.equal(ytDlpCalls[0].command, 'C:\\Tools\\yt-dlp.exe');
+  assert.deepEqual(ytDlpCalls[0].args.slice(0, 6), ['--no-warnings', '--no-playlist', '-f', 'bestaudio/best', '-g', '--']);
+  assert.deepEqual(ytDlpCalls[1].args.slice(0, 6), ['--no-warnings', '--no-playlist', '-f', 'bestvideo/best', '-g', '--']);
+  assert.equal(processCalls[0].args[processCalls[0].args.indexOf('-i') + 1], 'https://media.example/audio.webm');
+  assert.equal(processCalls[1].args[processCalls[1].args.indexOf('-i') + 1], 'https://media.example/video.mp4');
+});
+
+test('mineHistoryEntry reports yt-dlp failures for remote capture', async () => {
   const config = buildConfig();
   const payload: SubtitleEventPayload = {
     ...buildPayload(),
-    filePath: 'https://example.com/episode.mkv',
+    filePath: 'https://www.youtube.com/watch?v=abc123',
   };
 
-  await assert.rejects(() => mineHistoryEntry(config, payload), /local media file/);
+  await assert.rejects(
+    () =>
+      mineHistoryEntry(config, payload, {
+        runYtDlp: async () => {
+          throw new Error('yt-dlp failed to resolve remote media URL: spawn ENOENT');
+        },
+      }),
+    /yt-dlp failed to resolve remote media URL/,
+  );
 });
 
 test('mineHistoryEntry rejects empty batch requests', async () => {
@@ -244,13 +289,22 @@ test('mineHistoryEntry can mine text-only history entries without running ffmpeg
   const config = buildConfig();
   config.runtime.captureAudio = false;
   config.runtime.captureImage = false;
+  const payload = {
+    ...buildPayload(),
+    filePath: 'https://www.youtube.com/watch?v=abc123',
+  };
 
   let runProcessCalled = false;
+  let runYtDlpCalled = false;
   let minedPayload: Record<string, unknown> | null = null;
 
-  const result = await mineHistoryEntry(config, buildPayload(), {
+  const result = await mineHistoryEntry(config, payload, {
     runProcess: async () => {
       runProcessCalled = true;
+    },
+    runYtDlp: async () => {
+      runYtDlpCalled = true;
+      return '';
     },
     mineToAnki: async (_ankiConfig, minePayload) => {
       minedPayload = minePayload as unknown as Record<string, unknown>;
@@ -263,6 +317,7 @@ test('mineHistoryEntry can mine text-only history entries without running ffmpeg
 
   assert.equal(result.success, true);
   assert.equal(runProcessCalled, false);
+  assert.equal(runYtDlpCalled, false);
   assert.equal(minedPayload?.audioPath, undefined);
   assert.equal(minedPayload?.screenshotPath, undefined);
 });

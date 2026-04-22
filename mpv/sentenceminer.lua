@@ -10,6 +10,7 @@ local opts = {
     helper_exe_path = "",
     helper_start_timeout_ms = 15000,
     ffmpeg_path = "ffmpeg",
+    yt_dlp_path = "yt-dlp",
     temp_dir = "",
     capture_audio = "yes",
     capture_image = "yes",
@@ -649,6 +650,66 @@ local function resolve_ffmpeg_path()
     )
 end
 
+local function resolve_ytdlp_path()
+    local configured = trim_output(opts.yt_dlp_path)
+    local mpv_ytdl_path = trim_output(mp.get_property("user-data/mpv/ytdl/path", ""))
+
+    if configured == nil or configured == "" then
+        return mpv_ytdl_path or "yt-dlp", nil
+    end
+
+    local normalized = configured:lower()
+    if normalized == "yt-dlp" or normalized == "yt-dlp.exe" or normalized == "youtube-dl" or normalized == "youtube-dl.exe" then
+        return mpv_ytdl_path or configured, nil
+    end
+
+    if not is_path_like(configured) then
+        return configured, nil
+    end
+
+    local script_dir = get_script_dir()
+    local candidates = {}
+
+    local function add_candidate(candidate)
+        if candidate and candidate ~= "" then
+            table.insert(candidates, expand_mpv_path(candidate))
+        end
+    end
+
+    add_candidate(configured)
+    if not configured:lower():match("%.exe$") then
+        add_candidate(configured .. ".exe")
+    end
+
+    if script_dir and script_dir ~= "" and not is_absolute_path(configured) then
+        local relative = utils.join_path(script_dir, configured)
+        add_candidate(relative)
+        if not configured:lower():match("%.exe$") then
+            add_candidate(relative .. ".exe")
+        end
+
+        local parent = parent_dir(script_dir)
+        if parent then
+            local parent_relative = utils.join_path(parent, configured)
+            add_candidate(parent_relative)
+            if not configured:lower():match("%.exe$") then
+                add_candidate(parent_relative .. ".exe")
+            end
+        end
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if file_exists(candidate) then
+            return candidate, nil
+        end
+    end
+
+    return nil, string.format(
+        "yt_dlp_path='%s' did not resolve to yt-dlp.exe; set it to yt-dlp.exe or leave it as yt-dlp to use mpv/PATH discovery",
+        configured
+    )
+end
+
 local function spawn_helper_process()
     if not is_windows() then
         return nil, "helper auto-start is currently implemented only on Windows"
@@ -1030,13 +1091,43 @@ local function run_ffmpeg(args, description)
     end
 end
 
+local function resolve_remote_audio_url(source_url)
+    local ytdlp_path, ytdlp_err = resolve_ytdlp_path()
+    if not ytdlp_path then
+        error(ytdlp_err)
+    end
+
+    local result = utils.subprocess({
+        args = {
+            ytdlp_path,
+            "--no-warnings",
+            "--no-playlist",
+            "-f",
+            "bestaudio/best",
+            "-g",
+            "--",
+            source_url,
+        },
+        cancellable = false,
+        max_size = 1024 * 1024 * 4,
+        playback_only = false,
+    })
+
+    if result.status ~= 0 then
+        error("yt-dlp failed to resolve remote audio URL: " .. tostring(result.stderr or result.error_string or "unknown yt-dlp error"))
+    end
+
+    local url = tostring(result.stdout or ""):match("([^\r\n]+)")
+    if not url or url == "" then
+        error("yt-dlp did not return a remote audio URL")
+    end
+
+    return url
+end
+
 local function capture_audio(payload, capture)
     if not is_truthy(opts.capture_audio) then
         return nil
-    end
-
-    if not is_local_media(payload.filePath) then
-        error("audio capture requires a local media file")
     end
 
     if payload.startMs == nil or payload.endMs == nil then
@@ -1062,13 +1153,18 @@ local function capture_audio(payload, capture)
     if not ffmpeg_path then
         error(ffmpeg_err)
     end
+    local input_path = payload.filePath
+    if not is_local_media(input_path) then
+        input_path = resolve_remote_audio_url(input_path)
+    end
+
     local args = {
         ffmpeg_path,
         "-y",
         "-ss",
         format_seconds(clip_start_ms / 1000),
         "-i",
-        payload.filePath,
+        input_path,
         "-t",
         format_seconds(duration_ms / 1000),
         "-vn",

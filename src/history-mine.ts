@@ -17,6 +17,7 @@ export interface HistoryMineDependencies {
   mineToAnki?: typeof mineToAnki;
   createTempPath?: (payload: SubtitleEventPayload, kind: 'audio' | 'image', extension: string, tempDir: string) => string;
   runProcess?: (command: string, args: string[], description: string) => Promise<void>;
+  runYtDlp?: (command: string, args: string[]) => Promise<string>;
   cleanupFile?: (filePath: string) => Promise<void>;
 }
 
@@ -40,8 +41,10 @@ export async function mineHistoryEntry(
   const mineToAnkiImpl = dependencies.mineToAnki ?? mineToAnki;
   const createTempPath = dependencies.createTempPath ?? defaultCreateTempPath;
   const runProcess = dependencies.runProcess ?? defaultRunProcess;
+  const runYtDlp = dependencies.runYtDlp ?? defaultRunYtDlp;
   const cleanupFile = dependencies.cleanupFile ?? defaultCleanupFile;
   const tempDir = resolveTempDir(config.runtime.tempDir);
+  const isRemoteMedia = !isLocalMediaPath(payload.filePath);
 
   let audioPath: string | undefined;
   let screenshotPath: string | undefined;
@@ -49,18 +52,24 @@ export async function mineHistoryEntry(
   try {
     if (captureAudio) {
       audioPath = createAudioCapturePath(payload, config, tempDir, createTempPath);
+      const audioInputPath = isRemoteMedia
+        ? await resolveRemoteMediaUrl(config.runtime.ytDlpPath, payload.filePath, 'bestaudio/best', runYtDlp)
+        : payload.filePath;
       await runProcess(
         config.runtime.ffmpegPath,
-        buildAudioCaptureArgs(payload, config, audioPath),
+        buildAudioCaptureArgs(payload, config, audioPath, audioInputPath),
         'audio extraction',
       );
     }
 
     if (captureImage) {
       screenshotPath = createImageCapturePath(payload, config, tempDir, createTempPath);
+      const imageInputPath = isRemoteMedia
+        ? await resolveRemoteMediaUrl(config.runtime.ytDlpPath, payload.filePath, 'bestvideo/best', runYtDlp)
+        : payload.filePath;
       await runProcess(
         config.runtime.ffmpegPath,
-        buildImageCaptureArgs(payload.filePath, normalized.screenshotCaptureMs, config, screenshotPath),
+        buildImageCaptureArgs(imageInputPath, normalized.screenshotCaptureMs, config, screenshotPath),
         'image capture',
       );
     }
@@ -145,10 +154,6 @@ export function validateHistoryMinePayload(config: AppConfig, normalized: Normal
     throw new Error('Cannot mine without a source media path.');
   }
 
-  if ((config.runtime.captureAudio || config.runtime.captureImage) && !isLocalMediaPath(payload.filePath)) {
-    throw new Error('History mining capture requires a local media file.');
-  }
-
   if (
     config.runtime.captureAudio &&
     normalized.entries.some((entry) => entry.startMs == null || entry.endMs == null)
@@ -194,7 +199,12 @@ function createImageCapturePath(
   return createTempPath(payload, 'image', config.capture.imageFormat, tempDir);
 }
 
-function buildAudioCaptureArgs(payload: SubtitleEventPayload, config: AppConfig, outputPath: string): string[] {
+function buildAudioCaptureArgs(
+  payload: SubtitleEventPayload,
+  config: AppConfig,
+  outputPath: string,
+  inputPath: string = payload.filePath,
+): string[] {
   const prePaddingMs = config.capture.audioPrePaddingMs;
   const postPaddingMs = config.capture.audioPostPaddingMs;
   const clipStartMs = Math.max(0, (payload.startMs ?? 0) - prePaddingMs);
@@ -209,7 +219,7 @@ function buildAudioCaptureArgs(payload: SubtitleEventPayload, config: AppConfig,
     '-ss',
     formatSeconds(clipStartMs),
     '-i',
-    payload.filePath,
+    inputPath,
     '-t',
     formatSeconds(durationMs),
     '-vn',
@@ -271,6 +281,50 @@ async function defaultRunProcess(command: string, args: string[], description: s
         : '';
     const message = stderr || (error instanceof Error ? error.message : String(error));
     throw new Error(`${description} failed: ${message}`);
+  }
+}
+
+async function resolveRemoteMediaUrl(
+  ytDlpPath: string,
+  sourceUrl: string,
+  format: string,
+  runYtDlp: NonNullable<HistoryMineDependencies['runYtDlp']>,
+): Promise<string> {
+  const output = await runYtDlp(ytDlpPath, [
+    '--no-warnings',
+    '--no-playlist',
+    '-f',
+    format,
+    '-g',
+    '--',
+    sourceUrl,
+  ]);
+  const [resolvedUrl] = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!resolvedUrl) {
+    throw new Error(`yt-dlp did not return a media URL for ${sourceUrl}.`);
+  }
+
+  return resolvedUrl;
+}
+
+async function defaultRunYtDlp(command: string, args: string[]): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync(command, args, {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024 * 4,
+    });
+    return stdout;
+  } catch (error) {
+    const stderr =
+      error && typeof error === 'object' && 'stderr' in error && typeof error.stderr === 'string'
+        ? error.stderr.trim()
+        : '';
+    const message = stderr || (error instanceof Error ? error.message : String(error));
+    throw new Error(`yt-dlp failed to resolve remote media URL: ${message}`);
   }
 }
 

@@ -114,6 +114,80 @@ hello`,
   assert.equal(result.transcript[0]?.text, 'hello');
 });
 
+test('loadSubtitleTranscript fetches remote external subtitle files', async () => {
+  const requestedUrls: string[] = [];
+  const result = await loadSubtitleTranscript(
+    DEFAULT_CONFIG,
+    {
+      ...BASE_TRACK,
+      externalFilePath: 'https://example.com/subtitles/episode.vtt',
+    },
+    {
+      fetchText: async (url) => {
+        requestedUrls.push(url);
+        return `WEBVTT
+
+00:00:01.000 --> 00:00:02.000
+remote line`;
+      },
+    },
+  );
+
+  assert.equal(result.status, 'ready');
+  assert.deepEqual(requestedUrls, ['https://example.com/subtitles/episode.vtt']);
+  assert.equal(result.transcript[0]?.text, 'remote line');
+});
+
+test('loadSubtitleTranscript decodes mpv EDL remote subtitle sources', async () => {
+  const remoteUrl = 'https://www.youtube.com/api/timedtext?v=abc123&lang=zh&fmt=srt';
+  const result = await loadSubtitleTranscript(
+    DEFAULT_CONFIG,
+    {
+      ...BASE_TRACK,
+      externalFilePath: `edl://!no_clip;!delay_open,media_type=sub,codec=webvtt;%${remoteUrl.length}%${remoteUrl}`,
+    },
+    {
+      fetchText: async (url) => {
+        assert.equal(url, remoteUrl);
+        return `1
+00:00:01,000 --> 00:00:02,000
+youtube caption`;
+      },
+    },
+  );
+
+  assert.equal(result.status, 'ready');
+  assert.equal(result.transcript[0]?.text, 'youtube caption');
+});
+
+test('loadSubtitleTranscript reports malformed EDL subtitle sources as unavailable', async () => {
+  const result = await loadSubtitleTranscript(DEFAULT_CONFIG, {
+    ...BASE_TRACK,
+    externalFilePath: 'edl://!no_clip;!delay_open,media_type=sub',
+  });
+
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.message ?? '', /fetchable URL/);
+});
+
+test('loadSubtitleTranscript reports remote subtitle fetch failures clearly', async () => {
+  const result = await loadSubtitleTranscript(
+    DEFAULT_CONFIG,
+    {
+      ...BASE_TRACK,
+      externalFilePath: 'https://example.com/missing.srt',
+    },
+    {
+      fetchText: async () => {
+        throw new Error('HTTP 404 Not Found');
+      },
+    },
+  );
+
+  assert.equal(result.status, 'error');
+  assert.match(result.message ?? '', /Remote subtitle source could not be loaded: HTTP 404 Not Found/);
+});
+
 test('loadSubtitleTranscript extracts the active embedded subtitle stream', async () => {
   const result = await loadSubtitleTranscript(
     DEFAULT_CONFIG,

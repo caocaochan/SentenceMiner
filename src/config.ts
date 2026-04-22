@@ -40,6 +40,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   runtime: {
     enabled: true,
     ffmpegPath: 'ffmpeg',
+    ytDlpPath: 'yt-dlp',
     tempDir: '',
     captureAudio: true,
     captureImage: true,
@@ -76,6 +77,10 @@ export async function loadConfigFromPath(
     runtime: {
       ...config.runtime,
       ffmpegPath: resolveFfmpegPath(config.runtime.ffmpegPath, {
+        appRoot,
+        configPath,
+      }),
+      ytDlpPath: resolveConfiguredCommandPath(config.runtime.ytDlpPath, DEFAULT_CONFIG.runtime.ytDlpPath, {
         appRoot,
         configPath,
       }),
@@ -235,6 +240,36 @@ export function resolveFfmpegPath(
 
   const resolutionBases = [
     configPath ? path.dirname(configPath) : null,
+    appRoot,
+  ].filter((value): value is string => Boolean(value));
+
+  for (const base of resolutionBases) {
+    const candidate = path.resolve(base, normalized);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  const preferredBase = resolutionBases[0];
+  return preferredBase ? path.resolve(preferredBase, normalized) : path.resolve(normalized);
+}
+
+export function resolveConfiguredCommandPath(
+  configuredPath: string,
+  defaultCommand: string,
+  options: {
+    appRoot?: string;
+    configPath?: string;
+  } = {},
+): string {
+  const normalized = configuredPath.trim() || defaultCommand;
+  if (!isPathLike(normalized)) {
+    return normalized;
+  }
+
+  const appRoot = options.appRoot ?? resolveAppRoot();
+  const resolutionBases = [
+    options.configPath ? path.dirname(options.configPath) : null,
     appRoot,
   ].filter((value): value is string => Boolean(value));
 
@@ -483,6 +518,12 @@ function applyConfigEntry(config: Partial<AppConfig>, key: string, value: string
       config.runtime = {
         ...config.runtime,
         ffmpegPath: value,
+      };
+      return;
+    case 'yt_dlp_path':
+      config.runtime = {
+        ...config.runtime,
+        ytDlpPath: value,
       };
       return;
     case 'enabled':

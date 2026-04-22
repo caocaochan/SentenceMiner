@@ -90,6 +90,7 @@ export interface CaptureConfig {
 export interface RuntimeConfig {
   enabled: boolean;
   ffmpegPath: string;
+  ytDlpPath: string;
   tempDir: string;
   captureAudio: boolean;
   captureImage: boolean;

@@ -82,6 +82,7 @@ The helper starts automatically on first playback. You should not need to run `S
 - `helper_exe_path`
 - `helper_start_timeout_ms`
 - `ffmpeg_path`
+- `yt_dlp_path`
 - `temp_dir`
 - `capture_audio`
 - `capture_image`
@@ -94,9 +95,11 @@ SentenceMiner now starts disabled every time `mpv` launches. Use `Ctrl+Shift+m` 
 
 In the packaged release, `helper_exe_path` is preconfigured to `sentenceminer-helper/SentenceMinerHelper.exe`, `ffmpeg_path` points at the bundled `ffmpeg.exe`, and `bind_default_key=yes`, so extraction into the `mpv` folder is enough to start using the script. Source builds can still leave `helper_exe_path` empty and `ffmpeg_path=ffmpeg` to rely on auto-discovery and `PATH`.
 
+YouTube and other `yt-dlp` supported URLs require `yt-dlp` on `PATH` or a custom `yt_dlp_path`. SentenceMiner uses it to resolve remote subtitle/audio/video URLs before transcript loading or media capture.
+
 ## Developer Workflow
 
-For source development you still need Node.js 24 or newer. You also need `ffmpeg` on `PATH` or a custom `ffmpeg_path` in `script-opts/sentenceminer.conf`. To build the packaged release, install the Python tokenizer build requirements first.
+For source development you still need Node.js 24 or newer. You also need `ffmpeg` and `yt-dlp` on `PATH` or custom `ffmpeg_path` and `yt_dlp_path` values in `script-opts/sentenceminer.conf`. To build the packaged release, install the Python tokenizer build requirements first.
 
 ```powershell
 npm install

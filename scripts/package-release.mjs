@@ -56,6 +56,7 @@ async function writePackagedMpvConfig() {
   const packaged = source
     .replace(/^helper_exe_path=.*$/m, 'helper_exe_path=sentenceminer-helper/SentenceMinerHelper.exe')
     .replace(/^ffmpeg_path=.*$/m, 'ffmpeg_path=../scripts/sentenceminer-helper/ffmpeg.exe')
+    .replace(/^yt_dlp_path=.*$/m, 'yt_dlp_path=yt-dlp')
     .replace(/^bind_default_key=.*$/m, 'bind_default_key=yes')
     .replace(/^default_key=.*$/m, 'default_key=Ctrl+m');
 
