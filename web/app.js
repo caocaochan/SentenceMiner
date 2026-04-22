@@ -12,6 +12,7 @@ import {
   computeTranscriptItemUiState,
   filterTranscriptEntriesForBookmarkView,
   shouldHandleTranscriptBookmarkShortcut,
+  shouldPauseAutoScrollForViewportScroll,
   shouldRebuildTranscriptList,
 } from './transcript-render.js';
 import {
@@ -56,6 +57,7 @@ const state = {
   autoScrollLoopId: null,
   autoScrollTargetY: null,
   autoScrollLastTimestamp: null,
+  autoScrollLastProgrammaticY: null,
   autoScrollPausedByUser: false,
   autoScrollListenersAttached: false,
   lastScrolledCueId: null,
@@ -1024,6 +1026,7 @@ function syncCurrentCueScroll(currentCueId) {
 
   ensureAutoScrollListeners();
   state.autoScrollPausedByUser = false;
+  state.autoScrollLastProgrammaticY = null;
 
   const targetScrollTop = computeFollowTargetForItem(controls.item);
   if (targetScrollTop == null) {
@@ -1033,7 +1036,7 @@ function syncCurrentCueScroll(currentCueId) {
   if (prefersReducedMotion()) {
     stopAutoScrollLoop();
     state.autoScrollTargetY = null;
-    window.scrollTo(0, targetScrollTop);
+    scrollWindowForAutoFollow(targetScrollTop);
     return;
   }
 
@@ -1073,6 +1076,11 @@ function stopAutoScrollLoop() {
   state.autoScrollLastTimestamp = null;
 }
 
+function scrollWindowForAutoFollow(targetY) {
+  state.autoScrollLastProgrammaticY = targetY;
+  window.scrollTo(0, targetY);
+}
+
 function stepAutoScrollLoop(timestamp) {
   state.autoScrollLoopId = null;
 
@@ -1095,14 +1103,14 @@ function stepAutoScrollLoop(timestamp) {
   const delta = target - currentY;
 
   if (Math.abs(delta) < AUTO_SCROLL_CONVERGENCE_PX) {
-    window.scrollTo(0, target);
+    scrollWindowForAutoFollow(target);
     state.autoScrollTargetY = null;
     state.autoScrollLastTimestamp = null;
     return;
   }
 
   const alpha = 1 - Math.exp(-dtSeconds / AUTO_SCROLL_TIME_CONSTANT_S);
-  window.scrollTo(0, currentY + delta * alpha);
+  scrollWindowForAutoFollow(currentY + delta * alpha);
   state.autoScrollLoopId = window.requestAnimationFrame(stepAutoScrollLoop);
 }
 
@@ -1115,9 +1123,20 @@ function ensureAutoScrollListeners() {
   const handleUserScrollIntent = () => {
     state.autoScrollPausedByUser = true;
     state.autoScrollTargetY = null;
+    state.autoScrollLastProgrammaticY = null;
     stopAutoScrollLoop();
   };
 
+  window.addEventListener('scroll', () => {
+    const autoScrollActive = state.autoScrollTargetY != null || state.autoScrollLoopId !== null;
+    if (shouldPauseAutoScrollForViewportScroll({
+      autoScrollActive,
+      currentScrollTop: window.scrollY,
+      lastProgrammaticScrollTop: state.autoScrollLastProgrammaticY,
+    })) {
+      handleUserScrollIntent();
+    }
+  }, { passive: true });
   window.addEventListener('wheel', handleUserScrollIntent, { passive: true });
   window.addEventListener('touchstart', handleUserScrollIntent, { passive: true });
   window.addEventListener('keydown', (event) => {

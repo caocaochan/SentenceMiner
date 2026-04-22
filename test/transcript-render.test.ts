@@ -9,6 +9,7 @@ import {
   computeTranscriptItemUiState,
   filterTranscriptEntriesForBookmarkView,
   shouldHandleTranscriptBookmarkShortcut,
+  shouldPauseAutoScrollForViewportScroll,
   shouldRebuildTranscriptList,
 } from '../web/transcript-render.js';
 import { buildHistoryEntryKey } from '../web/history-selection.js';
@@ -258,4 +259,36 @@ test('computeTranscriptFollowScrollTarget clamps scrolling to the document bound
 
   assert.equal(topTarget, 0);
   assert.equal(bottomTarget, 1500);
+});
+
+test('shouldPauseAutoScrollForViewportScroll ignores matching programmatic scroll events', () => {
+  assert.equal(shouldPauseAutoScrollForViewportScroll({
+    autoScrollActive: true,
+    currentScrollTop: 501.5,
+    lastProgrammaticScrollTop: 500,
+  }), false);
+});
+
+test('shouldPauseAutoScrollForViewportScroll pauses when active scrolling moves away from the programmatic target', () => {
+  assert.equal(shouldPauseAutoScrollForViewportScroll({
+    autoScrollActive: true,
+    currentScrollTop: 620,
+    lastProgrammaticScrollTop: 500,
+  }), true);
+});
+
+test('shouldPauseAutoScrollForViewportScroll ignores viewport scroll events when auto-scroll is inactive', () => {
+  assert.equal(shouldPauseAutoScrollForViewportScroll({
+    autoScrollActive: false,
+    currentScrollTop: 620,
+    lastProgrammaticScrollTop: 500,
+  }), false);
+});
+
+test('shouldPauseAutoScrollForViewportScroll treats active scroll with no programmatic target as user intent', () => {
+  assert.equal(shouldPauseAutoScrollForViewportScroll({
+    autoScrollActive: true,
+    currentScrollTop: 620,
+    lastProgrammaticScrollTop: null,
+  }), true);
 });

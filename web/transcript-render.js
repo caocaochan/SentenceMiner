@@ -135,6 +135,23 @@ export function computeTranscriptFollowScrollTarget({
   return clamp(currentScrollTop + scrollDelta, 0, maxScrollTop);
 }
 
+export function shouldPauseAutoScrollForViewportScroll({
+  autoScrollActive,
+  currentScrollTop,
+  lastProgrammaticScrollTop,
+  tolerance = 2,
+}) {
+  if (!autoScrollActive) {
+    return false;
+  }
+
+  if (!Number.isFinite(lastProgrammaticScrollTop)) {
+    return true;
+  }
+
+  return Math.abs(currentScrollTop - lastProgrammaticScrollTop) > tolerance;
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
