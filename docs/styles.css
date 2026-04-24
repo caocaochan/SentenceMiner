@@ -288,6 +288,18 @@ p {
   background: var(--surface);
 }
 
+.download-band p a {
+  color: var(--blue);
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.download-band p a:hover {
+  color: var(--blue-dark);
+}
+
 .download-note {
   margin: 14px 0 0;
   font-size: 0.94rem;
