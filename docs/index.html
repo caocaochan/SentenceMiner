@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="SentenceMiner is an mpv-first sentence mining workflow for capturing subtitles, audio, and screenshots into existing Anki notes."
+    >
+    <title>SentenceMiner</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="SentenceMiner home">
+        <span class="brand-mark" aria-hidden="true">SM</span>
+        <span>SentenceMiner</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#setup">Setup</a>
+        <a href="https://github.com/caocaochan/SentenceMiner">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">mpv to Anki sentence mining</p>
+          <h1 id="hero-title">SentenceMiner</h1>
+          <p class="hero-lede">
+            Mine the line you are watching, capture matching media, and update the right Anki note without leaving mpv.
+          </p>
+          <div class="hero-actions" aria-label="Download and repository links">
+            <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip">
+              Download latest
+            </a>
+            <a class="button button-secondary" href="https://github.com/caocaochan/SentenceMiner">
+              View on GitHub
+            </a>
+          </div>
+          <p class="download-note">Recommended Windows package with the helper and ffmpeg bundled.</p>
+        </div>
+
+        <div class="product-visual" aria-label="SentenceMiner transcript interface preview">
+          <div class="mock-toolbar">
+            <div>
+              <span class="mock-kicker">Transcript</span>
+              <strong>Episode 04.mkv</strong>
+            </div>
+            <div class="mock-status-row" aria-label="Status indicators">
+              <span class="mock-pill mock-pill-live">Connected</span>
+              <span class="mock-pill">42 lines</span>
+              <span class="mock-pill">Anki ready</span>
+            </div>
+          </div>
+
+          <div class="mock-list" aria-hidden="true">
+            <article class="mock-line">
+              <span class="mock-time">00:12:08</span>
+              <p>Maybe the important part is not knowing every word yet.</p>
+              <button type="button" tabindex="-1">Mine</button>
+            </article>
+            <article class="mock-line mock-line-active">
+              <span class="mock-time">00:12:12</span>
+              <div>
+                <p>That sentence has exactly one new word.</p>
+                <span class="mock-badge">i+1</span>
+              </div>
+              <button type="button" tabindex="-1">Mine</button>
+            </article>
+            <article class="mock-line">
+              <span class="mock-time">00:12:17</span>
+              <p>The card keeps the screenshot and normalized audio.</p>
+              <button type="button" tabindex="-1">Mine</button>
+            </article>
+          </div>
+
+          <div class="mock-capture-bar" aria-hidden="true">
+            <span>Audio normalized</span>
+            <span>Screenshot captured</span>
+            <span>Matched note updated</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-band" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">What it handles</p>
+          <h2 id="features-title">A focused mining workflow for immersion sessions.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Live mpv transcript</h3>
+            <p>Keep the active subtitle history visible in a local browser while mpv plays.</p>
+          </article>
+          <article class="feature-card">
+            <h3>One hotkey mining</h3>
+            <p>Press the mining shortcut to send the current subtitle into your configured Anki fields.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Media capture included</h3>
+            <p>Capture matching audio and screenshots, with bundled ffmpeg in the packaged Windows release.</p>
+          </article>
+          <article class="feature-card">
+            <h3>i+1 line marking</h3>
+            <p>Highlight transcript lines with exactly one unknown segmented word from your known-word field.</p>
+          </article>
+          <article class="feature-card">
+            <h3>No developer setup</h3>
+            <p>The Windows zip includes a self-contained helper, tokenizer assets, and media tooling.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Safer Anki updates</h3>
+            <p>SentenceMiner updates an existing note only when its stored sentence matches the mined line.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="setup-band" id="setup" aria-labelledby="setup-title">
+        <div class="section-heading">
+          <p class="eyebrow">Setup</p>
+          <h2 id="setup-title">Start mining in mpv.</h2>
+        </div>
+        <ol class="setup-list">
+          <li>
+            <span>01</span>
+            <p>Download and extract <strong>SentenceMiner-latest.zip</strong>.</p>
+          </li>
+          <li>
+            <span>02</span>
+            <p>Extract it into your <strong>mpv</strong> folder so the packaged scripts and options merge in.</p>
+          </li>
+          <li>
+            <span>03</span>
+            <p>Configure <strong>script-opts/sentenceminer.conf</strong> for your Anki deck, note type, and fields.</p>
+          </li>
+          <li>
+            <span>04</span>
+            <p>Open a video in mpv, press <strong>Ctrl+Shift+m</strong> to enable, then press <strong>Ctrl+m</strong> to mine.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="download-band" aria-labelledby="download-title">
+        <div>
+          <p class="eyebrow">Latest package</p>
+          <h2 id="download-title">Get the Windows release zip.</h2>
+          <p>Anki with AnkiConnect and mpv are required. Node.js, Python, and manual ffmpeg setup are not required for the packaged release.</p>
+        </div>
+        <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip">
+          Download latest
+        </a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>SentenceMiner</span>
+      <a href="https://github.com/caocaochan/SentenceMiner">Source on GitHub</a>
+    </footer>
+  </body>
+</html>
