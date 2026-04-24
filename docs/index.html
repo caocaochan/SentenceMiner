@@ -65,8 +65,8 @@
             Mine from local video and YouTube. Creating Anki cards with matching audio and screenshots.
           </p>
           <div class="hero-actions" aria-label="Download and repository links">
-            <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip">
-              Download latest
+            <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip" data-release-download>
+              Download version 0.1
             </a>
           </div>
         </div>
@@ -141,8 +141,8 @@
           <h2 id="download-title">Get the Windows release zip.</h2>
           <p>Anki with AnkiConnect and mpv are required. <a href="https://yomitan.wiki/">Yomitan</a> recommended for initial card creation.</p>
         </div>
-        <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip">
-          Download latest
+        <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip" data-release-download>
+          Download version 0.1
         </a>
       </section>
     </main>
@@ -212,6 +212,37 @@
         } else if (mediaQuery.addListener) {
           mediaQuery.addListener(handleSystemChange);
         }
+      })();
+
+      (() => {
+        const buttons = document.querySelectorAll("[data-release-download]");
+        if (buttons.length === 0) {
+          return;
+        }
+
+        const setDownloadVersion = (version) => {
+          for (const button of buttons) {
+            button.textContent = `Download version ${version}`;
+          }
+        };
+
+        fetch("https://api.github.com/repos/caocaochan/SentenceMiner/releases/latest", {
+          headers: {
+            Accept: "application/vnd.github+json",
+          },
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((release) => {
+            const releaseText = `${release?.name ?? ""}\n${release?.body ?? ""}`;
+            const match = releaseText.match(/\bVersion\s+(\d+\.\d)\b/i);
+
+            if (match) {
+              setDownloadVersion(match[1]);
+            }
+          })
+          .catch(() => {
+            return;
+          });
       })();
     </script>
   </body>

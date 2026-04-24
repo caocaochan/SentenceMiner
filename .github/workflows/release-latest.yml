@@ -41,6 +41,12 @@ jobs:
       - name: Package end-user files
         run: node scripts/package-release.mjs
 
+      - name: Compute release version
+        shell: bash
+        run: |
+          VERSION=$(node scripts/release-version.mjs)
+          echo "SENTENCEMINER_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
       - name: Build latest zip
         shell: powershell
         run: Compress-Archive -Path dist\SentenceMiner\* -DestinationPath SentenceMiner-latest.zip -Force
@@ -59,6 +65,8 @@ jobs:
         shell: bash
         run: |
           NOTES=$(cat <<EOF
+          Version ${SENTENCEMINER_VERSION}
+
           Automatic latest package from commit ${GITHUB_SHA}.
 
           Download:
@@ -68,7 +76,7 @@ jobs:
 
           if gh release view latest >/dev/null 2>&1; then
             gh release upload latest SentenceMiner-latest.zip --clobber
-            gh release edit latest --title "Latest" --notes "$NOTES" --latest
+            gh release edit latest --title "Version ${SENTENCEMINER_VERSION}" --notes "$NOTES" --latest
           else
-            gh release create latest SentenceMiner-latest.zip --title "Latest" --notes "$NOTES" --latest
+            gh release create latest SentenceMiner-latest.zip --title "Version ${SENTENCEMINER_VERSION}" --notes "$NOTES" --latest
           fi
