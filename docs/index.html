@@ -8,6 +8,22 @@
       content="SentenceMiner is an mpv-first sentence mining workflow for capturing subtitles, audio, and screenshots into existing Anki notes."
     >
     <title>SentenceMiner</title>
+    <script>
+      (() => {
+        const storageKey = "sentenceminer-theme";
+        const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        let storedTheme = null;
+
+        try {
+          storedTheme = localStorage.getItem(storageKey);
+        } catch {
+          storedTheme = null;
+        }
+
+        document.documentElement.dataset.theme =
+          storedTheme === "dark" || storedTheme === "light" ? storedTheme : systemTheme;
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -19,6 +35,12 @@
         <a href="#features">Features</a>
         <a href="#setup">Setup</a>
       </nav>
+      <button class="theme-toggle" type="button" aria-label="Switch theme" aria-pressed="false" data-theme-toggle>
+        <span class="theme-toggle-track" aria-hidden="true">
+          <span class="theme-toggle-thumb"></span>
+        </span>
+        <span>Theme</span>
+      </button>
     </header>
 
     <main id="top">
@@ -34,7 +56,6 @@
               Download latest
             </a>
           </div>
-          <p class="download-note">Recommended Windows package with the helper and ffmpeg bundled.</p>
         </div>
 
         <div class="product-visual" aria-label="SentenceMiner transcript interface preview">
@@ -137,7 +158,7 @@
         <div>
           <p class="eyebrow">Latest package</p>
           <h2 id="download-title">Get the Windows release zip.</h2>
-          <p>Anki with AnkiConnect and mpv are required. Node.js, Python, and manual ffmpeg setup are not required for the packaged release.</p>
+          <p>Anki with AnkiConnect and mpv are required.</p>
         </div>
         <a class="button button-primary" href="https://github.com/caocaochan/SentenceMiner/releases/latest/download/SentenceMiner-latest.zip">
           Download latest
@@ -148,5 +169,69 @@
     <footer class="site-footer">
       <span>SentenceMiner</span>
     </footer>
+    <script>
+      (() => {
+        const storageKey = "sentenceminer-theme";
+        const root = document.documentElement;
+        const toggle = document.querySelector("[data-theme-toggle]");
+        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+        if (!toggle) {
+          return;
+        }
+
+        const getStoredTheme = () => {
+          try {
+            const theme = localStorage.getItem(storageKey);
+            return theme === "dark" || theme === "light" ? theme : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const storeTheme = (theme) => {
+          try {
+            localStorage.setItem(storageKey, theme);
+          } catch {
+            return;
+          }
+        };
+
+        const getSystemTheme = () => (mediaQuery.matches ? "dark" : "light");
+
+        const updateToggle = (theme) => {
+          const isDark = theme === "dark";
+          toggle.setAttribute("aria-pressed", String(isDark));
+          toggle.setAttribute("aria-label", `Switch to ${isDark ? "light" : "dark"} mode`);
+        };
+
+        const setTheme = (theme, shouldStore) => {
+          root.dataset.theme = theme;
+          updateToggle(theme);
+
+          if (shouldStore) {
+            storeTheme(theme);
+          }
+        };
+
+        setTheme(root.dataset.theme || getStoredTheme() || getSystemTheme(), false);
+
+        toggle.addEventListener("click", () => {
+          setTheme(root.dataset.theme === "dark" ? "light" : "dark", true);
+        });
+
+        const handleSystemChange = () => {
+          if (!getStoredTheme()) {
+            setTheme(getSystemTheme(), false);
+          }
+        };
+
+        if (mediaQuery.addEventListener) {
+          mediaQuery.addEventListener("change", handleSystemChange);
+        } else if (mediaQuery.addListener) {
+          mediaQuery.addListener(handleSystemChange);
+        }
+      })();
+    </script>
   </body>
 </html>
