@@ -291,7 +291,9 @@ p {
 
 .product-visual {
   width: 100%;
+  max-width: 880px;
   min-width: 0;
+  margin: 0 auto;
   overflow: hidden;
   border: 1px solid var(--preview-border);
   border-radius: var(--radius);
