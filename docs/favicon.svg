@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">SentenceMiner favicon</title>
+  <desc id="desc">A rounded square icon with a play triangle and subtitle lines.</desc>
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8aadf4"/>
+      <stop offset="0.55" stop-color="#c6a0f6"/>
+      <stop offset="1" stop-color="#f5a97f"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="16" y1="18" x2="48" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24273a" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#1e2030" stop-opacity="0.96"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#bg)"/>
+  <rect x="10" y="12" width="44" height="40" rx="12" fill="url(#panel)" stroke="#ffffff" stroke-opacity="0.16"/>
+  <path d="M23 23.5a1.5 1.5 0 0 1 2.3-1.27l8.56 5.5a1.5 1.5 0 0 1 0 2.54l-8.56 5.5A1.5 1.5 0 0 1 23 34.5v-11Z" fill="#f5a97f"/>
+  <rect x="37" y="24" width="9" height="3.5" rx="1.75" fill="#cad3f5"/>
+  <rect x="37" y="30.25" width="13" height="3.5" rx="1.75" fill="#cad3f5" fill-opacity="0.88"/>
+  <rect x="18" y="42" width="28" height="2.5" rx="1.25" fill="#8aadf4" fill-opacity="0.72"/>
+</svg>
