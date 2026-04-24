@@ -383,7 +383,7 @@ h3 {
   gap: 12px;
   padding: 12px;
   scroll-margin-block: calc(var(--hero-sticky-height) + var(--sticky-top-gap) + 16px);
-  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, padding 140ms ease;
 }
 
 .history-item:hover {
@@ -392,9 +392,10 @@ h3 {
 }
 
 .history-item-active {
-  border-color: rgba(var(--green-rgb), 0.58);
-  background: color-mix(in srgb, var(--surface) 84%, var(--green));
-  box-shadow: inset 3px 0 0 var(--green);
+  padding-block: 15px;
+  border-color: rgba(var(--green-rgb), 0.74);
+  background: color-mix(in srgb, var(--surface) 78%, var(--green));
+  box-shadow: inset 5px 0 0 var(--green), 0 8px 24px rgba(0, 0, 0, 0.14);
 }
 
 .history-item-selected {
@@ -409,9 +410,17 @@ h3 {
 }
 
 .history-item-active.history-item-bookmarked {
-  border-color: rgba(var(--green-rgb), 0.58);
-  background: color-mix(in srgb, var(--surface) 78%, var(--green) 12%, var(--amber));
-  box-shadow: inset 3px 0 0 var(--green), inset -3px 0 0 var(--amber);
+  border-color: rgba(var(--green-rgb), 0.74);
+  background: color-mix(in srgb, var(--surface) 72%, var(--green) 16%, var(--amber));
+  box-shadow: inset 5px 0 0 var(--green), inset -3px 0 0 var(--amber), 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.history-item-active.history-item-selected {
+  background: color-mix(in srgb, var(--surface) 72%, var(--green) 16%, var(--accent));
+}
+
+.history-item-active.history-item-selected.history-item-bookmarked {
+  background: color-mix(in srgb, var(--surface) 66%, var(--green) 15%, var(--accent) 10%, var(--amber));
 }
 
 .history-item-selected.history-item-bookmarked {
@@ -428,6 +437,13 @@ h3 {
 
 .history-item-head {
   display: contents;
+}
+
+.history-meta-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .history-meta {
@@ -458,6 +474,31 @@ h3 {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.history-item-active .history-text {
+  font-weight: 650;
+}
+
+.current-line-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 7px;
+  border: 1px solid rgba(var(--green-rgb), 0.6);
+  border-radius: var(--radius);
+  background: rgba(var(--green-rgb), 0.16);
+  color: var(--green);
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.current-line-badge[hidden] {
+  display: none;
 }
 
 .i-plus-one-badge {

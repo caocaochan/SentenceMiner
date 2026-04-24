@@ -1510,9 +1510,19 @@ function rebuildTranscriptList(entries) {
     const head = document.createElement('div');
     head.className = 'history-item-head';
 
+    const metaRow = document.createElement('div');
+    metaRow.className = 'history-meta-row';
+
+    const currentLineBadge = document.createElement('span');
+    currentLineBadge.className = 'current-line-badge';
+    currentLineBadge.textContent = 'Now';
+    currentLineBadge.setAttribute('aria-hidden', 'true');
+    currentLineBadge.hidden = true;
+
     const meta = document.createElement('div');
     meta.className = 'history-meta';
     meta.textContent = formatRange(entry.startMs, entry.endMs);
+    metaRow.append(currentLineBadge, meta);
 
     const checkboxLabel = document.createElement('label');
     checkboxLabel.className = 'history-select';
@@ -1557,7 +1567,7 @@ function rebuildTranscriptList(entries) {
     mineStatusBadge.className = 'mine-status-badge';
     textRow.append(mineStatusBadge);
 
-    content.append(textRow, meta);
+    content.append(textRow, metaRow);
 
     const actions = document.createElement('div');
     actions.className = 'history-actions';
@@ -1575,6 +1585,7 @@ function rebuildTranscriptList(entries) {
       bookmarkButton,
       goToButton,
       mineButton,
+      currentLineBadge,
       mineStatusBadge,
     });
   });
@@ -1617,6 +1628,7 @@ function updateTranscriptItemUi(renderedEntries, currentCueId, allEntries = rend
     controls.item.classList.toggle('history-item-mined', uiState.mineStatus === 'mined');
     controls.item.classList.toggle('history-item-failed', uiState.mineStatus === 'failed');
     controls.item.setAttribute('aria-current', uiState.active ? 'true' : 'false');
+    controls.currentLineBadge.hidden = !uiState.active;
     controls.checkbox.checked = uiState.selected;
     controls.checkbox.disabled = uiState.checkboxDisabled;
     controls.checkbox.parentElement?.classList.toggle('history-select-disabled', uiState.checkboxDisabled);
