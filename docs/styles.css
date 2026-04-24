@@ -63,21 +63,7 @@ a {
 }
 
 .brand {
-  gap: 10px;
   font-weight: 750;
-}
-
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--blue);
-  font-size: 0.8rem;
-  font-weight: 800;
 }
 
 .site-nav {
@@ -357,7 +343,7 @@ p {
 
 .setup-list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
