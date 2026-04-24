@@ -36,10 +36,21 @@
         <a href="#setup">Setup</a>
       </nav>
       <button class="theme-toggle" type="button" aria-label="Switch theme" aria-pressed="false" data-theme-toggle>
-        <span class="theme-toggle-track" aria-hidden="true">
-          <span class="theme-toggle-thumb"></span>
-        </span>
-        <span>Theme</span>
+        <span class="theme-toggle-thumb" aria-hidden="true"></span>
+        <svg class="theme-toggle-icon" aria-hidden="true" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2"></path>
+          <path d="M12 20v2"></path>
+          <path d="m4.93 4.93 1.41 1.41"></path>
+          <path d="m17.66 17.66 1.41 1.41"></path>
+          <path d="M2 12h2"></path>
+          <path d="M20 12h2"></path>
+          <path d="m6.34 17.66-1.41 1.41"></path>
+          <path d="m19.07 4.93-1.41 1.41"></path>
+        </svg>
+        <svg class="theme-toggle-icon" aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M20.99 13.55A9 9 0 1 1 10.45 3.01 7 7 0 0 0 20.99 13.55Z"></path>
+        </svg>
       </button>
     </header>
 
@@ -58,45 +69,13 @@
           </div>
         </div>
 
-        <div class="product-visual" aria-label="SentenceMiner transcript interface preview">
-          <div class="mock-toolbar">
-            <div>
-              <span class="mock-kicker">Transcript</span>
-              <strong>Episode 04.mkv</strong>
-            </div>
-            <div class="mock-status-row" aria-label="Status indicators">
-              <span class="mock-pill mock-pill-live">Connected</span>
-              <span class="mock-pill">42 lines</span>
-              <span class="mock-pill">Anki ready</span>
-            </div>
-          </div>
-
-          <div class="mock-list" aria-hidden="true">
-            <article class="mock-line">
-              <span class="mock-time">00:12:08</span>
-              <p>Maybe the important part is not knowing every word yet.</p>
-              <button type="button" tabindex="-1">Mine</button>
-            </article>
-            <article class="mock-line mock-line-active">
-              <span class="mock-time">00:12:12</span>
-              <div>
-                <p>That sentence has exactly one new word.</p>
-                <span class="mock-badge">i+1</span>
-              </div>
-              <button type="button" tabindex="-1">Mine</button>
-            </article>
-            <article class="mock-line">
-              <span class="mock-time">00:12:17</span>
-              <p>The card keeps the screenshot and normalized audio.</p>
-              <button type="button" tabindex="-1">Mine</button>
-            </article>
-          </div>
-
-          <div class="mock-capture-bar" aria-hidden="true">
-            <span>Audio normalized</span>
-            <span>Screenshot captured</span>
-            <span>Matched note updated</span>
-          </div>
+        <div class="product-visual">
+          <img
+            src="screenshot.png"
+            width="2522"
+            height="1450"
+            alt="SentenceMiner transcript interface showing subtitle lines, mining controls, and playback context."
+          >
         </div>
       </section>
 
